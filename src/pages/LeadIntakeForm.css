@@ -1,0 +1,100 @@
+.intake-page {
+  min-height: 100vh;
+  background: var(--bg-gray);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2xl) var(--space-xl);
+}
+
+.intake-container {
+  width: 100%;
+  max-width: 680px;
+}
+
+.intake-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xl);
+}
+
+.intake-logo-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
+.intake-title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.intake-subtitle {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+/* Step indicator */
+.intake-steps {
+  display: flex;
+  border-bottom: 3px solid var(--border);
+  margin-bottom: var(--space-2xl);
+  position: relative;
+}
+
+.intake-steps::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  height: 3px;
+  background: var(--cac-red);
+  transition: width 0.3s;
+}
+
+.intake-steps[data-step="1"]::after { width: 33.33%; }
+.intake-steps[data-step="2"]::after { width: 66.66%; }
+.intake-steps[data-step="3"]::after { width: 100%; }
+
+.intake-step-tab {
+  flex: 1;
+  padding: 12px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.intake-step-tab.active {
+  color: var(--cac-red);
+}
+
+.intake-step-tab.completed {
+  color: var(--cac-red);
+}
+
+/* Form sections */
+.intake-section-title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-xl);
+}
+
+/* Navigation buttons */
+.intake-nav {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+.intake-nav .btn {
+  padding: 12px 24px;
+}

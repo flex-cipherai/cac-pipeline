@@ -1,0 +1,57 @@
+/* CAC Brand System */
+:root {
+  /* Colors */
+  --cac-red: #EC3013;
+  --cac-red-hover: #d42b10;
+  --cac-red-light: rgba(236, 48, 19, 0.08);
+  --cac-red-lighter: rgba(236, 48, 19, 0.04);
+  --charcoal: #201E1D;
+  --surface-gray: #EAE9E9;
+  --bg-gray: #F3F2F2;
+  --divider: rgba(32, 30, 29, 0.4);
+  --white: #FFFFFF;
+
+  /* Semantic */
+  --text-primary: var(--charcoal);
+  --text-secondary: rgba(32, 30, 29, 0.6);
+  --text-muted: rgba(32, 30, 29, 0.4);
+  --border: rgba(32, 30, 29, 0.12);
+  --border-strong: rgba(32, 30, 29, 0.2);
+
+  /* Classification colors */
+  --hot-color: #EC3013;
+  --hot-bg: rgba(236, 48, 19, 0.08);
+  --warm-color: #E8960C;
+  --warm-bg: rgba(232, 150, 12, 0.08);
+  --cold-color: #888888;
+  --cold-bg: rgba(136, 136, 136, 0.08);
+
+  /* Typography */
+  --font-family: Arial, Helvetica, sans-serif;
+  --text-xs: 0.6875rem;    /* 11px */
+  --text-sm: 0.75rem;      /* 12px */
+  --text-base: 0.875rem;   /* 14px */
+  --text-md: 1rem;         /* 16px */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.375rem;     /* 22px */
+  --text-2xl: 1.75rem;     /* 28px */
+  --text-3xl: 2rem;        /* 32px */
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* Layout */
+  --sidebar-width: 210px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
