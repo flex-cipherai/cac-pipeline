@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
@@ -19,7 +18,6 @@ export function AuthProvider({ children }) {
       }
     })
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setUser(session?.user ?? null)
@@ -43,9 +41,26 @@ export function AuthProvider({ children }) {
       .single()
 
     if (data) {
+      // Check if the account has been deactivated
+      if (data.is_active === false) {
+        await supabase.auth.signOut()
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+        return 'deactivated'
+      }
+
       setProfile(data)
+
+      // Update last sign-in timestamp (fire and forget)
+      supabase
+        .from('profiles')
+        .update({ last_sign_in_at: new Date().toISOString() })
+        .eq('id', userId)
+        .then()
     }
     setLoading(false)
+    return null
   }
 
   async function signIn(email, password) {
@@ -54,6 +69,13 @@ export function AuthProvider({ children }) {
       password,
     })
     if (error) throw error
+
+    // After successful auth, check if the profile is active
+    const status = await fetchProfile(data.user.id)
+    if (status === 'deactivated') {
+      throw new Error('ACCOUNT_DEACTIVATED')
+    }
+
     return data
   }
 

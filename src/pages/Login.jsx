@@ -29,7 +29,11 @@ export default function Login() {
       await signIn(email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError('Invalid email or password. Check your credentials and try again.')
+      if (err.message === 'ACCOUNT_DEACTIVATED') {
+        setError('Your account has been deactivated. Contact your administrator to restore access.')
+      } else {
+        setError('Invalid email or password. Check your credentials and try again.')
+      }
     } finally {
       setLoading(false)
     }
