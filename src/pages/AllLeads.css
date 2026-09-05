@@ -1,0 +1,41 @@
+/* Header */
+.leads-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.leads-count {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Table wrapper */
+.leads-table-wrap {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+.leads-name {
+  font-weight: 600;
+}
+
+.leads-source {
+  color: var(--text-secondary);
+}
+
+/* Stage labels */
+.stage-lost {
+  color: var(--text-muted);
+}
+
+.stage-converted {
+  color: var(--cac-red);
+  font-weight: 600;
+}
+
+.stage-disqualified {
+  color: var(--text-muted);
+}

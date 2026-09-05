@@ -1,1 +1,137 @@
-/* Dashboard styles — implemented in Part 4 */
+/* Stats row */
+.dash-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+/* Sections */
+.dash-section {
+  margin-bottom: var(--space-xl);
+}
+
+.dash-section-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin-bottom: var(--space-md);
+}
+
+/* Classification bar */
+.classification-bar {
+  display: flex;
+  height: 18px;
+  border-radius: 9px;
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+}
+
+.classification-segment {
+  transition: flex 0.3s ease;
+}
+
+.classification-segment.hot {
+  background: var(--hot-color);
+}
+
+.classification-segment.warm {
+  background: var(--warm-color);
+}
+
+.classification-segment.cold {
+  background: #C4C4C4;
+}
+
+.classification-legend {
+  display: flex;
+  gap: var(--space-xl);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legend-dot.hot { background: var(--hot-color); }
+.legend-dot.warm { background: var(--warm-color); }
+.legend-dot.cold { background: #C4C4C4; }
+
+/* Sources row */
+.dash-sources-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-md);
+}
+
+/* Stage chart */
+.stage-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stage-chart-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.stage-chart-label {
+  width: 110px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.stage-chart-bar-track {
+  flex: 1;
+  height: 22px;
+  background: var(--surface-gray);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.stage-chart-bar {
+  height: 100%;
+  background: rgba(236, 48, 19, 0.18);
+  border-radius: var(--radius-sm);
+  transition: width 0.4s ease;
+}
+
+.stage-chart-count {
+  width: 28px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .dash-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-chart-label {
+    width: 80px;
+    font-size: var(--text-xs);
+  }
+}

@@ -122,6 +122,18 @@ export const PIPELINE_STAGES = [
   { key: 'Converted', label: 'Converted', description: 'Contract signed — client acquired' },
 ]
 
+// Estimated pipeline value based on lead's revenue tier (midpoint of pricing range)
+export function estimatePipelineValue(q1_revenue) {
+  const valueMap = {
+    'Below KES 10 million': 0,
+    'KES 10 million – 50 million': 500000,       // Tier 1 midpoint: 250K–750K
+    'KES 50 million – 100 million': 1125000,      // Tier 2 midpoint: 750K–1.5M
+    'KES 100 million – 500 million': 2750000,     // Tier 3 midpoint: 1.5M–4M
+    'Above KES 500 million': 5750000,             // Tier 4 midpoint: 4M–7.5M
+  }
+  return valueMap[q1_revenue] || 0
+}
+
 // Day of week mapping
 export const DAYS_OF_WEEK = [
   { value: 1, label: 'Monday' },
