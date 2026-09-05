@@ -8,6 +8,7 @@ import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
 import Settings from './pages/Settings'
 import MarketingAnalytics from './pages/MarketingAnalytics'
+import ResetPassword from './pages/ResetPassword'
 
 // Protected route wrapper
 function ProtectedRoute({ children, allowedRoles }) {
@@ -64,6 +65,7 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/intake" element={<LeadIntakeForm />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/login"
         element={

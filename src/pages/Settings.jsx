@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { DAYS_OF_WEEK, CLASSIFICATION_THRESHOLDS, HARD_DISQUALIFIERS } from '../lib/scoring'
 import './Settings.css'
@@ -8,16 +9,21 @@ export default function Settings() {
   const [availability, setAvailability] = useState({})
   const [loading, setLoading] = useState(true)
 
-  // Edit user modal state
+  // Edit user modal
   const [editingUser, setEditingUser] = useState(null)
   const [editRole, setEditRole] = useState('')
+
+  // Add user modal
+  const [showAddUser, setShowAddUser] = useState(false)
+  const [newUser, setNewUser] = useState({ name: '', email: '', role: 'sales' })
+  const [addingUser, setAddingUser] = useState(false)
+  const [addUserMessage, setAddUserMessage] = useState({ type: '', text: '' })
 
   useEffect(() => {
     fetchData()
   }, [])
 
   async function fetchData() {
-    // Fetch profiles
     const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
@@ -25,7 +31,6 @@ export default function Settings() {
 
     if (profileData) setProfiles(profileData)
 
-    // Fetch availability
     const { data: availData } = await supabase
       .from('calendar_availability')
       .select('*')
@@ -45,7 +50,6 @@ export default function Settings() {
     setLoading(false)
   }
 
-  // Role display names
   const roleLabels = {
     admin: 'Admin',
     sales: 'Sales',
@@ -68,6 +72,81 @@ export default function Settings() {
     setEditRole('')
   }
 
+  // Handle add user
+  async function handleAddUser(e) {
+    e.preventDefault()
+    if (!newUser.name.trim() || !newUser.email.trim()) return
+
+    setAddingUser(true)
+    setAddUserMessage({ type: '', text: '' })
+
+    try {
+      // Create a separate Supabase client so the admin's session is not affected
+      const tempClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY
+      )
+
+      // Generate a random temporary password
+      const tempPassword = crypto.randomUUID().slice(0, 16) + 'A1!'
+
+      // Sign up the new user
+      const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
+        email: newUser.email,
+        password: tempPassword,
+        options: {
+          data: {
+            name: newUser.name,
+            role: newUser.role,
+          },
+        },
+      })
+
+      if (signUpError) throw signUpError
+
+      // Send a password reset email so the user can set their own password
+      const { error: resetError } = await tempClient.auth.resetPasswordForEmail(
+        newUser.email,
+        { redirectTo: `${window.location.origin}/reset-password` }
+      )
+
+      if (resetError) {
+        console.warn('Reset email failed:', resetError)
+      }
+
+      // Refresh the profiles list
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at')
+
+      if (profileData) setProfiles(profileData)
+
+      setAddUserMessage({
+        type: 'success',
+        text: `Account created for ${newUser.name}. A password reset link has been sent to ${newUser.email}.`,
+      })
+      setNewUser({ name: '', email: '', role: 'sales' })
+
+      // Auto-close after a moment
+      setTimeout(() => {
+        setShowAddUser(false)
+        setAddUserMessage({ type: '', text: '' })
+      }, 4000)
+    } catch (err) {
+      console.error('Add user error:', err)
+      let msg = 'Could not create account. '
+      if (err.message?.includes('already registered')) {
+        msg += 'This email is already registered.'
+      } else {
+        msg += err.message || 'Please try again.'
+      }
+      setAddUserMessage({ type: 'error', text: msg })
+    } finally {
+      setAddingUser(false)
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -87,7 +166,18 @@ export default function Settings() {
 
       {/* User Management */}
       <div className="settings-section">
-        <h2 className="settings-section-title">User Management</h2>
+        <div className="settings-section-header">
+          <h2 className="settings-section-title">User Management</h2>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setShowAddUser(true)
+              setAddUserMessage({ type: '', text: '' })
+            }}
+          >
+            + Add User
+          </button>
+        </div>
         <div className="settings-card">
           <table className="data-table">
             <thead>
@@ -140,13 +230,83 @@ export default function Settings() {
               </select>
             </div>
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setEditingUser(null)}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={handleUpdateRole}>
-                Save
-              </button>
+              <button className="btn btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleUpdateRole}>Save</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add User Modal */}
+      {showAddUser && (
+        <div className="modal-overlay" onClick={() => setShowAddUser(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Add New User</h3>
+            <p className="modal-subtitle">
+              The user will receive a password reset email to set their own password.
+            </p>
+
+            <form onSubmit={handleAddUser}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="new-name">Full Name</label>
+                <input
+                  id="new-name"
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Diana Wanjiku"
+                  value={newUser.name}
+                  onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="new-email">Email</label>
+                <input
+                  id="new-email"
+                  type="email"
+                  className="form-input"
+                  placeholder="e.g. diana@cipherai.co.ke"
+                  value={newUser.email}
+                  onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="new-role">Role</label>
+                <select
+                  id="new-role"
+                  className="form-input"
+                  value={newUser.role}
+                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                >
+                  <option value="sales">Sales Manager</option>
+                  <option value="marketing">Marketing Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              {addUserMessage.text && (
+                <div className={`settings-message ${addUserMessage.type}`} role="alert">
+                  {addUserMessage.text}
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={addingUser || !newUser.name.trim() || !newUser.email.trim()}
+                >
+                  {addingUser ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
