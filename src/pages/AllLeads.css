@@ -1,41 +1,165 @@
-/* Header */
+/* ─── Header ─── */
 .leads-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--space-md);
 }
 
-.leads-count {
+/* ─── Search ─── */
+.leads-search-wrap {
+  position: relative;
+  width: 240px;
+}
+
+.leads-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.leads-search {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background: var(--white);
+  transition: border-color var(--duration-fast),
+              box-shadow var(--duration-fast);
 }
 
-/* Table wrapper */
+.leads-search:focus {
+  outline: none;
+  border-color: var(--charcoal);
+  box-shadow: 0 0 0 3px rgba(32, 30, 29, 0.06);
+}
+
+.leads-search::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── Table ─── */
 .leads-table-wrap {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   overflow-x: auto;
+  padding: 0;
+}
+
+.leads-table-wrap .data-table th:first-child,
+.leads-table-wrap .data-table td:first-child {
+  padding-left: var(--space-lg);
+}
+
+.leads-table-wrap .data-table th:last-child,
+.leads-table-wrap .data-table td:last-child {
+  padding-right: var(--space-lg);
 }
 
 .leads-name {
   font-weight: 600;
 }
 
-.leads-source {
-  color: var(--text-secondary);
+.leads-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
-/* Stage labels */
+.leads-source {
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+/* ─── Stage labels ─── */
 .stage-lost {
   color: var(--text-muted);
+  font-style: italic;
 }
 
 .stage-converted {
-  color: var(--cac-red);
+  color: var(--success);
   font-weight: 600;
 }
 
 .stage-disqualified {
   color: var(--text-muted);
+}
+
+/* ─── Mobile Card List ─── */
+.leads-mobile-list {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.leads-mobile-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.leads-mobile-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.leads-mobile-name {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.leads-mobile-company {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.leads-mobile-card-bottom {
+  display: flex;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.leads-mobile-meta {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.leads-mobile-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .leads-header {
+    flex-direction: column;
+  }
+
+  .leads-search-wrap {
+    width: 100%;
+  }
+
+  .leads-table-wrap {
+    display: none;
+  }
+
+  .leads-mobile-list {
+    display: flex;
+  }
 }
