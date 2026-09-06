@@ -6,7 +6,16 @@
 .layout-main {
   flex: 1;
   margin-left: var(--sidebar-width);
-  padding: var(--space-xl) var(--space-2xl);
+  padding: var(--space-2xl) var(--space-2xl);
   max-width: 100%;
   overflow-x: hidden;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .layout-main {
+    margin-left: 0;
+    padding: var(--space-lg) var(--space-md);
+    padding-top: var(--space-lg);
+  }
 }

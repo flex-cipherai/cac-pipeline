@@ -1,57 +1,84 @@
-/* CAC Brand System */
+/* CAC Brand System — Upgraded Design Tokens */
 :root {
-  /* Colors */
+  /* ─── Brand Colors ─── */
   --cac-red: #EC3013;
   --cac-red-hover: #d42b10;
-  --cac-red-light: rgba(236, 48, 19, 0.08);
-  --cac-red-lighter: rgba(236, 48, 19, 0.04);
+  --cac-red-light: rgba(236, 48, 19, 0.07);
+  --cac-red-lighter: rgba(236, 48, 19, 0.035);
   --charcoal: #201E1D;
   --surface-gray: #EAE9E9;
   --bg-gray: #F3F2F2;
   --divider: rgba(32, 30, 29, 0.4);
   --white: #FFFFFF;
 
-  /* Semantic */
+  /* ─── Semantic Text ─── */
   --text-primary: var(--charcoal);
-  --text-secondary: rgba(32, 30, 29, 0.6);
-  --text-muted: rgba(32, 30, 29, 0.4);
-  --border: rgba(32, 30, 29, 0.12);
-  --border-strong: rgba(32, 30, 29, 0.2);
+  --text-secondary: rgba(32, 30, 29, 0.55);
+  --text-muted: rgba(32, 30, 29, 0.36);
+  --border: rgba(32, 30, 29, 0.08);
+  --border-strong: rgba(32, 30, 29, 0.16);
 
-  /* Classification colors */
+  /* ─── Status Colors ─── */
+  --success: #16a34a;
+  --success-bg: rgba(22, 163, 74, 0.07);
+
+  /* ─── Classification ─── */
   --hot-color: #EC3013;
   --hot-bg: rgba(236, 48, 19, 0.08);
-  --warm-color: #E8960C;
-  --warm-bg: rgba(232, 150, 12, 0.08);
-  --cold-color: #888888;
-  --cold-bg: rgba(136, 136, 136, 0.08);
+  --warm-color: #d97706;
+  --warm-bg: rgba(217, 119, 6, 0.08);
+  --cold-color: #6b7280;
+  --cold-bg: rgba(107, 114, 128, 0.08);
 
-  /* Typography */
+  /* ─── Typography ─── */
   --font-family: Arial, Helvetica, sans-serif;
-  --text-xs: 0.6875rem;    /* 11px */
-  --text-sm: 0.75rem;      /* 12px */
-  --text-base: 0.875rem;   /* 14px */
-  --text-md: 1rem;         /* 16px */
-  --text-lg: 1.125rem;     /* 18px */
-  --text-xl: 1.375rem;     /* 22px */
-  --text-2xl: 1.75rem;     /* 28px */
-  --text-3xl: 2rem;        /* 32px */
+  --text-xs: 0.6875rem;   /* 11px */
+  --text-sm: 0.8125rem;   /* 13px — bumped from 12 */
+  --text-base: 0.875rem;  /* 14px */
+  --text-md: 1rem;        /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.375rem;    /* 22px */
+  --text-2xl: 1.625rem;   /* 26px */
+  --text-3xl: 2rem;       /* 32px */
 
-  /* Spacing */
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
-  --space-2xl: 3rem;
+  /* ─── Spacing ─── */
+  --space-xs: 0.25rem;    /* 4px */
+  --space-sm: 0.5rem;     /* 8px */
+  --space-md: 1rem;       /* 16px */
+  --space-lg: 1.5rem;     /* 24px */
+  --space-xl: 2rem;       /* 32px */
+  --space-2xl: 2.5rem;    /* 40px */
+  --space-3xl: 3.5rem;    /* 56px */
 
-  /* Layout */
-  --sidebar-width: 210px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* ─── Layout ─── */
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 0px;
+  --content-max-width: 1200px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  /* ─── Shadows (layered for depth) ─── */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.09), 0 2px 6px rgba(0,0,0,0.04);
+  --shadow-xl: 0 16px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+
+  /* ─── Transitions ─── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
 }
