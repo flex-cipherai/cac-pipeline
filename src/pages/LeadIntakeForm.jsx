@@ -264,7 +264,7 @@ export default function LeadIntakeForm() {
                 <strong>{submitResult.scheduledTime}</strong>.
               </p>
               <p className="intake-confirm-detail">
-                You'll receive a confirmation email and WhatsApp message shortly
+                You'll receive a confirmation email shortly
                 with details on what to expect.
               </p>
             </div>
@@ -374,17 +374,6 @@ export default function LeadIntakeForm() {
                 value={contact.phone}
                 onChange={e => setContact({ ...contact, phone: e.target.value })}
               />
-            </div>
-
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={contact.has_whatsapp}
-                  onChange={e => setContact({ ...contact, has_whatsapp: e.target.checked })}
-                />
-                This number has WhatsApp
-              </label>
             </div>
 
             <div className="intake-nav">
