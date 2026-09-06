@@ -296,3 +296,38 @@
     font-size: var(--text-lg);
   }
 }
+
+/* ─── Fully Booked States ─── */
+.schedule-fully-booked {
+  text-align: center;
+  padding: var(--space-3xl) var(--space-xl);
+  color: var(--text-secondary);
+}
+
+.schedule-fully-booked svg {
+  margin: 0 auto var(--space-md);
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.schedule-fully-booked-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.schedule-fully-booked-desc {
+  font-size: var(--text-base);
+  max-width: 340px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.schedule-day-full {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 12px 0;
+  text-align: center;
+}

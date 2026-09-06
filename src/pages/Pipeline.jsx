@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES } from '../lib/scoring'
+import LeadDetail from '../components/LeadDetail/LeadDetail'
 import './Pipeline.css'
 
 const LOST_REASONS = [
@@ -27,6 +28,7 @@ export default function Pipeline() {
   const [lostReason, setLostReason] = useState('')
   const [lostCustom, setLostCustom] = useState('')
   const [markingLost, setMarkingLost] = useState(false)
+  const [selectedLead, setSelectedLead] = useState(null)
 
   useEffect(() => { fetchLeads() }, [])
 
@@ -215,7 +217,7 @@ export default function Pipeline() {
                     >
                       <div className="pipeline-card-top">
                         <div>
-                          <div className="pipeline-card-name">{lead.full_name}</div>
+                          <div className="pipeline-card-name pipeline-card-name-link" onClick={() => setSelectedLead(lead)}>{lead.full_name}</div>
                           <div className="pipeline-card-company">{lead.company_name}</div>
                         </div>
                         <div className="pipeline-card-actions" ref={moveMenuId === lead.id ? moveMenuRef : null}>
@@ -355,6 +357,11 @@ export default function Pipeline() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Lead Detail Drawer */}
+      {selectedLead && (
+        <LeadDetail lead={selectedLead} onClose={() => setSelectedLead(null)} />
       )}
     </div>
   )

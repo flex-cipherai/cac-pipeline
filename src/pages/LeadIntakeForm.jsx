@@ -451,47 +451,74 @@ export default function LeadIntakeForm() {
               <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
                 Loading available slots...
               </p>
-            ) : (
-              <div className="schedule-grid">
-                {DAYS_OF_WEEK.map(day => {
-                  const slots = availability[day.value] || []
-                  if (slots.length === 0) return null
+            ) : (() => {
+              // Filter out booked slots — only show available ones
+              const daysWithOpenSlots = DAYS_OF_WEEK.map(day => {
+                const slots = availability[day.value] || []
+                const openSlots = slots.filter(time => !isSlotBooked(day.value, time))
+                return { ...day, slots, openSlots }
+              })
+              const hasAnyOpen = daysWithOpenSlots.some(d => d.openSlots.length > 0)
 
-                  return (
-                    <div key={day.value} className="schedule-day">
-                      <div className="schedule-day-label">{day.label}</div>
-                      <div className="schedule-slots">
-                        {slots.map(time => {
-                          const booked = isSlotBooked(day.value, time)
-                          const isSelected =
-                            selectedSlot?.dayOfWeek === day.value &&
-                            selectedSlot?.time === time
+              if (!hasAnyOpen) {
+                return (
+                  <div className="schedule-fully-booked">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <rect x="4" y="6" width="24" height="22" rx="2" />
+                      <path d="M4 12h24" />
+                      <path d="M10 3v5M22 3v5" />
+                      <path d="M12 18l3 3 5-6" />
+                    </svg>
+                    <p className="schedule-fully-booked-title">All slots are currently booked</p>
+                    <p className="schedule-fully-booked-desc">
+                      All available times for the coming week are taken. Please check back in a few days for new openings.
+                    </p>
+                  </div>
+                )
+              }
 
-                          return (
-                            <button
-                              key={time}
-                              className={`schedule-slot ${
-                                isSelected ? 'selected' : ''
-                              } ${booked ? 'booked' : ''}`}
-                              onClick={() =>
-                                !booked &&
-                                setSelectedSlot({
-                                  dayOfWeek: day.value,
-                                  time,
-                                })
-                              }
-                              disabled={booked}
-                            >
-                              {time}
-                            </button>
-                          )
-                        })}
+              return (
+                <div className="schedule-grid">
+                  {daysWithOpenSlots.map(day => {
+                    if (day.slots.length === 0) return null
+
+                    if (day.openSlots.length === 0) {
+                      return (
+                        <div key={day.value} className="schedule-day">
+                          <div className="schedule-day-label">{day.label}</div>
+                          <div className="schedule-day-full">Fully booked</div>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div key={day.value} className="schedule-day">
+                        <div className="schedule-day-label">{day.label}</div>
+                        <div className="schedule-slots">
+                          {day.openSlots.map(time => {
+                            const isSelected =
+                              selectedSlot?.dayOfWeek === day.value &&
+                              selectedSlot?.time === time
+
+                            return (
+                              <button
+                                key={time}
+                                className={`schedule-slot ${isSelected ? 'selected' : ''}`}
+                                onClick={() =>
+                                  setSelectedSlot({ dayOfWeek: day.value, time })
+                                }
+                              >
+                                {time}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                    )
+                  })}
+                </div>
+              )
+            })()}
 
             <div className="intake-nav">
               <button className="btn btn-secondary" onClick={goBack}>

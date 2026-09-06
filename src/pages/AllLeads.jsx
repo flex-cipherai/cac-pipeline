@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import LeadDetail from '../components/LeadDetail/LeadDetail'
 import './AllLeads.css'
 
 export default function AllLeads() {
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [selectedLead, setSelectedLead] = useState(null)
 
   useEffect(() => {
     fetchLeads()
@@ -128,7 +130,7 @@ export default function AllLeads() {
               </thead>
               <tbody>
                 {filtered.map(lead => (
-                  <tr key={lead.id}>
+                  <tr key={lead.id} className="leads-row-clickable" onClick={() => setSelectedLead(lead)}>
                     <td className="leads-name">{lead.full_name}</td>
                     <td>{lead.company_name}</td>
                     <td><span className={badgeClass(lead)}>{classLabel(lead)}</span></td>
@@ -149,7 +151,7 @@ export default function AllLeads() {
           {/* Mobile card list */}
           <div className="leads-mobile-list">
             {filtered.map(lead => (
-              <div key={lead.id} className="leads-mobile-card">
+              <div key={lead.id} className="leads-mobile-card leads-row-clickable" onClick={() => setSelectedLead(lead)}>
                 <div className="leads-mobile-card-top">
                   <div>
                     <div className="leads-mobile-name">{lead.full_name}</div>
@@ -180,6 +182,11 @@ export default function AllLeads() {
             )}
           </div>
         </>
+      )}
+
+      {/* Lead Detail Drawer */}
+      {selectedLead && (
+        <LeadDetail lead={selectedLead} onClose={() => setSelectedLead(null)} />
       )}
     </div>
   )

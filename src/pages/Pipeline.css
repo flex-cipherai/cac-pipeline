@@ -425,3 +425,13 @@
 .btn-lost:disabled {
   opacity: 0.45;
 }
+
+/* ─── Clickable lead name ─── */
+.pipeline-card-name-link {
+  cursor: pointer;
+  transition: color var(--duration-fast);
+}
+
+.pipeline-card-name-link:hover {
+  color: var(--cac-red);
+}

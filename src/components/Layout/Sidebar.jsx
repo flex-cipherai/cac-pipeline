@@ -71,6 +71,7 @@ export default function Sidebar({ isOpen, onClose }) {
           { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard' },
           { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline' },
           { to: '/leads', icon: icons.leads, label: 'All Leads' },
+          { to: '/settings', icon: icons.settings, label: 'Settings' },
         ]
       case 'admin':
       default:
