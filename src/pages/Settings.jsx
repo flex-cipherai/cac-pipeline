@@ -229,7 +229,8 @@ export default function Settings() {
         <div className="page-header">
           <h1 className="page-title">Admin Settings</h1>
         </div>
-        <p style={{ color: 'var(--text-secondary)' }}>Loading...</p>
+        <div className="skeleton skeleton-card" style={{ height: 200, marginBottom: 'var(--space-xl)' }} />
+        <div className="skeleton skeleton-card" style={{ height: 160 }} />
       </div>
     )
   }
@@ -335,6 +336,53 @@ export default function Settings() {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile user cards */}
+        <div className="settings-user-mobile-list">
+          {profiles.map(p => {
+            const status = getUserStatus(p)
+            const isSelf = p.id === currentUser?.id
+            return (
+              <div key={p.id} className={`settings-user-card ${status === 'deactivated' ? 'row-deactivated' : ''}`}>
+                <div className="settings-user-card-top">
+                  <div>
+                    <div className="settings-user-card-name">{p.name}</div>
+                    <div className="settings-user-card-email">{p.email}</div>
+                  </div>
+                  <div className="action-menu-wrap">
+                    <button
+                      className="action-menu-trigger"
+                      onClick={e => { e.stopPropagation(); toggleMenu(p.id) }}
+                      aria-label={`Actions for ${p.name}`}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="8" cy="3" r="1.5" />
+                        <circle cx="8" cy="8" r="1.5" />
+                        <circle cx="8" cy="13" r="1.5" />
+                      </svg>
+                    </button>
+                    {openMenu === p.id && (
+                      <div className="action-menu" onClick={e => e.stopPropagation()}>
+                        <button className="action-menu-item" onClick={() => { setEditingUser(p); setEditRole(p.role); setOpenMenu(null) }}>Edit Role</button>
+                        <button className="action-menu-item" onClick={() => { handleResendResetEmail(p); setOpenMenu(null) }}>Resend Reset Email</button>
+                        {!isSelf && (
+                          <button className={`action-menu-item ${status === 'deactivated' ? 'action-reactivate' : 'action-danger'}`} onClick={() => { handleToggleActive(p); setOpenMenu(null) }}>
+                            {status === 'deactivated' ? 'Reactivate' : 'Deactivate'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="settings-user-card-meta">
+                  <span className="settings-user-card-meta-item">{roleLabels[p.role] || p.role}</span>
+                  {getStatusBadge(status)}
+                  <span className="settings-user-card-meta-item">{formatLastSignIn(p.last_sign_in_at)}</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 

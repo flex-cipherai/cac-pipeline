@@ -4,6 +4,15 @@ import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES } from '../lib/scoring'
 import './Pipeline.css'
 
+const LOST_REASONS = [
+  'Unresponsive — no reply after multiple follow-ups',
+  'Not ready — decided to delay the project',
+  'Budget constraints — cannot commit financially',
+  'Went with a competitor',
+  "Scope mismatch — needs don't align with our services",
+  'Internal changes — leadership or priorities shifted',
+]
+
 export default function Pipeline() {
   const { profile } = useAuth()
   const [leads, setLeads] = useState([])
@@ -13,11 +22,14 @@ export default function Pipeline() {
   const [moveMenuId, setMoveMenuId] = useState(null)
   const moveMenuRef = useRef(null)
 
-  useEffect(() => {
-    fetchLeads()
-  }, [])
+  // Mark as Lost modal state
+  const [lostModal, setLostModal] = useState(null) // lead object
+  const [lostReason, setLostReason] = useState('')
+  const [lostCustom, setLostCustom] = useState('')
+  const [markingLost, setMarkingLost] = useState(false)
 
-  // Close move menu on outside click
+  useEffect(() => { fetchLeads() }, [])
+
   useEffect(() => {
     function handleClick(e) {
       if (moveMenuRef.current && !moveMenuRef.current.contains(e.target)) {
@@ -54,7 +66,6 @@ export default function Pipeline() {
   function handleDragStart(e, lead) {
     setDraggedLead(lead)
     e.dataTransfer.effectAllowed = 'move'
-    // For a nice drag ghost
     e.dataTransfer.setData('text/plain', lead.id)
   }
 
@@ -64,9 +75,7 @@ export default function Pipeline() {
     setDragOverStage(stageKey)
   }
 
-  function handleDragLeave() {
-    setDragOverStage(null)
-  }
+  function handleDragLeave() { setDragOverStage(null) }
 
   async function handleDrop(e, targetStage) {
     e.preventDefault()
@@ -84,33 +93,53 @@ export default function Pipeline() {
     setDragOverStage(null)
   }
 
-  // ── Move via menu (keyboard/mobile accessible) ──
   async function moveLead(lead, targetStage) {
     setLeads(prev =>
-      prev.map(l =>
-        l.id === lead.id ? { ...l, current_stage: targetStage } : l
-      )
+      prev.map(l => l.id === lead.id ? { ...l, current_stage: targetStage } : l)
     )
-
-    await supabase
-      .from('leads')
-      .update({ current_stage: targetStage })
-      .eq('id', lead.id)
-
+    await supabase.from('leads').update({ current_stage: targetStage }).eq('id', lead.id)
     await supabase.from('lead_stage_history').insert({
-      lead_id: lead.id,
-      stage: targetStage,
-      moved_by: profile?.id,
+      lead_id: lead.id, stage: targetStage, moved_by: profile?.id,
     })
-
     setMoveMenuId(null)
   }
 
-  function badgeClass(classification) {
-    return `badge badge-${classification}`
+  // ── Mark as Lost ──
+  function openLostModal(lead) {
+    setLostModal(lead)
+    setLostReason('')
+    setLostCustom('')
+    setMoveMenuId(null)
   }
 
-  // Format scheduled date
+  async function handleMarkLost() {
+    if (!lostModal) return
+    const reason = lostReason === '__custom' ? lostCustom.trim() : lostReason
+    if (!reason) return
+
+    setMarkingLost(true)
+    try {
+      await supabase
+        .from('leads')
+        .update({ is_lost: true, lost_reason: reason })
+        .eq('id', lostModal.id)
+
+      await supabase.from('lead_stage_history').insert({
+        lead_id: lostModal.id, stage: 'Lost', moved_by: profile?.id,
+      })
+
+      // Remove from local state
+      setLeads(prev => prev.filter(l => l.id !== lostModal.id))
+      setLostModal(null)
+    } catch (err) {
+      console.error('Error marking lead as lost:', err)
+    } finally {
+      setMarkingLost(false)
+    }
+  }
+
+  function badgeClass(c) { return `badge badge-${c}` }
+
   function formatDate(lead) {
     if (lead.scheduled_day && lead.scheduled_time) {
       return `${lead.scheduled_day} · ${lead.scheduled_time}`
@@ -172,9 +201,7 @@ export default function Pipeline() {
               </div>
               <div className="pipeline-column-cards">
                 {stageLeads.length === 0 && (
-                  <div className="pipeline-column-empty">
-                    No leads
-                  </div>
+                  <div className="pipeline-column-empty">No leads</div>
                 )}
                 {stageLeads.map(lead => {
                   const scheduleInfo = formatDate(lead)
@@ -191,13 +218,12 @@ export default function Pipeline() {
                           <div className="pipeline-card-name">{lead.full_name}</div>
                           <div className="pipeline-card-company">{lead.company_name}</div>
                         </div>
-                        {/* Move menu button — accessible alternative to drag */}
                         <div className="pipeline-card-actions" ref={moveMenuId === lead.id ? moveMenuRef : null}>
                           <button
                             className="pipeline-card-move-btn"
                             onClick={() => setMoveMenuId(moveMenuId === lead.id ? null : lead.id)}
-                            aria-label="Move lead"
-                            title="Move to stage"
+                            aria-label="Lead actions"
+                            title="Actions"
                           >
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                               <circle cx="8" cy="3" r="1.5" />
@@ -217,6 +243,17 @@ export default function Pipeline() {
                                   {s.label}
                                 </button>
                               ))}
+                              <div className="pipeline-move-menu-divider" />
+                              <button
+                                className="pipeline-move-menu-item pipeline-move-menu-lost"
+                                onClick={() => openLostModal(lead)}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                                  <circle cx="7" cy="7" r="5.5" />
+                                  <path d="M5 5l4 4M9 5l-4 4" />
+                                </svg>
+                                Mark as Lost
+                              </button>
                             </div>
                           )}
                         </div>
@@ -244,6 +281,81 @@ export default function Pipeline() {
           )
         })}
       </div>
+
+      {/* ── Mark as Lost Modal ── */}
+      {lostModal && (
+        <div className="modal-overlay" onClick={() => !markingLost && setLostModal(null)}>
+          <div className="modal-card modal-lost" onClick={e => e.stopPropagation()}>
+            <div className="modal-lost-header">
+              <div className="modal-lost-icon">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <circle cx="11" cy="11" r="9" />
+                  <path d="M8 8l6 6M14 8l-6 6" />
+                </svg>
+              </div>
+              <h3 className="modal-title">Mark Lead as Lost</h3>
+            </div>
+            <p className="modal-subtitle">
+              <strong>{lostModal.full_name}</strong> from {lostModal.company_name} will be
+              removed from the pipeline. This can be reversed from the All Leads view.
+            </p>
+
+            <div className="form-group">
+              <label className="form-label">Reason for losing this lead</label>
+              <div className="lost-reason-options">
+                {LOST_REASONS.map(reason => (
+                  <button
+                    key={reason}
+                    className={`lost-reason-option ${lostReason === reason ? 'selected' : ''}`}
+                    onClick={() => { setLostReason(reason); setLostCustom('') }}
+                    type="button"
+                  >
+                    {reason}
+                  </button>
+                ))}
+                <button
+                  className={`lost-reason-option ${lostReason === '__custom' ? 'selected' : ''}`}
+                  onClick={() => setLostReason('__custom')}
+                  type="button"
+                >
+                  Other reason...
+                </button>
+              </div>
+              {lostReason === '__custom' && (
+                <textarea
+                  className="form-input lost-custom-input"
+                  placeholder="Describe why this lead was lost..."
+                  value={lostCustom}
+                  onChange={e => setLostCustom(e.target.value)}
+                  rows={3}
+                  autoFocus
+                />
+              )}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setLostModal(null)}
+                disabled={markingLost}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-lost"
+                onClick={handleMarkLost}
+                disabled={
+                  markingLost ||
+                  (!lostReason) ||
+                  (lostReason === '__custom' && !lostCustom.trim())
+                }
+              >
+                {markingLost ? 'Removing...' : 'Mark as Lost'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

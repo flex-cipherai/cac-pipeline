@@ -270,6 +270,12 @@ export default function LeadIntakeForm() {
             </div>
           ) : (
             <div className="intake-confirmation">
+              <div className="intake-confirm-icon-muted">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <circle cx="14" cy="14" r="11" />
+                  <path d="M14 9v6M14 19v.5" />
+                </svg>
+              </div>
               <h1 className="intake-title">Thank You for Your Interest</h1>
               <p className="intake-subtitle">
                 We appreciate you taking the time to tell us about your business.
@@ -398,10 +404,11 @@ export default function LeadIntakeForm() {
           <div className="intake-step-content">
             <h2 className="intake-section-title">Qualification Questions</h2>
 
-            {Object.entries(QUALIFICATION_QUESTIONS).map(([key, question]) => (
+            {Object.entries(QUALIFICATION_QUESTIONS).map(([key, question], idx) => (
               <div key={key} className="intake-question">
                 <p className="intake-question-label">
-                  {key.toUpperCase().replace('Q', 'Q')}. {question.question}
+                  <span className="intake-question-number">{idx + 1}</span>
+                  {question.question}
                 </p>
                 <div className="radio-group">
                   {question.options.map(option => (
