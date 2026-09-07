@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { DAYS_OF_WEEK, CLASSIFICATION_THRESHOLDS, HARD_DISQUALIFIERS } from '../lib/scoring'
@@ -25,23 +24,15 @@ export default function Settings() {
   const [newUser, setNewUser] = useState({ name: '', email: '', role: 'sales' })
   const [addingUser, setAddingUser] = useState(false)
 
-  // Per-user Google Calendar
-  const [gcalStatus, setGcalStatus] = useState({ connected: false, email: null })
-  const [gcalLoading, setGcalLoading] = useState(false)
-
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
+
+  // Action menu state
+  const [actionMenuId, setActionMenuId] = useState(null)
+  const actionMenuRef = useRef(null)
 
   useEffect(() => {
     fetchData()
-    handleGCalCallback()
   }, [])
-
-  // Re-check Google Calendar status whenever currentUser becomes available
-  useEffect(() => {
-    if (currentUser?.id) {
-      checkGoogleCalendar()
-    }
-  }, [currentUser?.id])
 
   useEffect(() => {
     if (toast.show) {
@@ -49,6 +40,16 @@ export default function Settings() {
       return () => clearTimeout(timer)
     }
   }, [toast.show])
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target)) {
+        setActionMenuId(null)
+      }
+    }
+    if (actionMenuId) document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [actionMenuId])
 
   function showToast(type, text) { setToast({ show: true, type, text }) }
 
@@ -64,29 +65,22 @@ export default function Settings() {
     if (availData) {
       setAllSlots(availData)
       const grouped = {}
-      availData.filter(s => s.is_available).forEach(slot => {
-        if (!grouped[slot.day_of_week]) grouped[slot.day_of_week] = []
-        grouped[slot.day_of_week].push(slot.time_slot)
+      availData.forEach(s => {
+        if (!grouped[s.day_of_week]) grouped[s.day_of_week] = []
+        if (s.is_available) grouped[s.day_of_week].push(s.time_slot)
       })
       setAvailability(grouped)
     }
     setLoading(false)
   }
 
-  // ── Calendar ──
-  function isSlotActive(day, time) { return (availability[day] || []).includes(time) }
+  function isSlotActive(day, time) {
+    return allSlots.some(s => s.day_of_week === day && s.time_slot === time && s.is_available)
+  }
 
   async function toggleSlot(day, time) {
-    const active = isSlotActive(day, time)
     const existingRow = allSlots.find(s => s.day_of_week === day && s.time_slot === time)
-
-    setAvailability(prev => {
-      const daySlots = prev[day] || []
-      return active
-        ? { ...prev, [day]: daySlots.filter(t => t !== time) }
-        : { ...prev, [day]: [...daySlots, time].sort() }
-    })
-
+    const active = isSlotActive(day, time)
     if (existingRow) {
       await supabase.from('calendar_availability').update({ is_available: !active }).eq('id', existingRow.id)
       setAllSlots(prev => prev.map(s => s.id === existingRow.id ? { ...s, is_available: !active } : s))
@@ -97,82 +91,6 @@ export default function Settings() {
     }
   }
 
-  // ── Per-User Google Calendar ──
-
-  async function checkGoogleCalendar() {
-    if (!currentUser?.id) return
-    try {
-      const { data, error } = await supabase.functions.invoke('google-calendar', {
-        body: { action: 'status', user_id: currentUser.id },
-      })
-      if (!error && data?.connected) {
-        setGcalStatus({ connected: true, email: data.email })
-      } else {
-        setGcalStatus({ connected: false, email: null })
-      }
-    } catch {
-      setGcalStatus({ connected: false, email: null })
-    }
-  }
-
-  async function connectGoogleCalendar() {
-    setGcalLoading(true)
-    try {
-      const { data, error } = await supabase.functions.invoke('google-calendar', {
-        body: { action: 'get-auth-url', user_id: currentUser.id },
-      })
-      if (error) throw error
-      // Store user_id in sessionStorage so callback knows which user
-      sessionStorage.setItem('gcal_connecting_user', currentUser.id)
-      if (data?.url) window.location.href = data.url
-    } catch {
-      showToast('error', 'Could not start Google Calendar connection. Ensure the Edge Function is deployed.')
-      setGcalLoading(false)
-    }
-  }
-
-  async function disconnectGoogleCalendar() {
-    try {
-      const { error } = await supabase.functions.invoke('google-calendar', {
-        body: { action: 'disconnect', user_id: currentUser.id },
-      })
-      if (error) throw error
-      setGcalStatus({ connected: false, email: null })
-      showToast('success', 'Google Calendar disconnected.')
-    } catch {
-      showToast('error', 'Could not disconnect. Try again.')
-    }
-  }
-
-  async function handleGCalCallback() {
-    const params = new URLSearchParams(window.location.search)
-    const code = params.get('code')
-    if (!code) return
-
-    // Google returns user_id in the state param (set during auth URL generation)
-    const stateUserId = params.get('state')
-    window.history.replaceState({}, '', window.location.pathname)
-
-    const userId = stateUserId || sessionStorage.getItem('gcal_connecting_user') || currentUser?.id
-    sessionStorage.removeItem('gcal_connecting_user')
-
-    setGcalLoading(true)
-    try {
-      const { data, error } = await supabase.functions.invoke('google-calendar', {
-        body: { action: 'exchange-code', code, user_id: userId },
-      })
-      if (error) throw error
-      if (data?.success) {
-        setGcalStatus({ connected: true, email: data.email })
-        showToast('success', `Google Calendar connected as ${data.email}`)
-      }
-    } catch {
-      showToast('error', 'Failed to connect Google Calendar. Try again.')
-    } finally {
-      setGcalLoading(false)
-    }
-  }
-
   // ── User Management (admin only) ──
   const roleLabels = { admin: 'Admin', sales: 'Sales', marketing: 'Marketing' }
   function getUserStatus(user) {
@@ -180,126 +98,137 @@ export default function Settings() {
     if (!user.last_sign_in_at) return 'pending'
     return 'active'
   }
-  function getStatusBadge(status) {
-    const config = {
-      active: { label: 'Active', className: 'status-active' },
-      pending: { label: 'Pending Invite', className: 'status-pending' },
-      deactivated: { label: 'Deactivated', className: 'status-deactivated' },
-    }
-    const c = config[status] || config.active
-    return <span className={`status-badge ${c.className}`}>{c.label}</span>
+
+  function getStatusLabel(status) {
+    return { active: 'Active', pending: 'Pending Invite', deactivated: 'Deactivated' }[status]
   }
+
   function formatLastSignIn(dateStr) {
-    if (!dateStr) return '—'
-    const d = new Date(dateStr), now = new Date(), ms = now - d
-    const mins = Math.floor(ms / 60000), hrs = Math.floor(ms / 3600000), days = Math.floor(ms / 86400000)
-    if (mins < 1) return 'Just now'
-    if (mins < 60) return `${mins}m ago`
-    if (hrs < 24) return `${hrs}h ago`
-    if (days < 7) return `${days}d ago`
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    if (!dateStr) return 'Never'
+    const d = new Date(dateStr)
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   }
-  async function handleUpdateRole() {
-    if (!editingUser || !editRole) return
-    await supabase.from('profiles').update({ role: editRole }).eq('id', editingUser.id)
-    setProfiles(prev => prev.map(p => p.id === editingUser.id ? { ...p, role: editRole } : p))
-    setEditingUser(null)
-    showToast('success', `Role updated to ${roleLabels[editRole]} for ${editingUser.name}.`)
-  }
-  async function handleToggleActive(user) {
-    const ns = !user.is_active
-    await supabase.from('profiles').update({ is_active: ns }).eq('id', user.id)
-    setProfiles(prev => prev.map(p => p.id === user.id ? { ...p, is_active: ns } : p))
-    showToast('success', `${user.name} has been ${ns ? 'reactivated' : 'deactivated'}.`)
-  }
-  async function handleResendResetEmail(user) {
-    try {
-      const tc = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
-      const { error } = await tc.auth.resetPasswordForEmail(user.email, { redirectTo: `${window.location.origin}/reset-password` })
-      if (error) throw error
-      showToast('success', `Password reset email sent to ${user.email}.`)
-    } catch { showToast('error', 'Could not send reset email. Try again.') }
-  }
+
   async function handleAddUser(e) {
     e.preventDefault()
-    if (!newUser.name.trim() || !newUser.email.trim()) return
     setAddingUser(true)
     try {
-      const tc = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
-      const pw = crypto.randomUUID().slice(0, 16) + 'A1!'
-      const { error } = await tc.auth.signUp({ email: newUser.email, password: pw, options: { data: { name: newUser.name, role: newUser.role } } })
+      const { data, error } = await supabase.auth.admin.createUser({
+        email: newUser.email,
+        email_confirm: false,
+        user_metadata: { name: newUser.name, role: newUser.role },
+      })
       if (error) throw error
-      await tc.auth.resetPasswordForEmail(newUser.email, { redirectTo: `${window.location.origin}/reset-password` })
-      const { data } = await supabase.from('profiles').select('*').order('created_at')
-      if (data) setProfiles(data)
+
+      await supabase.auth.resetPasswordForEmail(newUser.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      showToast('success', `Invite sent to ${newUser.email}`)
       setShowAddUser(false)
       setNewUser({ name: '', email: '', role: 'sales' })
-      showToast('success', `Account created for ${newUser.name}. Password reset link sent to ${newUser.email}.`)
+      fetchData()
     } catch (err) {
-      showToast('error', err.message?.includes('already registered') ? 'This email is already registered.' : (err.message || 'Could not create account.'))
-    } finally { setAddingUser(false) }
+      showToast('error', err.message || 'Failed to add user')
+    } finally {
+      setAddingUser(false)
+    }
   }
 
-  const [openMenu, setOpenMenu] = useState(null)
-  function toggleMenu(id) { setOpenMenu(openMenu === id ? null : id) }
-  useEffect(() => {
-    if (openMenu) { const h = () => setOpenMenu(null); document.addEventListener('click', h); return () => document.removeEventListener('click', h) }
-  }, [openMenu])
+  async function handleUpdateRole(userId) {
+    try {
+      await supabase.from('profiles').update({ role: editRole }).eq('id', userId)
+      showToast('success', 'Role updated')
+      setEditingUser(null)
+      fetchData()
+    } catch {
+      showToast('error', 'Failed to update role')
+    }
+  }
 
-  const pageTitle = isAdmin ? 'Admin Settings' : 'Settings'
+  async function handleToggleActive(user) {
+    const newStatus = user.is_active === false ? true : false
+    try {
+      await supabase.from('profiles').update({ is_active: newStatus }).eq('id', user.id)
+      showToast('success', newStatus ? 'Account reactivated' : 'Account deactivated')
+      setActionMenuId(null)
+      fetchData()
+    } catch {
+      showToast('error', 'Failed to update account status')
+    }
+  }
+
+  async function handleResendInvite(user) {
+    try {
+      await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      showToast('success', `Password reset sent to ${user.email}`)
+      setActionMenuId(null)
+    } catch {
+      showToast('error', 'Failed to send reset email')
+    }
+  }
 
   if (loading) {
     return (
       <div>
-        <div className="page-header"><h1 className="page-title">{pageTitle}</h1></div>
-        <div className="skeleton skeleton-card" style={{ height: 200, marginBottom: 'var(--space-xl)' }} />
-        <div className="skeleton skeleton-card" style={{ height: 160 }} />
+        <div className="page-header"><h1 className="page-title">Settings</h1></div>
+        <div className="skeleton skeleton-card" style={{ height: 200 }} />
       </div>
     )
   }
 
   return (
     <div>
-      <div className="page-header"><h1 className="page-title">{pageTitle}</h1></div>
-
-      {toast.show && (
-        <div className={`toast toast-${toast.type}`} role="status">
-          {toast.type === 'success' && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="8" cy="8" r="6.5" /><path d="M5.5 8.5l2 2 3.5-4" /></svg>}
-          {toast.type === 'error' && <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="8" r="6.5" /><line x1="8" y1="5" x2="8" y2="8.5" /><circle cx="8" cy="11" r="0.5" fill="currentColor" /></svg>}
-          <span>{toast.text}</span>
-        </div>
-      )}
+      <div className="page-header">
+        <h1 className="page-title">Settings</h1>
+      </div>
 
       {/* ── User Management (Admin only) ── */}
       {isAdmin && (
         <div className="settings-section">
           <div className="settings-section-header">
             <h2 className="settings-section-title">User Management</h2>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAddUser(true)}>+ Add User</button>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowAddUser(true)}>Add User</button>
           </div>
+
+          {/* Desktop table */}
           <div className="settings-card settings-card-overflow">
             <table className="data-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Sign In</th><th></th></tr></thead>
+              <thead>
+                <tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Sign In</th><th></th></tr>
+              </thead>
               <tbody>
-                {profiles.map(p => {
-                  const status = getUserStatus(p); const isSelf = p.id === currentUser?.id
+                {profiles.map(user => {
+                  const status = getUserStatus(user)
+                  const isCurrentUser = user.id === currentUser?.id
                   return (
-                    <tr key={p.id} className={status === 'deactivated' ? 'row-deactivated' : ''}>
-                      <td className="leads-name">{p.name}</td><td>{p.email}</td><td>{roleLabels[p.role] || p.role}</td>
-                      <td>{getStatusBadge(status)}</td><td className="text-muted">{formatLastSignIn(p.last_sign_in_at)}</td>
+                    <tr key={user.id} className={status === 'deactivated' ? 'row-deactivated' : ''}>
+                      <td style={{ fontWeight: 600 }}>{user.name}</td>
+                      <td>{user.email}</td>
+                      <td>{roleLabels[user.role]}</td>
+                      <td><span className={`status-badge status-${status}`}>{getStatusLabel(status)}</span></td>
+                      <td className="text-muted">{formatLastSignIn(user.last_sign_in_at)}</td>
                       <td>
-                        <div className="action-menu-wrap">
-                          <button className="action-menu-trigger" onClick={e => { e.stopPropagation(); toggleMenu(p.id) }}>
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" /></svg>
-                          </button>
-                          {openMenu === p.id && (
-                            <div className="action-menu" onClick={e => e.stopPropagation()}>
-                              <button className="action-menu-item" onClick={() => { setEditingUser(p); setEditRole(p.role); setOpenMenu(null) }}>Edit Role</button>
-                              <button className="action-menu-item" onClick={() => { handleResendResetEmail(p); setOpenMenu(null) }}>Resend Reset Email</button>
-                              {!isSelf && <button className={`action-menu-item ${status === 'deactivated' ? 'action-reactivate' : 'action-danger'}`} onClick={() => { handleToggleActive(p); setOpenMenu(null) }}>{status === 'deactivated' ? 'Reactivate' : 'Deactivate'}</button>}
-                            </div>
-                          )}
-                        </div>
+                        {!isCurrentUser && (
+                          <div className="action-menu-wrap" ref={actionMenuId === user.id ? actionMenuRef : null}>
+                            <button className="action-menu-trigger" onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}>
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" /></svg>
+                            </button>
+                            {actionMenuId === user.id && (
+                              <div className="action-menu">
+                                <button className="action-menu-item" onClick={() => { setEditingUser(user); setEditRole(user.role); setActionMenuId(null) }}>Change Role</button>
+                                <button className="action-menu-item" onClick={() => handleResendInvite(user)}>Resend Password Reset</button>
+                                {user.is_active === false ? (
+                                  <button className="action-menu-item action-reactivate" onClick={() => handleToggleActive(user)}>Reactivate</button>
+                                ) : (
+                                  <button className="action-menu-item action-danger" onClick={() => handleToggleActive(user)}>Deactivate</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )
@@ -307,77 +236,100 @@ export default function Settings() {
               </tbody>
             </table>
           </div>
-          {/* Mobile user cards */}
+
+          {/* Mobile cards */}
           <div className="settings-user-mobile-list">
-            {profiles.map(p => {
-              const status = getUserStatus(p); const isSelf = p.id === currentUser?.id
+            {profiles.map(user => {
+              const status = getUserStatus(user)
+              const isCurrentUser = user.id === currentUser?.id
               return (
-                <div key={p.id} className={`settings-user-card ${status === 'deactivated' ? 'row-deactivated' : ''}`}>
+                <div key={user.id} className="settings-user-card">
                   <div className="settings-user-card-top">
-                    <div><div className="settings-user-card-name">{p.name}</div><div className="settings-user-card-email">{p.email}</div></div>
-                    <div className="action-menu-wrap">
-                      <button className="action-menu-trigger" onClick={e => { e.stopPropagation(); toggleMenu(p.id) }}>
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" /></svg>
-                      </button>
-                      {openMenu === p.id && (
-                        <div className="action-menu" onClick={e => e.stopPropagation()}>
-                          <button className="action-menu-item" onClick={() => { setEditingUser(p); setEditRole(p.role); setOpenMenu(null) }}>Edit Role</button>
-                          <button className="action-menu-item" onClick={() => { handleResendResetEmail(p); setOpenMenu(null) }}>Resend Reset Email</button>
-                          {!isSelf && <button className={`action-menu-item ${status === 'deactivated' ? 'action-reactivate' : 'action-danger'}`} onClick={() => { handleToggleActive(p); setOpenMenu(null) }}>{status === 'deactivated' ? 'Reactivate' : 'Deactivate'}</button>}
-                        </div>
-                      )}
+                    <div>
+                      <div className="settings-user-card-name">{user.name}</div>
+                      <div className="settings-user-card-email">{user.email}</div>
                     </div>
+                    {!isCurrentUser && (
+                      <div className="action-menu-wrap" ref={actionMenuId === user.id ? actionMenuRef : null}>
+                        <button className="action-menu-trigger" onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}>
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" /></svg>
+                        </button>
+                        {actionMenuId === user.id && (
+                          <div className="action-menu">
+                            <button className="action-menu-item" onClick={() => { setEditingUser(user); setEditRole(user.role); setActionMenuId(null) }}>Change Role</button>
+                            <button className="action-menu-item" onClick={() => handleResendInvite(user)}>Resend Password Reset</button>
+                            {user.is_active === false ? (
+                              <button className="action-menu-item action-reactivate" onClick={() => handleToggleActive(user)}>Reactivate</button>
+                            ) : (
+                              <button className="action-menu-item action-danger" onClick={() => handleToggleActive(user)}>Deactivate</button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="settings-user-card-meta">
-                    <span className="settings-user-card-meta-item">{roleLabels[p.role] || p.role}</span>
-                    {getStatusBadge(status)}
-                    <span className="settings-user-card-meta-item">{formatLastSignIn(p.last_sign_in_at)}</span>
+                    <span className="settings-user-card-meta-item">{roleLabels[user.role]}</span>
+                    <span className={`status-badge status-${status}`}>{getStatusLabel(status)}</span>
                   </div>
                 </div>
               )
             })}
           </div>
-        </div>
-      )}
 
-      {/* Edit Role Modal */}
-      {editingUser && (
-        <div className="modal-overlay" onClick={() => setEditingUser(null)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">Edit Role — {editingUser.name}</h3>
-            <div className="form-group"><label className="form-label">Role</label>
-              <select className="form-input" value={editRole} onChange={e => setEditRole(e.target.value)}>
-                <option value="admin">Admin</option><option value="sales">Sales Manager</option><option value="marketing">Marketing Manager</option>
-              </select>
+          {/* Add User Modal */}
+          {showAddUser && (
+            <div className="modal-overlay" onClick={() => setShowAddUser(false)}>
+              <div className="modal-card" onClick={e => e.stopPropagation()}>
+                <h3 className="modal-title">Add New User</h3>
+                <p className="modal-subtitle">They'll receive an email to set their password.</p>
+                <form onSubmit={handleAddUser}>
+                  <div className="form-group">
+                    <label className="form-label">Full Name</label>
+                    <input className="form-input" required value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Email</label>
+                    <input className="form-input" type="email" required value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Role</label>
+                    <select className="form-input" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })}>
+                      <option value="sales">Sales Manager</option>
+                      <option value="marketing">Marketing Manager</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                  <div className="modal-actions">
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={addingUser}>{addingUser ? 'Sending...' : 'Send Invite'}</button>
+                  </div>
+                </form>
+              </div>
             </div>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleUpdateRole}>Save</button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Add User Modal */}
-      {showAddUser && (
-        <div className="modal-overlay" onClick={() => setShowAddUser(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">Add New User</h3>
-            <p className="modal-subtitle">The user will receive a password reset email to set their own password.</p>
-            <form onSubmit={handleAddUser}>
-              <div className="form-group"><label className="form-label" htmlFor="nn">Full Name</label><input id="nn" type="text" className="form-input" placeholder="e.g. Diana Wanjiku" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} required autoFocus /></div>
-              <div className="form-group"><label className="form-label" htmlFor="ne">Email</label><input id="ne" type="email" className="form-input" placeholder="e.g. diana@cipherai.co.ke" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} required /></div>
-              <div className="form-group"><label className="form-label" htmlFor="nr">Role</label>
-                <select id="nr" className="form-input" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })}>
-                  <option value="sales">Sales Manager</option><option value="marketing">Marketing Manager</option><option value="admin">Admin</option>
-                </select>
+          {/* Edit Role Modal */}
+          {editingUser && (
+            <div className="modal-overlay" onClick={() => setEditingUser(null)}>
+              <div className="modal-card" onClick={e => e.stopPropagation()}>
+                <h3 className="modal-title">Change Role</h3>
+                <p className="modal-subtitle">Update {editingUser.name}'s access level.</p>
+                <div className="form-group">
+                  <label className="form-label">Role</label>
+                  <select className="form-input" value={editRole} onChange={e => setEditRole(e.target.value)}>
+                    <option value="admin">Admin</option>
+                    <option value="sales">Sales Manager</option>
+                    <option value="marketing">Marketing Manager</option>
+                  </select>
+                </div>
+                <div className="modal-actions">
+                  <button className="btn btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>
+                  <button className="btn btn-primary" onClick={() => handleUpdateRole(editingUser.id)}>Save</button>
+                </div>
               </div>
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddUser(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={addingUser || !newUser.name.trim() || !newUser.email.trim()}>{addingUser ? 'Creating...' : 'Create Account'}</button>
-              </div>
-            </form>
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -405,33 +357,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* ── Google Calendar Sync (per user) ── */}
-      <div className="settings-section">
-        <h2 className="settings-section-title">Google Calendar Sync</h2>
-        <div className="section-card">
-          <div className="settings-gcal">
-            <div className="settings-gcal-info">
-              <div className="settings-gcal-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" /><path d="M3 9h18" stroke="currentColor" strokeWidth="1.5" /><path d="M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><rect x="7" y="12" width="4" height="3" rx="0.5" fill="currentColor" opacity="0.3" /><rect x="13" y="12" width="4" height="3" rx="0.5" fill="currentColor" opacity="0.3" /></svg>
-              </div>
-              <div>
-                {gcalStatus.connected ? (
-                  <><div className="settings-gcal-status connected">Connected</div><div className="settings-gcal-email">{gcalStatus.email}</div><p className="settings-gcal-desc">Discovery calls will be automatically added to your Google Calendar.</p></>
-                ) : (
-                  <><div className="settings-gcal-status">Not connected</div><p className="settings-gcal-desc">Connect your Google Calendar so discovery calls are automatically created as calendar events.</p></>
-                )}
-              </div>
-            </div>
-            <div className="settings-gcal-action">
-              {gcalStatus.connected
-                ? <button className="btn btn-secondary btn-sm" onClick={disconnectGoogleCalendar}>Disconnect</button>
-                : <button className="btn btn-primary btn-sm" onClick={connectGoogleCalendar} disabled={gcalLoading}>{gcalLoading ? 'Connecting...' : 'Connect Calendar'}</button>
-              }
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ── Scoring (Admin only) ── */}
       {isAdmin && (
         <div className="settings-section">
@@ -445,6 +370,18 @@ export default function Settings() {
             <h3 className="settings-disq-title" style={{ padding: 0 }}>Hard Disqualifiers</h3>
             {HARD_DISQUALIFIERS.map((d, i) => <p key={i} className="settings-disq-item" style={{ paddingLeft: 0 }}>• {d.question}: {d.response}</p>)}
           </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast.show && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 8.5l3 3 5-6" /></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3.5M8 10.5v.5" /></svg>
+          )}
+          {toast.text}
         </div>
       )}
     </div>

@@ -473,79 +473,11 @@
   background: var(--cac-red-hover);
 }
 
-/* ─── Google Calendar ─── */
-.settings-gcal {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  padding: var(--space-lg);
-}
-
-.settings-gcal-info {
-  display: flex;
-  gap: var(--space-md);
-  align-items: flex-start;
-}
-
-.settings-gcal-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--bg-gray);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.settings-gcal-status {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-bottom: 2px;
-}
-
-.settings-gcal-status.connected {
-  color: var(--success);
-}
-
-.settings-gcal-email {
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  font-weight: 500;
-  margin-bottom: 6px;
-}
-
-.settings-gcal-desc {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  line-height: 1.5;
-  max-width: 400px;
-}
-
-.settings-gcal-action {
-  flex-shrink: 0;
-}
-
 /* ─── Calendar Grid Mobile ─── */
 @media (max-width: 768px) {
   .settings-calendar-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
-  }
-
-  .settings-gcal {
-    flex-direction: column;
-  }
-
-  .settings-gcal-action {
-    width: 100%;
-  }
-
-  .settings-gcal-action .btn {
-    width: 100%;
   }
 }
 

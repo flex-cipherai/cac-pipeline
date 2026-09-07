@@ -27,6 +27,12 @@ const icons = {
       <path d="M14.5 11c2 0 3.5 1.5 3.5 3.5" />
     </svg>
   ),
+  notifications: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <rect x="2" y="4" width="16" height="12" rx="2" />
+      <path d="M2 7l8 5 8-5" />
+    </svg>
+  ),
   settings: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <circle cx="10" cy="10" r="2.5" />
@@ -71,6 +77,7 @@ export default function Sidebar({ isOpen, onClose }) {
           { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard' },
           { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline' },
           { to: '/leads', icon: icons.leads, label: 'All Leads' },
+          { to: '/notifications', icon: icons.notifications, label: 'Notifications' },
           { to: '/settings', icon: icons.settings, label: 'Settings' },
         ]
       case 'admin':
@@ -79,6 +86,7 @@ export default function Sidebar({ isOpen, onClose }) {
           { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard' },
           { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline' },
           { to: '/leads', icon: icons.leads, label: 'All Leads' },
+          { to: '/notifications', icon: icons.notifications, label: 'Notifications' },
           { to: '/settings', icon: icons.settings, label: 'Settings' },
         ]
     }

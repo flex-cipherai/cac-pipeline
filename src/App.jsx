@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
 import Settings from './pages/Settings'
+import Notifications from './pages/Notifications'
 import MarketingAnalytics from './pages/MarketingAnalytics'
 import ResetPassword from './pages/ResetPassword'
 
@@ -97,6 +98,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['admin', 'sales']}>
             <AllLeads />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'sales']}>
+            <Notifications />
           </ProtectedRoute>
         }
       />
