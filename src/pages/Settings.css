@@ -479,6 +479,17 @@
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
+
+  .booking-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Booking Configuration ─── */
+.booking-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
 }
 
 @media (max-width: 480px) {

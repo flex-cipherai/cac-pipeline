@@ -17,6 +17,15 @@ export default function Settings() {
   const [allSlots, setAllSlots] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // Booking configuration
+  const [bookingConfig, setBookingConfig] = useState({
+    booking_window_days: '14',
+    booking_min_notice_hours: '4',
+    booking_duration_minutes: '60',
+    booking_buffer_minutes: '0',
+  })
+  const [savingConfig, setSavingConfig] = useState(false)
+
   // Admin modals
   const [editingUser, setEditingUser] = useState(null)
   const [editRole, setEditRole] = useState('')
@@ -71,7 +80,32 @@ export default function Settings() {
       })
       setAvailability(grouped)
     }
+
+    // Fetch booking config from system_settings
+    const { data: configData } = await supabase
+      .from('system_settings').select('key, value')
+      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes'])
+    if (configData) {
+      const cfg = { ...bookingConfig }
+      configData.forEach(row => { if (row.key && row.value) cfg[row.key] = row.value })
+      setBookingConfig(cfg)
+    }
+
     setLoading(false)
+  }
+
+  async function saveBookingConfig() {
+    setSavingConfig(true)
+    try {
+      for (const [key, value] of Object.entries(bookingConfig)) {
+        await supabase.from('system_settings').upsert({ key, value: String(value) }, { onConflict: 'key' })
+      }
+      showToast('success', 'Booking settings saved')
+    } catch {
+      showToast('error', 'Failed to save booking settings')
+    } finally {
+      setSavingConfig(false)
+    }
   }
 
   function isSlotActive(day, time) {
@@ -353,6 +387,59 @@ export default function Settings() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Booking Configuration ── */}
+      <div className="settings-section">
+        <div className="settings-section-header">
+          <h2 className="settings-section-title">Booking Configuration</h2>
+        </div>
+        <div className="section-card" style={{ padding: 'var(--space-lg)' }}>
+          <div className="booking-config-grid">
+            <div className="form-group">
+              <label className="form-label">Meeting duration</label>
+              <select className="form-input" value={bookingConfig.booking_duration_minutes} onChange={e => setBookingConfig({ ...bookingConfig, booking_duration_minutes: e.target.value })}>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">60 minutes</option>
+                <option value="90">90 minutes</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Booking window</label>
+              <select className="form-input" value={bookingConfig.booking_window_days} onChange={e => setBookingConfig({ ...bookingConfig, booking_window_days: e.target.value })}>
+                <option value="7">7 days ahead</option>
+                <option value="14">14 days ahead</option>
+                <option value="21">21 days ahead</option>
+                <option value="30">30 days ahead</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Minimum notice</label>
+              <select className="form-input" value={bookingConfig.booking_min_notice_hours} onChange={e => setBookingConfig({ ...bookingConfig, booking_min_notice_hours: e.target.value })}>
+                <option value="2">2 hours</option>
+                <option value="4">4 hours</option>
+                <option value="8">8 hours</option>
+                <option value="24">24 hours (1 day)</option>
+                <option value="48">48 hours (2 days)</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Buffer between calls</label>
+              <select className="form-input" value={bookingConfig.booking_buffer_minutes} onChange={e => setBookingConfig({ ...bookingConfig, booking_buffer_minutes: e.target.value })}>
+                <option value="0">No buffer</option>
+                <option value="15">15 minutes</option>
+                <option value="30">30 minutes</option>
+                <option value="60">60 minutes</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-md)' }}>
+            <button className="btn btn-primary btn-sm" onClick={saveBookingConfig} disabled={savingConfig}>
+              {savingConfig ? 'Saving...' : 'Save Configuration'}
+            </button>
           </div>
         </div>
       </div>
