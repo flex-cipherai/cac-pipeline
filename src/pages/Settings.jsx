@@ -33,9 +33,15 @@ export default function Settings() {
 
   useEffect(() => {
     fetchData()
-    checkGoogleCalendar()
     handleGCalCallback()
   }, [])
+
+  // Re-check Google Calendar status whenever currentUser becomes available
+  useEffect(() => {
+    if (currentUser?.id) {
+      checkGoogleCalendar()
+    }
+  }, [currentUser?.id])
 
   useEffect(() => {
     if (toast.show) {
@@ -92,15 +98,21 @@ export default function Settings() {
   }
 
   // ── Per-User Google Calendar ──
-  const userGcalKey = currentUser ? `gcal_email_${currentUser.id}` : null
-  const userGcalTokenKey = currentUser ? `gcal_tokens_${currentUser.id}` : null
 
   async function checkGoogleCalendar() {
-    if (!userGcalKey) return
+    if (!currentUser?.id) return
     try {
-      const { data } = await supabase.from('system_settings').select('value').eq('key', userGcalKey).single()
-      if (data?.value) setGcalStatus({ connected: true, email: data.value })
-    } catch {}
+      const { data, error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'status', user_id: currentUser.id },
+      })
+      if (!error && data?.connected) {
+        setGcalStatus({ connected: true, email: data.email })
+      } else {
+        setGcalStatus({ connected: false, email: null })
+      }
+    } catch {
+      setGcalStatus({ connected: false, email: null })
+    }
   }
 
   async function connectGoogleCalendar() {
@@ -121,8 +133,10 @@ export default function Settings() {
 
   async function disconnectGoogleCalendar() {
     try {
-      await supabase.from('system_settings').delete().eq('key', userGcalTokenKey)
-      await supabase.from('system_settings').delete().eq('key', userGcalKey)
+      const { error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'disconnect', user_id: currentUser.id },
+      })
+      if (error) throw error
       setGcalStatus({ connected: false, email: null })
       showToast('success', 'Google Calendar disconnected.')
     } catch {
@@ -135,9 +149,11 @@ export default function Settings() {
     const code = params.get('code')
     if (!code) return
 
+    // Google returns user_id in the state param (set during auth URL generation)
+    const stateUserId = params.get('state')
     window.history.replaceState({}, '', window.location.pathname)
 
-    const userId = sessionStorage.getItem('gcal_connecting_user') || currentUser?.id
+    const userId = stateUserId || sessionStorage.getItem('gcal_connecting_user') || currentUser?.id
     sessionStorage.removeItem('gcal_connecting_user')
 
     setGcalLoading(true)
