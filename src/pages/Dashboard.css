@@ -1,3 +1,23 @@
+/* ─── Header ─── */
+.dash-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.dash-export-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.dash-export-btns .btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
 /* ─── Stats Row ─── */
 .dash-stats-row {
   display: grid;

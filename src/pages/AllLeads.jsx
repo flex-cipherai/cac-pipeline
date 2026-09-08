@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { exportCSV, exportLeadsPDF } from '../lib/exportUtils'
 import LeadDetail from '../components/LeadDetail/LeadDetail'
 import './AllLeads.css'
 
@@ -56,6 +57,29 @@ export default function AllLeads() {
     )
   })
 
+  function handleExportCSV() {
+    const data = filtered.length > 0 ? filtered : leads
+    const headers = ['Name', 'Company', 'Email', 'Phone', 'Classification', 'Score', 'Stage', 'Source', 'Scheduled', 'Date']
+    const rows = data.map(l => [
+      l.full_name,
+      l.company_name,
+      l.email,
+      l.phone,
+      l.is_disqualified ? 'Cold' : (l.classification || '').charAt(0).toUpperCase() + (l.classification || '').slice(1),
+      `${l.total_score}/21`,
+      l.is_lost ? 'Lost' : l.current_stage,
+      l.source || 'Website',
+      l.scheduled_day && l.scheduled_time ? `${l.scheduled_day} ${l.scheduled_time}` : '',
+      l.created_at ? new Date(l.created_at).toLocaleDateString('en-GB') : '',
+    ])
+    exportCSV(headers, rows, `CAC_Leads_${new Date().toISOString().slice(0, 10)}`)
+  }
+
+  function handleExportPDF() {
+    const data = filtered.length > 0 ? filtered : leads
+    exportLeadsPDF(data, `CAC_Leads_${new Date().toISOString().slice(0, 10)}`)
+  }
+
   if (loading) {
     return (
       <div>
@@ -81,18 +105,30 @@ export default function AllLeads() {
           </p>
         </div>
         {leads.length > 0 && (
-          <div className="leads-search-wrap">
-            <svg className="leads-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <circle cx="7" cy="7" r="5" />
-              <path d="M11 11l3.5 3.5" />
-            </svg>
-            <input
-              type="text"
-              className="leads-search"
-              placeholder="Search leads..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+          <div className="leads-header-actions">
+            <div className="leads-search-wrap">
+              <svg className="leads-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="7" cy="7" r="5" />
+                <path d="M11 11l3.5 3.5" />
+              </svg>
+              <input
+                type="text"
+                className="leads-search"
+                placeholder="Search leads..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="leads-export-btns">
+              <button className="btn btn-secondary btn-sm" onClick={handleExportCSV} title="Export as CSV">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 9V2M4 6.5L7 9.5l3-3M2 11.5h10" /></svg>
+                CSV
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={handleExportPDF} title="Export as PDF">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 9V2M4 6.5L7 9.5l3-3M2 11.5h10" /></svg>
+                PDF
+              </button>
+            </div>
           </div>
         )}
       </div>

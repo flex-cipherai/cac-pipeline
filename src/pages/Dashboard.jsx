@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES, estimatePipelineValue } from '../lib/scoring'
+import { exportCSV, exportDashboardPDF } from '../lib/exportUtils'
 import './Dashboard.css'
 
 /* ─── Inline icons for stat cards ─── */
@@ -117,6 +118,51 @@ export default function Dashboard() {
   const roleLabel = profile?.role === 'sales' ? 'Sales' : 'Admin'
   const classTotal = hotCount + warmCount + coldCount
 
+  const sourcesArr = Object.entries(sources).sort((a, b) => b[1] - a[1])
+  const stageCounts = PIPELINE_STAGES.map(s => [s.label, stageCountMap[s.key]])
+
+  function handleExportCSV() {
+    const headers = ['Metric', 'Value']
+    const rows = [
+      ['Total Leads', String(totalLeads)],
+      ['Qualified', String(qualifiedCount)],
+      ['Disqualified', String(coldCount)],
+      ['Qualification Rate', `${qualificationRate}%`],
+      ['Hot', String(hotCount)],
+      ['Warm', String(warmCount)],
+      ['In Pipeline', String(inPipeline)],
+      ['Converted', String(convertedCount)],
+      ['Conversion Rate', `${conversionRate}%`],
+      ['Pipeline Value', formatValue(pipelineValue)],
+      ['Lost', String(lostCount)],
+      [''],
+      ['Stage', 'Count'],
+      ...stageCounts.map(([s, c]) => [s, String(c)]),
+      [''],
+      ['Source', 'Count'],
+      ...sourcesArr.map(([s, c]) => [s, String(c)]),
+    ]
+    exportCSV(headers, rows, `CAC_Dashboard_${new Date().toISOString().slice(0, 10)}`)
+  }
+
+  function handleExportPDF() {
+    exportDashboardPDF({
+      totalLeads,
+      qualifiedCount,
+      coldCount,
+      qualificationRate,
+      hotCount,
+      warmCount,
+      inPipeline,
+      convertedCount,
+      conversionRate,
+      pipelineValueFormatted: formatValue(pipelineValue),
+      lostCount,
+      stageCounts,
+      sources: sourcesArr,
+    }, `CAC_Dashboard_${new Date().toISOString().slice(0, 10)}`)
+  }
+
   if (loading) {
     return (
       <div>
@@ -135,11 +181,25 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
-      <div className="page-header">
-        <h1 className="page-title">{roleLabel} Dashboard</h1>
-        <p className="page-subtitle">
-          {monthYear} · {totalLeads} total lead{totalLeads !== 1 ? 's' : ''}
-        </p>
+      <div className="page-header dash-header">
+        <div>
+          <h1 className="page-title">{roleLabel} Dashboard</h1>
+          <p className="page-subtitle">
+            {monthYear} · {totalLeads} total lead{totalLeads !== 1 ? 's' : ''}
+          </p>
+        </div>
+        {totalLeads > 0 && (
+          <div className="dash-export-btns">
+            <button className="btn btn-secondary btn-sm" onClick={handleExportCSV} title="Export as CSV">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 9V2M4 6.5L7 9.5l3-3M2 11.5h10" /></svg>
+              CSV
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={handleExportPDF} title="Export as PDF">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M7 9V2M4 6.5L7 9.5l3-3M2 11.5h10" /></svg>
+              PDF
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Lead Metrics ── */}
