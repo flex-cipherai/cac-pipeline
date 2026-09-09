@@ -147,15 +147,15 @@ export default function Settings() {
     e.preventDefault()
     setAddingUser(true)
     try {
-      const { data, error } = await supabase.auth.admin.createUser({
-        email: newUser.email,
-        email_confirm: false,
-        user_metadata: { name: newUser.name, role: newUser.role },
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'create_user', email: newUser.email, name: newUser.name, role: newUser.role },
       })
       if (error) throw error
+      if (data?.error) throw new Error(data.error)
 
-      await supabase.auth.resetPasswordForEmail(newUser.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Send password reset so they can set their password
+      await supabase.functions.invoke('manage-users', {
+        body: { action: 'reset_password', email: newUser.email, redirect_to: `${window.location.origin}/reset-password` },
       })
 
       showToast('success', `Invite sent to ${newUser.email}`)
@@ -171,36 +171,46 @@ export default function Settings() {
 
   async function handleUpdateRole(userId) {
     try {
-      await supabase.from('profiles').update({ role: editRole }).eq('id', userId)
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'update_role', user_id: userId, role: editRole },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
       showToast('success', 'Role updated')
       setEditingUser(null)
       fetchData()
-    } catch {
-      showToast('error', 'Failed to update role')
+    } catch (err) {
+      showToast('error', err.message || 'Failed to update role')
     }
   }
 
   async function handleToggleActive(user) {
     const newStatus = user.is_active === false ? true : false
     try {
-      await supabase.from('profiles').update({ is_active: newStatus }).eq('id', user.id)
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'toggle_active', user_id: user.id, is_active: newStatus },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
       showToast('success', newStatus ? 'Account reactivated' : 'Account deactivated')
       setActionMenuId(null)
       fetchData()
-    } catch {
-      showToast('error', 'Failed to update account status')
+    } catch (err) {
+      showToast('error', err.message || 'Failed to update account status')
     }
   }
 
   async function handleResendInvite(user) {
     try {
-      await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'reset_password', email: user.email, redirect_to: `${window.location.origin}/reset-password` },
       })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
       showToast('success', `Password reset sent to ${user.email}`)
       setActionMenuId(null)
-    } catch {
-      showToast('error', 'Failed to send reset email')
+    } catch (err) {
+      showToast('error', err.message || 'Failed to send reset email')
     }
   }
 
