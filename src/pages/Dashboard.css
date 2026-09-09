@@ -230,3 +230,190 @@
     right: var(--space-md);
   }
 }
+
+/* ─── Upcoming Calls (Gap 2) ─── */
+.dash-calls-card { }
+
+.dash-calls-date {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dash-calls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dash-call-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-gray);
+  border-radius: var(--radius-sm);
+}
+
+.dash-call-time {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--cac-red);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+}
+
+.dash-call-time.overdue {
+  color: #991b1b;
+}
+
+.dash-call-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-call-name {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-call-company {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.dash-overdue-tag {
+  font-size: 10px;
+  font-weight: 700;
+  color: #991b1b;
+  background: #fee2e2;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ─── Value by stage (Gap 7) ─── */
+.stage-chart-value {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ─── Conversion Funnel (Gap 9) ─── */
+.dash-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dash-funnel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dash-funnel-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  width: 100px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.dash-funnel-bar-wrap {
+  flex: 1;
+  height: 28px;
+  background: var(--bg-gray);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.dash-funnel-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cac-red), rgba(236, 48, 19, 0.6));
+  border-radius: var(--radius-sm);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+.dash-funnel-count {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-funnel-drop {
+  font-size: var(--text-xs);
+  color: #991b1b;
+  font-weight: 600;
+  min-width: 36px;
+}
+
+/* ─── Activity Feed (Gap 10) ─── */
+.dash-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.dash-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash-activity-item:last-child {
+  border-bottom: none;
+}
+
+.dash-activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--charcoal);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.dash-activity-dot.lost {
+  background: var(--cac-red);
+}
+
+.dash-activity-dot.converted {
+  background: var(--success);
+}
+
+.dash-activity-content {
+  flex: 1;
+}
+
+.dash-activity-text {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.dash-activity-meta {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+@media (max-width: 480px) {
+  .dash-funnel-label {
+    width: 72px;
+    font-size: var(--text-xs);
+  }
+}

@@ -149,6 +149,20 @@ export default function Pipeline() {
     return null
   }
 
+  // Gap 3: Lead aging — calculate days in current stage
+  function getDaysInStage(lead) {
+    // Use stage_entered_at if available, otherwise fall back to updated_at or created_at
+    const ref = lead.stage_entered_at || lead.updated_at || lead.created_at
+    if (!ref) return 0
+    return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000)
+  }
+
+  function getAgingClass(days) {
+    if (days >= 10) return 'aging-red'
+    if (days >= 5) return 'aging-amber'
+    return ''
+  }
+
   if (loading) {
     return (
       <div>
@@ -273,7 +287,18 @@ export default function Pipeline() {
                         <span className={badgeClass(lead.classification)}>
                           {lead.classification.charAt(0).toUpperCase() + lead.classification.slice(1)}
                         </span>
-                        <span className="pipeline-card-score">{lead.total_score}/21</span>
+                        <div className="pipeline-card-footer-right">
+                          {(() => {
+                            const days = getDaysInStage(lead)
+                            const agingClass = getAgingClass(days)
+                            return days > 0 ? (
+                              <span className={`pipeline-card-aging ${agingClass}`} title={`${days} day${days !== 1 ? 's' : ''} in this stage`}>
+                                {days}d
+                              </span>
+                            ) : null
+                          })()}
+                          <span className="pipeline-card-score">{lead.total_score}/21</span>
+                        </div>
                       </div>
                     </div>
                   )
@@ -361,7 +386,10 @@ export default function Pipeline() {
 
       {/* Lead Detail Drawer */}
       {selectedLead && (
-        <LeadDetail lead={selectedLead} onClose={() => setSelectedLead(null)} />
+        <LeadDetail lead={selectedLead} onClose={() => setSelectedLead(null)} onLeadUpdated={(updated) => {
+          setLeads(prev => updated.is_lost ? prev.filter(l => l.id !== updated.id) : prev.map(l => l.id === updated.id ? updated : l))
+          setSelectedLead(null)
+        }} />
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 // Export utilities — CSV and PDF generation for CAC Pipeline
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
 
 // ── CSV Export ──
 
@@ -28,14 +28,11 @@ export function exportCSV(headers, rows, filename) {
   URL.revokeObjectURL(url)
 }
 
-// ── PDF Export ──
+// ── PDF helpers ──
 
 function addCACHeader(doc) {
-  // Red bar
   doc.setFillColor(236, 48, 19)
   doc.rect(0, 0, doc.internal.pageSize.getWidth(), 28, 'F')
-
-  // Logo text
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
@@ -43,14 +40,10 @@ function addCACHeader(doc) {
   doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')
   doc.text('CONSULTANTS', 14, 20)
-
-  // Date
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   doc.setFontSize(9)
   doc.text(dateStr, doc.internal.pageSize.getWidth() - 14, 16, { align: 'right' })
-
-  doc.setTextColor(32, 30, 29) // Reset to charcoal
+  doc.setTextColor(32, 30, 29)
 }
 
 function addFooter(doc) {
@@ -68,11 +61,12 @@ function addFooter(doc) {
   }
 }
 
+// ── PDF Exports ──
+
 export function exportLeadsPDF(leads, filename) {
   const doc = new jsPDF('landscape')
   addCACHeader(doc)
 
-  // Title
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(32, 30, 29)
@@ -83,7 +77,6 @@ export function exportLeadsPDF(leads, filename) {
   doc.setTextColor(120, 120, 120)
   doc.text(`${leads.length} lead${leads.length !== 1 ? 's' : ''} · Generated ${new Date().toLocaleString('en-GB')}`, 14, 47)
 
-  // Table
   const headers = [['Name', 'Company', 'Email', 'Phone', 'Class', 'Score', 'Stage', 'Source', 'Date']]
   const rows = leads.map(l => [
     l.full_name || '',
@@ -97,33 +90,16 @@ export function exportLeadsPDF(leads, filename) {
     l.created_at ? new Date(l.created_at).toLocaleDateString('en-GB') : '',
   ])
 
-  doc.autoTable({
+  autoTable(doc, {
     head: headers,
     body: rows,
     startY: 53,
-    styles: {
-      fontSize: 8,
-      cellPadding: 3,
-      font: 'helvetica',
-      textColor: [32, 30, 29],
-    },
-    headStyles: {
-      fillColor: [32, 30, 29],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 8,
-    },
-    alternateRowStyles: {
-      fillColor: [243, 242, 242],
-    },
-    columnStyles: {
-      4: { cellWidth: 18 }, // Class
-      5: { cellWidth: 18 }, // Score
-    },
+    styles: { fontSize: 8, cellPadding: 3, font: 'helvetica', textColor: [32, 30, 29] },
+    headStyles: { fillColor: [32, 30, 29], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    alternateRowStyles: { fillColor: [243, 242, 242] },
+    columnStyles: { 4: { cellWidth: 18 }, 5: { cellWidth: 18 } },
     margin: { top: 32, left: 14, right: 14 },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) addCACHeader(doc)
-    },
+    didDrawPage: (data) => { if (data.pageNumber > 1) addCACHeader(doc) },
   })
 
   addFooter(doc)
@@ -135,28 +111,25 @@ export function exportDashboardPDF(metrics, filename) {
   addCACHeader(doc)
 
   let y = 40
-
-  // Title
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(32, 30, 29)
   doc.text('Pipeline Summary Report', 14, y)
   y += 7
-
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(120, 120, 120)
   doc.text(`Generated ${new Date().toLocaleString('en-GB')}`, 14, y)
   y += 14
 
-  // ── Lead Metrics section ──
+  // Lead Metrics
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(236, 48, 19)
   doc.text('Lead Metrics', 14, y)
   y += 2
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     body: [
       ['Total Leads', String(metrics.totalLeads)],
@@ -177,14 +150,14 @@ export function exportDashboardPDF(metrics, filename) {
 
   y = doc.lastAutoTable.finalY + 12
 
-  // ── Pipeline Metrics section ──
+  // Pipeline Metrics
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(236, 48, 19)
   doc.text('Pipeline Metrics', 14, y)
   y += 2
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     body: [
       ['In Pipeline', String(metrics.inPipeline)],
@@ -204,32 +177,26 @@ export function exportDashboardPDF(metrics, filename) {
 
   y = doc.lastAutoTable.finalY + 12
 
-  // ── Leads by Stage ──
+  // Leads by Stage
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(236, 48, 19)
   doc.text('Leads by Stage', 14, y)
   y += 2
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: y,
     head: [['Stage', 'Count']],
     body: metrics.stageCounts.map(([stage, count]) => [stage, String(count)]),
     styles: { fontSize: 9, cellPadding: 4, font: 'helvetica' },
-    headStyles: {
-      fillColor: [32, 30, 29],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-    },
-    columnStyles: {
-      1: { halign: 'right' },
-    },
+    headStyles: { fillColor: [32, 30, 29], textColor: [255, 255, 255], fontStyle: 'bold' },
+    columnStyles: { 1: { halign: 'right' } },
     margin: { left: 14, right: 14 },
   })
 
   y = doc.lastAutoTable.finalY + 12
 
-  // ── Lead Sources ──
+  // Lead Sources
   if (metrics.sources && metrics.sources.length > 0) {
     doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
@@ -237,19 +204,13 @@ export function exportDashboardPDF(metrics, filename) {
     doc.text('Lead Sources', 14, y)
     y += 2
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: y,
       head: [['Source', 'Count']],
       body: metrics.sources.map(([src, count]) => [src, String(count)]),
       styles: { fontSize: 9, cellPadding: 4, font: 'helvetica' },
-      headStyles: {
-        fillColor: [32, 30, 29],
-        textColor: [255, 255, 255],
-        fontStyle: 'bold',
-      },
-      columnStyles: {
-        1: { halign: 'right' },
-      },
+      headStyles: { fillColor: [32, 30, 29], textColor: [255, 255, 255], fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'right' } },
       margin: { left: 14, right: 14 },
     })
   }

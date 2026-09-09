@@ -178,11 +178,38 @@
   justify-content: space-between;
 }
 
+.pipeline-card-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pipeline-card-score {
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Gap 3: Lead aging */
+.pipeline-card-aging {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-gray);
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline-card-aging.aging-amber {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.pipeline-card-aging.aging-red {
+  color: #991b1b;
+  background: #fee2e2;
 }
 
 /* ─── Move Menu (three-dot) ─── */

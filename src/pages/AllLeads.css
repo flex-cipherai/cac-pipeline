@@ -201,3 +201,112 @@
 .leads-row-clickable {
   cursor: pointer;
 }
+
+.row-selected {
+  background: var(--cac-red-lighter) !important;
+}
+
+/* ─── Filter bar (Gap 1) ─── */
+.leads-filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.leads-filter-select {
+  padding: 7px 28px 7px 10px;
+  font-size: var(--text-sm);
+  font-family: var(--font-family);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--text-primary);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.leads-filter-clear {
+  font-size: var(--text-sm);
+  font-family: var(--font-family);
+  color: var(--cac-red);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 7px 10px;
+}
+
+.leads-filter-clear:hover {
+  text-decoration: underline;
+}
+
+/* ─── Sortable headers (Gap 1) ─── */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortable-th:hover {
+  color: var(--cac-red);
+}
+
+.sort-icon {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+/* ─── Bulk action bar (Gap 8) ─── */
+.leads-bulk-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--charcoal);
+  color: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  z-index: 200;
+  animation: bulkBarIn var(--duration-normal) var(--ease-out);
+}
+
+@keyframes bulkBarIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.leads-bulk-count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.leads-bulk-bar .leads-filter-select {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.2);
+  color: var(--white);
+}
+
+.leads-bulk-bar .btn-secondary {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.2);
+  color: var(--white);
+}
+
+/* Checkbox styling */
+.data-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--cac-red);
+}
