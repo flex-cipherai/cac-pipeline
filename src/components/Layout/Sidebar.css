@@ -51,7 +51,7 @@
   gap: 12px;
   padding: 11px 14px;
   border-radius: var(--radius-sm);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 500;
   color: rgba(255, 255, 255, 0.5);
   transition: background var(--duration-fast),
@@ -65,7 +65,7 @@
 }
 
 .sidebar-nav-item.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(236, 48, 19, 0.12);
   color: var(--white);
   font-weight: 600;
 }
@@ -220,11 +220,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px var(--space-md);
+    padding: 10px var(--space-md);
     background: var(--charcoal);
     position: sticky;
     top: 0;
     z-index: 100;
+    min-height: 52px;
   }
 
   .mobile-header-logo {

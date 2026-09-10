@@ -74,12 +74,14 @@
   color: var(--text-muted);
   text-align: center;
   border-bottom: 3px solid var(--border);
-  transition: color var(--duration-fast), border-color var(--duration-fast);
+  transition: color var(--duration-normal), border-color var(--duration-normal);
+  position: relative;
 }
 
 .intake-step-tab.active {
   color: var(--cac-red);
   border-bottom-color: var(--cac-red);
+  font-weight: 700;
 }
 
 .intake-step-tab.completed {

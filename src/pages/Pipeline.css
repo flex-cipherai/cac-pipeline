@@ -100,27 +100,28 @@
   align-items: center;
   justify-content: center;
   height: 60px;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  font-style: italic;
+  opacity: 0.6;
 }
 
 /* ─── Lead Cards ─── */
 .pipeline-card {
-  background: var(--bg-gray);
+  background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px;
   cursor: grab;
   transition: box-shadow var(--duration-normal) var(--ease-out),
               transform var(--duration-fast),
+              border-color var(--duration-fast),
               opacity var(--duration-fast);
   position: relative;
 }
 
 .pipeline-card:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(236, 48, 19, 0.2);
 }
 
 .pipeline-card:active {

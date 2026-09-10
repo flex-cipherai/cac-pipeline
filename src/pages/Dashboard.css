@@ -29,7 +29,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-md);
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-md);
 }
 
 /* ─── Two-column grid ─── */
@@ -37,7 +37,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-md);
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-md);
+}
+
+.dash-grid-2 > .section-card {
+  margin-bottom: 0;
 }
 
 /* ─── Classification Bar ─── */
