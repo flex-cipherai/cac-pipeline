@@ -5,6 +5,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -18,22 +25,15 @@ Deno.serve(async (req) => {
     // Verify the caller is authenticated and is an admin
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: false, error: 'Missing authorization' })
     }
 
-    // Use anon client to verify the caller
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     })
     const { data: { user: caller }, error: authError } = await anonClient.auth.getUser()
     if (authError || !caller) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: false, error: 'Unauthorized — please sign in again' })
     }
 
     // Check caller is admin
@@ -44,13 +44,10 @@ Deno.serve(async (req) => {
       .single()
 
     if (callerProfile?.role !== 'admin') {
-      return new Response(JSON.stringify({ error: 'Admin access required' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: false, error: 'Admin access required' })
     }
 
-    // Use service role client for admin operations
+    // Service role client bypasses RLS
     const adminClient = createClient(supabaseUrl, serviceRoleKey)
 
     const body = await req.json()
@@ -59,54 +56,37 @@ Deno.serve(async (req) => {
     // ── Create User ──
     if (action === 'create_user') {
       const { email, name, role } = body
-
       if (!email || !name || !role) {
-        return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: 'Name, email, and role are required' })
       }
 
-      // Create user with admin API
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
-        email_confirm: false,
+        email_confirm: true,
         user_metadata: { name, role },
       })
 
       if (createError) {
-        return new Response(JSON.stringify({ error: createError.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: createError.message })
       }
 
-      // Update profile with name and role
+      // The handle_new_user trigger will create the profile, but update to be safe
       await adminClient
         .from('profiles')
         .update({ name, role, email })
         .eq('id', newUser.user.id)
 
-      // Send password reset so they can set their password
-      const { error: resetError } = await adminClient.auth.admin.generateLink({
-        type: 'magiclink',
-        email,
-      })
+      // Generate password reset link
+      await adminClient.auth.resetPasswordForEmail(email)
 
-      return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: true, user_id: newUser.user.id })
     }
 
     // ── Update Role ──
     if (action === 'update_role') {
       const { user_id, role } = body
-
       if (!user_id || !role) {
-        return new Response(JSON.stringify({ error: 'Missing user_id or role' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: 'User ID and role are required' })
       }
 
       const { error } = await adminClient
@@ -115,26 +95,17 @@ Deno.serve(async (req) => {
         .eq('id', user_id)
 
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: error.message })
       }
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: true })
     }
 
     // ── Toggle Active ──
     if (action === 'toggle_active') {
       const { user_id, is_active } = body
-
       if (!user_id || is_active === undefined) {
-        return new Response(JSON.stringify({ error: 'Missing user_id or is_active' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: 'User ID and status are required' })
       }
 
       const { error } = await adminClient
@@ -143,26 +114,17 @@ Deno.serve(async (req) => {
         .eq('id', user_id)
 
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: error.message })
       }
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: true })
     }
 
     // ── Resend Password Reset ──
     if (action === 'reset_password') {
       const { email, redirect_to } = body
-
       if (!email) {
-        return new Response(JSON.stringify({ error: 'Missing email' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: 'Email is required' })
       }
 
       const { error } = await adminClient.auth.resetPasswordForEmail(email, {
@@ -170,26 +132,15 @@ Deno.serve(async (req) => {
       })
 
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: false, error: error.message })
       }
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ success: true })
     }
 
-    return new Response(JSON.stringify({ error: 'Unknown action' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ success: false, error: `Unknown action: ${action}` })
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ success: false, error: err.message || 'Internal server error' })
   }
 })

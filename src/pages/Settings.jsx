@@ -150,13 +150,8 @@ export default function Settings() {
       const { data, error } = await supabase.functions.invoke('manage-users', {
         body: { action: 'create_user', email: newUser.email, name: newUser.name, role: newUser.role },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
-
-      // Send password reset so they can set their password
-      await supabase.functions.invoke('manage-users', {
-        body: { action: 'reset_password', email: newUser.email, redirect_to: `${window.location.origin}/reset-password` },
-      })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to create user')
 
       showToast('success', `Invite sent to ${newUser.email}`)
       setShowAddUser(false)
@@ -174,8 +169,8 @@ export default function Settings() {
       const { data, error } = await supabase.functions.invoke('manage-users', {
         body: { action: 'update_role', user_id: userId, role: editRole },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to update role')
       showToast('success', 'Role updated')
       setEditingUser(null)
       fetchData()
@@ -190,8 +185,8 @@ export default function Settings() {
       const { data, error } = await supabase.functions.invoke('manage-users', {
         body: { action: 'toggle_active', user_id: user.id, is_active: newStatus },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to update status')
       showToast('success', newStatus ? 'Account reactivated' : 'Account deactivated')
       setActionMenuId(null)
       fetchData()
@@ -205,8 +200,8 @@ export default function Settings() {
       const { data, error } = await supabase.functions.invoke('manage-users', {
         body: { action: 'reset_password', email: user.email, redirect_to: `${window.location.origin}/reset-password` },
       })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to send reset email')
       showToast('success', `Password reset sent to ${user.email}`)
       setActionMenuId(null)
     } catch (err) {
