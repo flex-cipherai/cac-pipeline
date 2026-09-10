@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { DAYS_OF_WEEK, CLASSIFICATION_THRESHOLDS, HARD_DISQUALIFIERS } from '../lib/scoring'
@@ -37,7 +37,6 @@ export default function Settings() {
 
   // Action menu state
   const [actionMenuId, setActionMenuId] = useState(null)
-  const actionMenuRef = useRef(null)
 
   useEffect(() => {
     fetchData()
@@ -52,7 +51,7 @@ export default function Settings() {
 
   useEffect(() => {
     function handleClick(e) {
-      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target)) {
+      if (!e.target.closest('.action-menu-wrap')) {
         setActionMenuId(null)
       }
     }
@@ -251,7 +250,7 @@ export default function Settings() {
                       <td className="text-muted">{formatLastSignIn(user.last_sign_in_at)}</td>
                       <td>
                         {!isCurrentUser && (
-                          <div className="action-menu-wrap" ref={actionMenuId === user.id ? actionMenuRef : null}>
+                          <div className="action-menu-wrap">
                             <button className="action-menu-trigger" onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}>
                               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" /></svg>
                             </button>
@@ -289,7 +288,7 @@ export default function Settings() {
                       <div className="settings-user-card-email">{user.email}</div>
                     </div>
                     {!isCurrentUser && (
-                      <div className="action-menu-wrap" ref={actionMenuId === user.id ? actionMenuRef : null}>
+                      <div className="action-menu-wrap">
                         <button className="action-menu-trigger" onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}>
                           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="8" cy="13" r="1.5" /></svg>
                         </button>
