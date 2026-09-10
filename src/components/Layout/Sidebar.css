@@ -23,19 +23,15 @@
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: 10px;
   margin-bottom: var(--space-2xl);
   padding: 0 var(--space-xs);
 }
 
-.sidebar-logo-icon {
-  flex-shrink: 0;
-}
-
-.sidebar-logo-text {
-  font-size: var(--text-md);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+.sidebar-logo-img {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
 }
 
 /* ─── Navigation ─── */
@@ -77,7 +73,7 @@
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   border-radius: 0 2px 2px 0;
 }
 
@@ -102,7 +98,7 @@
   gap: var(--space-sm);
   padding: 10px 14px;
   font-size: var(--text-sm);
-  color: var(--cac-red);
+  color: var(--sdfm-red);
   margin-bottom: var(--space-md);
   border-radius: var(--radius-sm);
   transition: background var(--duration-fast);
@@ -136,7 +132,7 @@
   font-size: var(--text-sm);
   font-weight: 700;
   color: var(--white);
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   flex-shrink: 0;
 }
 

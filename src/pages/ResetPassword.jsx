@@ -38,24 +38,10 @@ export default function ResetPassword() {
       <div className="login-brand">
         <div className="login-brand-content">
           <div className="login-brand-logo">
-            <svg width="44" height="44" viewBox="0 0 40 40">
-              <circle cx="20" cy="20" r="18" fill="white" />
-              <g transform="translate(12, 8)" fill="#EC3013">
-                <circle cx="8" cy="3" r="2.5" />
-                <rect x="6.5" y="5" width="3" height="14" rx="1.5" />
-                <circle cx="2" cy="12" r="1.8" />
-                <line x1="6.5" y1="12" x2="3.8" y2="12" stroke="#EC3013" strokeWidth="2" />
-                <circle cx="14" cy="12" r="1.8" />
-                <line x1="9.5" y1="12" x2="12.2" y2="12" stroke="#EC3013" strokeWidth="2" />
-                <circle cx="2" cy="17" r="1.8" />
-                <line x1="6.5" y1="17" x2="3.8" y2="17" stroke="#EC3013" strokeWidth="2" />
-                <circle cx="14" cy="17" r="1.8" />
-                <line x1="9.5" y1="17" x2="12.2" y2="17" stroke="#EC3013" strokeWidth="2" />
-              </g>
-            </svg>
+            <img src="/sdfm-logo.png" alt="SDFM Group Limited" className="login-brand-logo-img" />
           </div>
-          <h2 className="login-brand-name">Pipeline</h2>
-          <p className="login-brand-tagline">Sales pipeline management for Cipher AI Consultants</p>
+          <h2 className="login-brand-name">Sales Management Pipeline</h2>
+          <p className="login-brand-tagline">Transforming Kenyan Businesses</p>
         </div>
       </div>
 
@@ -64,7 +50,7 @@ export default function ResetPassword() {
           {success ? (
             <div className="login-sent">
               <div className="login-sent-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--cac-red)" strokeWidth="2">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--sdfm-red)" strokeWidth="2">
                   <path d="M5 13l4 4L19 7" />
                 </svg>
               </div>

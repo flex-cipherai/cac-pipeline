@@ -13,8 +13,8 @@ const DEFAULT_TEMPLATES = [
     subject: 'Your Discovery Call is Confirmed — {{scheduled_day}} at {{scheduled_time}}',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 8px;">Discovery Call Confirmed</h1>
@@ -28,7 +28,7 @@ const DEFAULT_TEMPLATES = [
       can help. No preparation is needed — just bring your questions.
     </p>
   </div>
-  <p style="font-size: 12px; color: #999; text-align: center;">Cipher AI Consultants · Transforming Kenyan Businesses</p>
+  <p style="font-size: 12px; color: #999; text-align: center;">SDFM Group Limited · Transforming Kenyan Businesses</p>
 </div>`,
     available_variables: ['full_name', 'company_name', 'email', 'phone', 'scheduled_day', 'scheduled_time', 'classification', 'total_score'],
   },
@@ -37,11 +37,11 @@ const DEFAULT_TEMPLATES = [
     name: 'Thank You (Disqualified)',
     recipient_type: 'client',
     description: 'Sent to Cold leads after form submission. Polite and invites future reconnection.',
-    subject: 'Thank You for Your Interest — Cipher AI Consultants',
+    subject: 'Thank You for Your Interest — SDFM Group Limited',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">Thank You, {{full_name}}</h1>
@@ -54,7 +54,7 @@ const DEFAULT_TEMPLATES = [
       anytime from our website.
     </p>
   </div>
-  <p style="font-size: 12px; color: #999; text-align: center;">Cipher AI Consultants · Transforming Kenyan Businesses</p>
+  <p style="font-size: 12px; color: #999; text-align: center;">SDFM Group Limited · Transforming Kenyan Businesses</p>
 </div>`,
     available_variables: ['full_name', 'company_name', 'email'],
   },
@@ -63,11 +63,11 @@ const DEFAULT_TEMPLATES = [
     name: 'Assessment Questions Sent',
     recipient_type: 'client',
     description: 'Sent when assessment questions are delivered to the lead.',
-    subject: 'Your AI Gap Assessment Questions — Cipher AI Consultants',
+    subject: 'Your AI Gap Assessment Questions — SDFM Group Limited',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 8px;">Assessment Questions Ready</h1>
@@ -80,7 +80,7 @@ const DEFAULT_TEMPLATES = [
       basis of your personalised AI Gap Assessment Report.
     </p>
   </div>
-  <p style="font-size: 12px; color: #999; text-align: center;">Cipher AI Consultants · Transforming Kenyan Businesses</p>
+  <p style="font-size: 12px; color: #999; text-align: center;">SDFM Group Limited · Transforming Kenyan Businesses</p>
 </div>`,
     available_variables: ['full_name', 'company_name', 'email', 'current_stage'],
   },
@@ -89,11 +89,11 @@ const DEFAULT_TEMPLATES = [
     name: 'Gap Assessment Report Ready',
     recipient_type: 'client',
     description: 'Sent when the Gap Assessment Report has been completed and is ready for presentation.',
-    subject: 'Your AI Gap Assessment Report is Ready — Cipher AI Consultants',
+    subject: 'Your AI Gap Assessment Report is Ready — SDFM Group Limited',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 8px;">Your Report is Ready</h1>
@@ -106,7 +106,7 @@ const DEFAULT_TEMPLATES = [
       a presentation walkthrough.
     </p>
   </div>
-  <p style="font-size: 12px; color: #999; text-align: center;">Cipher AI Consultants · Transforming Kenyan Businesses</p>
+  <p style="font-size: 12px; color: #999; text-align: center;">SDFM Group Limited · Transforming Kenyan Businesses</p>
 </div>`,
     available_variables: ['full_name', 'company_name', 'email', 'current_stage'],
   },
@@ -115,11 +115,11 @@ const DEFAULT_TEMPLATES = [
     name: 'Contract Sent',
     recipient_type: 'client',
     description: 'Sent when the project contract is prepared and delivered to the lead.',
-    subject: 'Your Project Contract — Cipher AI Consultants',
+    subject: 'Your Project Contract — SDFM Group Limited',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 8px;">Your Contract is Ready</h1>
@@ -132,7 +132,7 @@ const DEFAULT_TEMPLATES = [
       would like to discuss any terms, don't hesitate to reach out. We're excited to get started.
     </p>
   </div>
-  <p style="font-size: 12px; color: #999; text-align: center;">Cipher AI Consultants · Transforming Kenyan Businesses</p>
+  <p style="font-size: 12px; color: #999; text-align: center;">SDFM Group Limited · Transforming Kenyan Businesses</p>
 </div>`,
     available_variables: ['full_name', 'company_name', 'email', 'current_stage'],
   },
@@ -144,8 +144,8 @@ const DEFAULT_TEMPLATES = [
     subject: 'New {{classification}} Lead: {{full_name}} from {{company_name}} ({{total_score}}/21)',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">New Lead Submitted</h1>
@@ -169,8 +169,8 @@ const DEFAULT_TEMPLATES = [
     subject: 'Lead Update: {{full_name}} moved to {{current_stage}}',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">Pipeline Update</h1>
@@ -191,8 +191,8 @@ const DEFAULT_TEMPLATES = [
     subject: 'Lead Lost: {{full_name}} from {{company_name}}',
     body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
   <div style="padding: 32px 0 24px; text-align: center;">
-    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
   </div>
   <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
     <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">Lead Lost</h1>

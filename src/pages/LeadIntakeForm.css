@@ -21,24 +21,10 @@
   margin-bottom: var(--space-2xl);
 }
 
-.intake-logo-text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.1;
-}
-
-.intake-logo-cipher {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--cac-red);
-}
-
-.intake-logo-consultants {
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: var(--charcoal);
-  letter-spacing: 0.2em;
+.intake-logo-img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
 }
 
 /* ─── Header ─── */
@@ -79,8 +65,8 @@
 }
 
 .intake-step-tab.active {
-  color: var(--cac-red);
-  border-bottom-color: var(--cac-red);
+  color: var(--sdfm-red);
+  border-bottom-color: var(--sdfm-red);
   font-weight: 700;
 }
 
@@ -107,7 +93,7 @@
 }
 
 .intake-step-content .form-label {
-  color: var(--cac-red);
+  color: var(--sdfm-red);
 }
 
 /* ─── Qualification Questions ─── */
@@ -122,7 +108,7 @@
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -242,15 +228,15 @@
   color: var(--text-primary);
   font-weight: 600;
   cursor: pointer;
-  background: var(--cac-red-lighter);
+  background: var(--sdfm-red-lighter);
 }
 
 .cal-day.available:hover {
-  background: var(--cac-red-light);
+  background: var(--sdfm-red-light);
 }
 
 .cal-day.selected {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
   box-shadow: 0 2px 6px rgba(236, 48, 19, 0.3);
 }
@@ -288,12 +274,12 @@
 }
 
 .cal-legend-dot.available {
-  background: var(--cac-red-lighter);
+  background: var(--sdfm-red-lighter);
   border: 1px solid rgba(236, 48, 19, 0.15);
 }
 
 .cal-legend-dot.selected {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
 }
 
 /* ─── Time Slots Panel ─── */
@@ -335,12 +321,12 @@
 
 .cal-time-slot:hover {
   border-color: rgba(236, 48, 19, 0.3);
-  background: var(--cac-red-lighter);
+  background: var(--sdfm-red-lighter);
 }
 
 .cal-time-slot.selected {
-  border-color: var(--cac-red);
-  background: var(--cac-red);
+  border-color: var(--sdfm-red);
+  background: var(--sdfm-red);
   color: var(--white);
   box-shadow: 0 2px 8px rgba(236, 48, 19, 0.25);
 }
@@ -386,7 +372,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--cac-red-lighter);
+  background: var(--sdfm-red-lighter);
   border: 1px solid rgba(236, 48, 19, 0.12);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -396,7 +382,7 @@
 }
 
 .cal-selection-summary svg {
-  color: var(--cac-red);
+  color: var(--sdfm-red);
   flex-shrink: 0;
 }
 
@@ -423,7 +409,7 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
   font-size: 28px;
   font-weight: 700;

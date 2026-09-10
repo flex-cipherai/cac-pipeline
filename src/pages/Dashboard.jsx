@@ -131,11 +131,11 @@ export default function Dashboard() {
       [''], ['Stage', 'Count'], ...stageCounts.map(([s, c]) => [s, String(c)]),
       [''], ['Source', 'Count'], ...sourcesArr.map(([s, c]) => [s, String(c)]),
     ]
-    exportCSV(headers, rows, `CAC_Dashboard_${new Date().toISOString().slice(0, 10)}`)
+    exportCSV(headers, rows, `SDFM_Dashboard_${new Date().toISOString().slice(0, 10)}`)
   }
 
   function handleExportPDF() {
-    exportDashboardPDF({ totalLeads, qualifiedCount, coldCount, qualificationRate, hotCount, warmCount, inPipeline, convertedCount, conversionRate, pipelineValueFormatted: formatValue(pipelineValue), lostCount, stageCounts, sources: sourcesArr }, `CAC_Dashboard_${new Date().toISOString().slice(0, 10)}`)
+    exportDashboardPDF({ totalLeads, qualifiedCount, coldCount, qualificationRate, hotCount, warmCount, inPipeline, convertedCount, conversionRate, pipelineValueFormatted: formatValue(pipelineValue), lostCount, stageCounts, sources: sourcesArr }, `SDFM_Dashboard_${new Date().toISOString().slice(0, 10)}`)
   }
 
   function formatRelative(dateStr) {

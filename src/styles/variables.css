@@ -1,10 +1,10 @@
-/* CAC Brand System — Upgraded Design Tokens */
+/* SDFM Brand System — Upgraded Design Tokens */
 :root {
   /* ─── Brand Colors ─── */
-  --cac-red: #EC3013;
-  --cac-red-hover: #d42b10;
-  --cac-red-light: rgba(236, 48, 19, 0.07);
-  --cac-red-lighter: rgba(236, 48, 19, 0.035);
+  --sdfm-red: #EC3013;
+  --sdfm-red-hover: #d42b10;
+  --sdfm-red-light: rgba(236, 48, 19, 0.07);
+  --sdfm-red-lighter: rgba(236, 48, 19, 0.035);
   --charcoal: #201E1D;
   --surface-gray: #EAE9E9;
   --bg-gray: #F3F2F2;

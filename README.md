@@ -1,13 +1,13 @@
-# CAC Sales Pipeline Management System
+# SDFM Sales Management Pipeline
 
-Sales pipeline management system for Cipher AI Consultants. Manages the full sales lifecycle from lead intake through contract signing.
+Sales pipeline management system for SDFM Group Limited. Manages the full sales lifecycle from lead intake through contract signing.
 
 ## Tech Stack
 
 - **Frontend:** React (Vite)
 - **Backend:** Supabase (PostgreSQL, Auth, RLS)
 - **Deployment:** Netlify
-- **Styling:** Plain CSS (CAC Brand Guidelines)
+- **Styling:** Plain CSS (SDFM Brand Guidelines)
 
 ## Structure
 

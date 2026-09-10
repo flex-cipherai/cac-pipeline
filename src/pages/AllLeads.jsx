@@ -152,10 +152,10 @@ export default function AllLeads() {
       l.scheduled_day && l.scheduled_time ? `${l.scheduled_day} ${l.scheduled_time}` : '',
       l.created_at ? new Date(l.created_at).toLocaleDateString('en-GB') : '',
     ])
-    exportCSV(headers, rows, `CAC_Leads_${new Date().toISOString().slice(0, 10)}`)
+    exportCSV(headers, rows, `SDFM_Leads_${new Date().toISOString().slice(0, 10)}`)
   }
 
-  function handleExportPDF() { exportLeadsPDF(filtered, `CAC_Leads_${new Date().toISOString().slice(0, 10)}`) }
+  function handleExportPDF() { exportLeadsPDF(filtered, `SDFM_Leads_${new Date().toISOString().slice(0, 10)}`) }
 
   const hasFilters = filterClass || filterStage || filterStatus
   function clearFilters() { setFilterClass(''); setFilterStage(''); setFilterStatus('') }

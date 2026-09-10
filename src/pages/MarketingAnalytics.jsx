@@ -85,7 +85,7 @@ export default function MarketingAnalytics() {
       ['Source', 'Total', 'Qualified', 'Cold'],
       ...sourcesArr.map(([src, d]) => [src, String(d.total), String(d.qualified), String(d.cold)]),
     ]
-    exportCSV(headers, rows, `CAC_Marketing_${new Date().toISOString().slice(0, 10)}`)
+    exportCSV(headers, rows, `SDFM_Marketing_${new Date().toISOString().slice(0, 10)}`)
   }
 
   if (loading) {

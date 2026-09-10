@@ -18,8 +18,8 @@ export function qualifiedLeadConfirmation({ fullName, scheduledDay, scheduledTim
     html: `
       <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
         <div style="padding: 32px 0 24px; text-align: center;">
-          <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-          <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+          <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+          <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
         </div>
         <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
           <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 8px;">Discovery Call Confirmed</h1>
@@ -34,7 +34,7 @@ export function qualifiedLeadConfirmation({ fullName, scheduledDay, scheduledTim
           </p>
         </div>
         <p style="font-size: 12px; color: #999; text-align: center;">
-          Cipher AI Consultants · Transforming Kenyan Businesses
+          SDFM Group Limited · Transforming Kenyan Businesses
         </p>
       </div>
     `,
@@ -43,12 +43,12 @@ export function qualifiedLeadConfirmation({ fullName, scheduledDay, scheduledTim
 
 export function coldLeadThankYou({ fullName }) {
   return {
-    subject: 'Thank You for Your Interest — Cipher AI Consultants',
+    subject: 'Thank You for Your Interest — SDFM Group Limited',
     html: `
       <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
         <div style="padding: 32px 0 24px; text-align: center;">
-          <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-          <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+          <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+          <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
         </div>
         <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
           <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">Thank You, ${fullName}</h1>
@@ -62,7 +62,7 @@ export function coldLeadThankYou({ fullName }) {
           </p>
         </div>
         <p style="font-size: 12px; color: #999; text-align: center;">
-          Cipher AI Consultants · Transforming Kenyan Businesses
+          SDFM Group Limited · Transforming Kenyan Businesses
         </p>
       </div>
     `,
@@ -76,8 +76,8 @@ export function adminNewLeadAlert({ fullName, companyName, classification, total
     html: `
       <div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
         <div style="padding: 32px 0 24px; text-align: center;">
-          <span style="font-size: 22px; font-weight: 700; color: #EC3013;">CIPHER AI</span>
-          <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">CONSULTANTS</span>
+          <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+          <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
         </div>
         <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
           <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">New Lead Submitted</h1>

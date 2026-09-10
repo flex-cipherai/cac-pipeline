@@ -45,7 +45,7 @@
 }
 
 .mkt-bar-qualified {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   opacity: 0.85;
   z-index: 2;
 }
@@ -91,7 +91,7 @@
 }
 
 .mkt-bar-legend-dot.qualified {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   opacity: 0.85;
 }
 
@@ -135,7 +135,7 @@
   left: 0;
   top: 0;
   height: 100%;
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   opacity: 0.8;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   transition: width var(--duration-slow) var(--ease-out);

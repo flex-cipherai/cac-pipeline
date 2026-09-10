@@ -118,8 +118,8 @@
 }
 
 .period-all-btn.active {
-  background: var(--cac-red-light);
-  color: var(--cac-red);
+  background: var(--sdfm-red-light);
+  color: var(--sdfm-red);
   font-weight: 600;
 }
 
@@ -189,7 +189,7 @@
 }
 
 .period-month-btn.selected {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
   font-weight: 700;
 }

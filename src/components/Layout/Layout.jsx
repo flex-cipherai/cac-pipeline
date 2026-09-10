@@ -12,18 +12,7 @@ export default function Layout({ children }) {
       {/* Mobile header */}
       <div className="mobile-header">
         <div className="mobile-header-logo">
-          <svg width="24" height="24" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="18" fill="#EC3013" />
-            <g transform="translate(12, 8)" fill="white">
-              <circle cx="8" cy="3" r="2.5" />
-              <rect x="6.5" y="5" width="3" height="14" rx="1.5" />
-              <circle cx="2" cy="12" r="1.8" />
-              <line x1="6.5" y1="12" x2="3.8" y2="12" stroke="white" strokeWidth="2" />
-              <circle cx="14" cy="12" r="1.8" />
-              <line x1="9.5" y1="12" x2="12.2" y2="12" stroke="white" strokeWidth="2" />
-            </g>
-          </svg>
-          <span>PIPELINE</span>
+          <img src="/sdfm-logo.png" alt="SDFM Group" style={{ height: '22px', width: 'auto', filter: 'brightness(0) invert(1)' }} />
         </div>
         <button
           className="mobile-hamburger"

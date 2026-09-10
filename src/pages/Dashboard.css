@@ -131,7 +131,7 @@
 
 .dash-source-bar {
   height: 100%;
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   border-radius: 4px;
   min-width: 4px;
   transition: width var(--duration-slow) var(--ease-out);
@@ -183,7 +183,7 @@
 }
 
 .stage-chart-bar.has-value {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   opacity: 0.85;
 }
 
@@ -278,7 +278,7 @@
 .dash-call-time {
   font-size: var(--text-sm);
   font-weight: 700;
-  color: var(--cac-red);
+  color: var(--sdfm-red);
   font-variant-numeric: tabular-nums;
   min-width: 50px;
 }
@@ -357,7 +357,7 @@
 
 .dash-funnel-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--cac-red), rgba(236, 48, 19, 0.6));
+  background: linear-gradient(90deg, var(--sdfm-red), rgba(236, 48, 19, 0.6));
   border-radius: var(--radius-sm);
   transition: width var(--duration-normal) var(--ease-out);
 }
@@ -406,7 +406,7 @@
 }
 
 .dash-activity-dot.lost {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
 }
 
 .dash-activity-dot.converted {

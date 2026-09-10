@@ -1,5 +1,5 @@
 // Lead Qualification Scoring Logic
-// Based on the CAC Lead Qualification Questions document
+// Based on the SDFM Lead Qualification Questions document
 
 export const QUALIFICATION_QUESTIONS = {
   q1: {

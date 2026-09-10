@@ -126,7 +126,7 @@
 }
 
 .leads-mobile-card:active {
-  background: var(--cac-red-lighter);
+  background: var(--sdfm-red-lighter);
 }
 
 .leads-mobile-card-top {
@@ -210,7 +210,7 @@
 }
 
 .row-selected {
-  background: var(--cac-red-lighter) !important;
+  background: var(--sdfm-red-lighter) !important;
 }
 
 /* ─── Filter bar (Gap 1) ─── */
@@ -252,7 +252,7 @@
 .leads-filter-clear {
   font-size: var(--text-sm);
   font-family: var(--font-family);
-  color: var(--cac-red);
+  color: var(--sdfm-red);
   background: none;
   border: none;
   cursor: pointer;
@@ -272,7 +272,7 @@
 }
 
 .sortable-th:hover {
-  color: var(--cac-red);
+  color: var(--sdfm-red);
 }
 
 .sort-icon {
@@ -332,5 +332,5 @@
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: var(--cac-red);
+  accent-color: var(--sdfm-red);
 }

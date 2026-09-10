@@ -71,8 +71,8 @@
 }
 
 .notif-card.active {
-  border-color: var(--cac-red);
-  box-shadow: 0 0 0 1px var(--cac-red);
+  border-color: var(--sdfm-red);
+  box-shadow: 0 0 0 1px var(--sdfm-red);
 }
 
 .notif-card.inactive {
@@ -273,8 +273,8 @@
 
 .notif-field-input:focus {
   outline: none;
-  border-color: var(--cac-red);
-  box-shadow: 0 0 0 3px var(--cac-red-light);
+  border-color: var(--sdfm-red);
+  box-shadow: 0 0 0 3px var(--sdfm-red-light);
 }
 
 /* ─── Variables ─── */
@@ -301,15 +301,15 @@
   font-size: 11px;
   font-family: var(--font-family);
   font-weight: 500;
-  color: var(--cac-red);
-  background: var(--cac-red-light);
+  color: var(--sdfm-red);
+  background: var(--sdfm-red-light);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all var(--duration-fast);
 }
 
 .notif-variable-chip:hover {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
 }
 
@@ -360,8 +360,8 @@
 
 .notif-body-editor:focus {
   outline: none;
-  border-color: var(--cac-red);
-  box-shadow: 0 0 0 3px var(--cac-red-light);
+  border-color: var(--sdfm-red);
+  box-shadow: 0 0 0 3px var(--sdfm-red-light);
 }
 
 .notif-preview-frame {

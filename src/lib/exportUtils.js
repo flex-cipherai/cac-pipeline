@@ -1,4 +1,4 @@
-// Export utilities — CSV and PDF generation for CAC Pipeline
+// Export utilities — CSV and PDF generation for SDFM Pipeline
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -30,16 +30,16 @@ export function exportCSV(headers, rows, filename) {
 
 // ── PDF helpers ──
 
-function addCACHeader(doc) {
+function addSDFMHeader(doc) {
   doc.setFillColor(236, 48, 19)
   doc.rect(0, 0, doc.internal.pageSize.getWidth(), 28, 'F')
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(16)
   doc.setFont('helvetica', 'bold')
-  doc.text('CIPHER AI', 14, 14)
+  doc.text('SDFM GROUP', 14, 14)
   doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')
-  doc.text('CONSULTANTS', 14, 20)
+  doc.text('LIMITED', 14, 20)
   const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   doc.setFontSize(9)
   doc.text(dateStr, doc.internal.pageSize.getWidth() - 14, 16, { align: 'right' })
@@ -53,7 +53,7 @@ function addFooter(doc) {
     doc.setFontSize(8)
     doc.setTextColor(160, 160, 160)
     doc.text(
-      `Cipher AI Consultants · Page ${i} of ${pageCount}`,
+      `SDFM Group Limited · Page ${i} of ${pageCount}`,
       doc.internal.pageSize.getWidth() / 2,
       doc.internal.pageSize.getHeight() - 10,
       { align: 'center' }
@@ -65,7 +65,7 @@ function addFooter(doc) {
 
 export function exportLeadsPDF(leads, filename) {
   const doc = new jsPDF('landscape')
-  addCACHeader(doc)
+  addSDFMHeader(doc)
 
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
@@ -99,7 +99,7 @@ export function exportLeadsPDF(leads, filename) {
     alternateRowStyles: { fillColor: [243, 242, 242] },
     columnStyles: { 4: { cellWidth: 18 }, 5: { cellWidth: 18 } },
     margin: { top: 32, left: 14, right: 14 },
-    didDrawPage: (data) => { if (data.pageNumber > 1) addCACHeader(doc) },
+    didDrawPage: (data) => { if (data.pageNumber > 1) addSDFMHeader(doc) },
   })
 
   addFooter(doc)
@@ -108,7 +108,7 @@ export function exportLeadsPDF(leads, filename) {
 
 export function exportDashboardPDF(metrics, filename) {
   const doc = new jsPDF('portrait')
-  addCACHeader(doc)
+  addSDFMHeader(doc)
 
   let y = 40
   doc.setFontSize(14)

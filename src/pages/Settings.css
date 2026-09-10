@@ -125,11 +125,11 @@
 }
 
 .action-menu-item.action-danger {
-  color: var(--cac-red);
+  color: var(--sdfm-red);
 }
 
 .action-menu-item.action-danger:hover {
-  background: var(--cac-red-light);
+  background: var(--sdfm-red-light);
 }
 
 .action-menu-item.action-reactivate {
@@ -169,7 +169,7 @@
 }
 
 .toast-error {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
 }
 
@@ -232,7 +232,7 @@
 }
 
 .settings-score-card.hot {
-  background: var(--cac-red);
+  background: var(--sdfm-red);
   color: var(--white);
 }
 
@@ -463,14 +463,14 @@
 }
 
 .settings-cal-toggle.active {
-  background: var(--cac-red);
-  border-color: var(--cac-red);
+  background: var(--sdfm-red);
+  border-color: var(--sdfm-red);
   color: var(--white);
   font-weight: 600;
 }
 
 .settings-cal-toggle.active:hover {
-  background: var(--cac-red-hover);
+  background: var(--sdfm-red-hover);
 }
 
 /* ─── Calendar Grid Mobile ─── */
