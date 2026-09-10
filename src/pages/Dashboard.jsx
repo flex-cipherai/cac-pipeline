@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES, estimatePipelineValue } from '../lib/scoring'
 import { exportCSV, exportDashboardPDF } from '../lib/exportUtils'
+import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../components/PeriodSelector/PeriodSelector'
 import './Dashboard.css'
 
 const StatIcons = {
@@ -17,9 +18,11 @@ const StatIcons = {
 
 export default function Dashboard() {
   const { profile } = useAuth()
-  const [leads, setLeads] = useState([])
+  const [allLeads, setAllLeads] = useState([])
   const [stageHistory, setStageHistory] = useState([])
   const [loading, setLoading] = useState(true)
+  const now = new Date()
+  const [period, setPeriod] = useState({ mode: 'all', month: now.getMonth(), year: now.getFullYear() })
 
   useEffect(() => { fetchData() }, [])
 
@@ -28,10 +31,13 @@ export default function Dashboard() {
       supabase.from('leads').select('*').order('created_at', { ascending: false }),
       supabase.from('lead_stage_history').select('*, profiles:moved_by(name), leads:lead_id(full_name, company_name)').order('entered_at', { ascending: false }).limit(15),
     ])
-    if (leadsRes.data) setLeads(leadsRes.data)
+    if (leadsRes.data) setAllLeads(leadsRes.data)
     if (historyRes.data) setStageHistory(historyRes.data)
     setLoading(false)
   }
+
+  // Apply period filter
+  const leads = filterByPeriod(allLeads, period)
 
   // ── Metrics ──
   const totalLeads = leads.length
@@ -73,10 +79,10 @@ export default function Dashboard() {
     return String(value)
   }
 
-  // Gap 2: Upcoming calls
+  // Upcoming calls (always based on all leads, not period-filtered)
   const todayStr = new Date().toISOString().slice(0, 10)
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-  const upcomingCalls = leads.filter(l =>
+  const upcomingCalls = allLeads.filter(l =>
     l.current_stage === 'Scheduled' && !l.is_lost && !l.is_disqualified && l.scheduled_date
   ).sort((a, b) => {
     const dateA = `${a.scheduled_date} ${a.scheduled_time || ''}`
@@ -87,18 +93,17 @@ export default function Dashboard() {
   const thisWeekCalls = upcomingCalls.filter(l => {
     if (!l.scheduled_date) return false
     const d = new Date(l.scheduled_date)
-    const now = new Date()
     const diffDays = Math.floor((d - now) / 86400000)
     return diffDays >= 0 && diffDays <= 7
   })
 
-  // Gap 4: Follow-up reminders
-  const followUpsDue = leads.filter(l =>
+  // Follow-up reminders (always based on all leads)
+  const followUpsDue = allLeads.filter(l =>
     l.follow_up_date && !l.is_lost && !l.is_disqualified &&
     new Date(l.follow_up_date) <= new Date(new Date().toDateString() + ' 23:59:59')
   ).sort((a, b) => a.follow_up_date.localeCompare(b.follow_up_date))
 
-  // Gap 9: Conversion funnel
+  // Conversion funnel
   const funnelStages = PIPELINE_STAGES.map(s => ({
     label: s.label,
     count: leads.filter(l => {
@@ -110,8 +115,6 @@ export default function Dashboard() {
   }))
   const funnelMax = Math.max(...funnelStages.map(s => s.count), 1)
 
-  const now = new Date()
-  const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const roleLabel = profile?.role === 'sales' ? 'Sales' : 'Admin'
   const classTotal = hotCount + warmCount + coldCount
   const sourcesArr = Object.entries(sources).sort((a, b) => b[1] - a[1])
@@ -120,6 +123,7 @@ export default function Dashboard() {
   function handleExportCSV() {
     const headers = ['Metric', 'Value']
     const rows = [
+      ['Period', getPeriodLabel(period)],
       ['Total Leads', String(totalLeads)], ['Qualified', String(qualifiedCount)], ['Disqualified', String(coldCount)],
       ['Qualification Rate', `${qualificationRate}%`], ['Hot', String(hotCount)], ['Warm', String(warmCount)],
       ['In Pipeline', String(inPipeline)], ['Converted', String(convertedCount)], ['Conversion Rate', `${conversionRate}%`],
@@ -144,7 +148,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div>
-        <div className="page-header"><h1 className="page-title">{roleLabel} Dashboard</h1><p className="page-subtitle">{monthYear}</p></div>
+        <div className="page-header"><h1 className="page-title">{roleLabel} Dashboard</h1></div>
         <div className="dash-stats-row">{[1,2,3,4].map(i => <div key={i} className="skeleton skeleton-card" />)}</div>
         <div className="skeleton skeleton-card" style={{ height: 160, marginBottom: 'var(--space-xl)' }} />
       </div>
@@ -156,17 +160,20 @@ export default function Dashboard() {
       <div className="page-header dash-header">
         <div>
           <h1 className="page-title">{roleLabel} Dashboard</h1>
-          <p className="page-subtitle">{monthYear} · {totalLeads} total lead{totalLeads !== 1 ? 's' : ''}</p>
+          <p className="page-subtitle">{totalLeads} lead{totalLeads !== 1 ? 's' : ''}{period.mode === 'month' ? ` in ${getPeriodLabel(period)}` : ''}</p>
         </div>
-        {totalLeads > 0 && (
-          <div className="dash-export-btns">
-            <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}>CSV</button>
-            <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>PDF</button>
-          </div>
-        )}
+        <div className="dash-header-actions">
+          <PeriodSelector value={period} onChange={setPeriod} />
+          {totalLeads > 0 && (
+            <div className="dash-export-btns">
+              <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}>CSV</button>
+              <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>PDF</button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Gap 2: Upcoming calls + Gap 4: Follow-ups due */}
+      {/* Upcoming calls + Follow-ups due */}
       {(todaysCalls.length > 0 || followUpsDue.length > 0) && (
         <div className="dash-grid-2" style={{ marginBottom: 'var(--space-md)' }}>
           {todaysCalls.length > 0 && (
@@ -264,7 +271,7 @@ export default function Dashboard() {
         <div className="stat-card"><div className="stat-icon">{StatIcons.lost}</div><div className="stat-label">Lost</div><div className="stat-value">{lostCount}</div></div>
       </div>
 
-      {/* Leads by Stage + Gap 7: Value by stage */}
+      {/* Leads by Stage */}
       <div className="section-card">
         <div className="section-card-header"><h2 className="section-card-title">Leads by Stage</h2></div>
         <div className="stage-chart">
@@ -286,7 +293,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Gap 9: Conversion funnel */}
+      {/* Conversion funnel */}
       {qualifiedCount > 0 && (
         <div className="section-card">
           <div className="section-card-header"><h2 className="section-card-title">Conversion Funnel</h2></div>
@@ -310,7 +317,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Gap 10: Recent activity feed */}
+      {/* Recent activity */}
       {stageHistory.length > 0 && (
         <div className="section-card">
           <div className="section-card-header"><h2 className="section-card-title">Recent Activity</h2></div>

@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES } from '../lib/scoring'
 import LeadDetail from '../components/LeadDetail/LeadDetail'
+import PeriodSelector, { filterByPeriod } from '../components/PeriodSelector/PeriodSelector'
 import './Pipeline.css'
 
 const LOST_REASONS = [
@@ -21,7 +22,6 @@ export default function Pipeline() {
   const [draggedLead, setDraggedLead] = useState(null)
   const [dragOverStage, setDragOverStage] = useState(null)
   const [moveMenuId, setMoveMenuId] = useState(null)
-  const moveMenuRef = useRef(null)
 
   // Mark as Lost modal state
   const [lostModal, setLostModal] = useState(null) // lead object
@@ -29,12 +29,14 @@ export default function Pipeline() {
   const [lostCustom, setLostCustom] = useState('')
   const [markingLost, setMarkingLost] = useState(false)
   const [selectedLead, setSelectedLead] = useState(null)
+  const now = new Date()
+  const [period, setPeriod] = useState({ mode: 'all', month: now.getMonth(), year: now.getFullYear() })
 
   useEffect(() => { fetchLeads() }, [])
 
   useEffect(() => {
     function handleClick(e) {
-      if (moveMenuRef.current && !moveMenuRef.current.contains(e.target)) {
+      if (!e.target.closest('.pipeline-card-actions')) {
         setMoveMenuId(null)
       }
     }
@@ -54,15 +56,17 @@ export default function Pipeline() {
     setLoading(false)
   }
 
+  const filteredLeads = filterByPeriod(leads, period)
+
   const leadsByStage = {}
   PIPELINE_STAGES.forEach(s => { leadsByStage[s.key] = [] })
-  leads.forEach(l => {
+  filteredLeads.forEach(l => {
     if (leadsByStage[l.current_stage]) {
       leadsByStage[l.current_stage].push(l)
     }
   })
 
-  const activeCount = leads.length
+  const activeCount = filteredLeads.length
 
   // ── Drag and drop ──
   function handleDragStart(e, lead) {
@@ -188,10 +192,11 @@ export default function Pipeline() {
   return (
     <div>
       <div className="page-header pipeline-header">
-        <h1 className="page-title">Pipeline</h1>
-        <span className="pipeline-count">
-          {activeCount} active lead{activeCount !== 1 ? 's' : ''}
-        </span>
+        <div>
+          <h1 className="page-title">Pipeline</h1>
+          <p className="page-subtitle">{activeCount} active lead{activeCount !== 1 ? 's' : ''}</p>
+        </div>
+        <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
       <div className="pipeline-board">
@@ -234,7 +239,7 @@ export default function Pipeline() {
                           <div className="pipeline-card-name pipeline-card-name-link" onClick={() => setSelectedLead(lead)}>{lead.full_name}</div>
                           <div className="pipeline-card-company">{lead.company_name}</div>
                         </div>
-                        <div className="pipeline-card-actions" ref={moveMenuId === lead.id ? moveMenuRef : null}>
+                        <div className="pipeline-card-actions">
                           <button
                             className="pipeline-card-move-btn"
                             onClick={() => setMoveMenuId(moveMenuId === lead.id ? null : lead.id)}

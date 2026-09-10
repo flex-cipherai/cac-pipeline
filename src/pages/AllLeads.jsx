@@ -3,13 +3,16 @@ import { supabase } from '../lib/supabase'
 import { PIPELINE_STAGES } from '../lib/scoring'
 import { exportCSV, exportLeadsPDF } from '../lib/exportUtils'
 import LeadDetail from '../components/LeadDetail/LeadDetail'
+import PeriodSelector, { filterByPeriod } from '../components/PeriodSelector/PeriodSelector'
 import './AllLeads.css'
 
 export default function AllLeads() {
-  const [leads, setLeads] = useState([])
+  const [allLeads, setAllLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [selectedLead, setSelectedLead] = useState(null)
+  const now = new Date()
+  const [period, setPeriod] = useState({ mode: 'all', month: now.getMonth(), year: now.getFullYear() })
 
   // Gap 1: Filters
   const [filterClass, setFilterClass] = useState('')
@@ -31,9 +34,12 @@ export default function AllLeads() {
 
   async function fetchLeads() {
     const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false })
-    if (data) setLeads(data)
+    if (data) setAllLeads(data)
     setLoading(false)
   }
+
+  // Apply period filter first
+  const leads = filterByPeriod(allLeads, period)
 
   function badgeClass(lead) {
     if (lead.is_disqualified) return 'badge badge-cold'
@@ -124,11 +130,11 @@ export default function AllLeads() {
     if (bulkAction === 'move' && bulkStage) {
       const ids = [...selected]
       await Promise.all(ids.map(id => supabase.from('leads').update({ current_stage: bulkStage }).eq('id', id)))
-      setLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, current_stage: bulkStage } : l))
+      setAllLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, current_stage: bulkStage } : l))
     } else if (bulkAction === 'lost') {
       const ids = [...selected]
       await Promise.all(ids.map(id => supabase.from('leads').update({ is_lost: true, lost_reason: 'Bulk action' }).eq('id', id)))
-      setLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, is_lost: true, lost_reason: 'Bulk action' } : l))
+      setAllLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, is_lost: true, lost_reason: 'Bulk action' } : l))
     }
     setSelected(new Set())
     setBulkAction('')
@@ -170,18 +176,21 @@ export default function AllLeads() {
           <h1 className="page-title">All Leads</h1>
           <p className="page-subtitle">{leads.length} lead{leads.length !== 1 ? 's' : ''}{hasFilters ? ` · ${filtered.length} shown` : ''}</p>
         </div>
-        {leads.length > 0 && (
-          <div className="leads-header-actions">
-            <div className="leads-search-wrap">
-              <svg className="leads-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><path d="M11 11l3.5 3.5" /></svg>
-              <input type="text" className="leads-search" placeholder="Search leads..." value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-            <div className="leads-export-btns">
-              <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}>CSV</button>
-              <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>PDF</button>
-            </div>
-          </div>
-        )}
+        <div className="leads-header-actions">
+          <PeriodSelector value={period} onChange={setPeriod} />
+          {leads.length > 0 && (
+            <>
+              <div className="leads-search-wrap">
+                <svg className="leads-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><path d="M11 11l3.5 3.5" /></svg>
+                <input type="text" className="leads-search" placeholder="Search leads..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+              <div className="leads-export-btns">
+                <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}>CSV</button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>PDF</button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Gap 1: Filter bar */}
@@ -300,7 +309,7 @@ export default function AllLeads() {
 
       {selectedLead && (
         <LeadDetail lead={selectedLead} onClose={() => setSelectedLead(null)} onLeadUpdated={(updated) => {
-          setLeads(prev => prev.map(l => l.id === updated.id ? updated : l))
+          setAllLeads(prev => prev.map(l => l.id === updated.id ? updated : l))
           setSelectedLead(null)
         }} />
       )}

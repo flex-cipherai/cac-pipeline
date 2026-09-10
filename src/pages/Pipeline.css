@@ -1,14 +1,9 @@
 /* ─── Pipeline Header ─── */
 .pipeline-header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-}
-
-.pipeline-count {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  font-weight: 500;
+  gap: var(--space-md);
 }
 
 /* ─── Kanban Board ─── */

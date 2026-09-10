@@ -6,6 +6,12 @@
   gap: var(--space-md);
 }
 
+.dash-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .dash-export-btns {
   display: flex;
   gap: 4px;
@@ -197,6 +203,16 @@
 @media (max-width: 768px) {
   .dash-stats-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .dash-header {
+    flex-direction: column;
+  }
+  .dash-header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 
