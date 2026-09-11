@@ -64,7 +64,7 @@ export default function Login() {
       <div className="login-brand">
         <div className="login-brand-content">
           <div className="login-brand-logo">
-            <img src="/sdfm-logo.png" alt="SDFM Group Limited" className="login-brand-logo-img" />
+            <img src="/sdfm-logo-white.png" alt="SDFM Group Limited" className="login-brand-logo-img" />
           </div>
           <h2 className="login-brand-name">Sales Management Pipeline</h2>
           <p className="login-brand-tagline">Transforming Kenyan Businesses</p>

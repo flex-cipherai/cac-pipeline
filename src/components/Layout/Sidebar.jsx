@@ -120,7 +120,7 @@ export default function Sidebar({ isOpen, onClose }) {
         <div className="sidebar-top">
           {/* Logo */}
           <div className="sidebar-logo">
-            <img src="/sdfm-logo.png" alt="SDFM Group Limited" className="sidebar-logo-img" />
+            <img src="/sdfm-logo-white.png" alt="SDFM Group Limited" className="sidebar-logo-img" />
           </div>
 
           {/* Navigation */}

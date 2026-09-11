@@ -12,7 +12,7 @@ export default function Layout({ children }) {
       {/* Mobile header */}
       <div className="mobile-header">
         <div className="mobile-header-logo">
-          <img src="/sdfm-logo.png" alt="SDFM Group" style={{ height: '18px', width: 'auto', padding: '4px 10px', background: '#fff', borderRadius: '5px' }} />
+          <img src="/sdfm-logo-white.png" alt="SDFM Group" style={{ height: '24px', width: 'auto' }} />
         </div>
         <button
           className="mobile-hamburger"
