@@ -28,10 +28,12 @@
 }
 
 .sidebar-logo-img {
-  height: 32px;
+  height: 28px;
   width: auto;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  padding: 6px 14px;
+  background: var(--white);
+  border-radius: 6px;
 }
 
 /* ─── Navigation ─── */

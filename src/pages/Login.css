@@ -27,10 +27,12 @@
 }
 
 .login-brand-logo-img {
-  height: 48px;
+  height: 40px;
   width: auto;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  padding: 8px 18px;
+  background: var(--white);
+  border-radius: 8px;
 }
 
 .login-brand-name {
