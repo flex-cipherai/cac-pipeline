@@ -106,22 +106,17 @@ export function adminNewLeadAlert({ fullName, companyName, classification, total
 export async function sendNotification({ to, template }) {
   const { subject, html } = template
 
-  console.log(`[Email Notification] To: ${to} | Subject: ${subject}`)
-  console.log('[Email Notification] Email sending is not yet active. Configure Resend and deploy the send-email Edge Function to enable.')
-
-  // ── Uncomment below once the send-email Edge Function is deployed ──
-  // try {
-  //   const { data, error } = await supabase.functions.invoke('send-email', {
-  //     body: { to, subject, html },
-  //   })
-  //   if (error) throw error
-  //   return { success: true, data }
-  // } catch (err) {
-  //   console.error('Failed to send email:', err)
-  //   return { success: false, error: err }
-  // }
-
-  return { success: true, pending: true }
+  try {
+    const { data, error } = await supabase.functions.invoke('send-email', {
+      body: { to, subject, html },
+    })
+    if (error) throw error
+    console.log(`[Email] Sent to ${to}: ${subject}`)
+    return { success: true, data }
+  } catch (err) {
+    console.error(`[Email] Failed to send to ${to}:`, err)
+    return { success: false, error: err }
+  }
 }
 
 // ── Convenience Functions ──

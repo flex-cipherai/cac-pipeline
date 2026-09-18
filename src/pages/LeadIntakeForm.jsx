@@ -48,13 +48,37 @@ export default function LeadIntakeForm() {
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedTime, setSelectedTime] = useState(null)
 
-  // Source tracking via URL param
+  // Source tracking via URL param, UTM, or referrer
   const [source, setSource] = useState('Website')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const src = params.get('source')
-    if (src) setSource(src)
+    // Priority: explicit ?source= → ?utm_source= → referrer sniffing → default
+    const explicit = params.get('source')
+    const utm = params.get('utm_source')
+    if (explicit) {
+      setSource(explicit)
+    } else if (utm) {
+      // Map common UTM source values to clean labels
+      const utmMap = {
+        linkedin: 'LinkedIn',
+        facebook: 'Facebook',
+        twitter: 'Twitter',
+        instagram: 'Instagram',
+        google: 'Google',
+        email: 'Email',
+        whatsapp: 'WhatsApp',
+      }
+      setSource(utmMap[utm.toLowerCase()] || utm)
+    } else if (document.referrer) {
+      // Auto-detect from referrer if no params present
+      const ref = document.referrer.toLowerCase()
+      if (ref.includes('linkedin.com')) setSource('LinkedIn')
+      else if (ref.includes('facebook.com') || ref.includes('fb.com')) setSource('Facebook')
+      else if (ref.includes('twitter.com') || ref.includes('x.com')) setSource('Twitter')
+      else if (ref.includes('instagram.com')) setSource('Instagram')
+      else if (ref.includes('google.com')) setSource('Google')
+    }
   }, [])
 
   // Fetch availability + booking config when reaching step 3

@@ -8,8 +8,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const SENDER_EMAIL = Deno.env.get('SENDER_EMAIL') || 'noreply@cipherai.co.ke'
-const SENDER_NAME = 'Cipher AI Consultants'
+const SENDER_EMAIL = Deno.env.get('SENDER_EMAIL') || 'notifications@sdfmgroup.com'
+const SENDER_NAME = 'SDFM Group Limited'
 
 serve(async (req) => {
   // CORS headers
