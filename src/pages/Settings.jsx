@@ -23,6 +23,7 @@ export default function Settings() {
     booking_min_notice_hours: '4',
     booking_duration_minutes: '60',
     booking_buffer_minutes: '0',
+    reminder_hours_before_call: '24',
   })
   const [savingConfig, setSavingConfig] = useState(false)
 
@@ -93,7 +94,7 @@ export default function Settings() {
     // Fetch booking config from system_settings
     const { data: configData } = await supabase
       .from('system_settings').select('key, value')
-      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes'])
+      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes', 'reminder_hours_before_call'])
     if (configData) {
       const cfg = { ...bookingConfig }
       configData.forEach(row => { if (row.key && row.value) cfg[row.key] = row.value })
@@ -551,6 +552,16 @@ export default function Settings() {
                 <option value="15">15 minutes</option>
                 <option value="30">30 minutes</option>
                 <option value="60">60 minutes</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Reminder timing</label>
+              <select className="form-input" value={bookingConfig.reminder_hours_before_call} onChange={e => setBookingConfig({ ...bookingConfig, reminder_hours_before_call: e.target.value })}>
+                <option value="1">1 hour before</option>
+                <option value="2">2 hours before</option>
+                <option value="4">4 hours before</option>
+                <option value="24">24 hours before</option>
+                <option value="48">48 hours before</option>
               </select>
             </div>
           </div>

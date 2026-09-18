@@ -206,6 +206,24 @@ const DEFAULT_TEMPLATES = [
 </div>`,
     available_variables: ['full_name', 'company_name', 'email', 'classification', 'total_score', 'current_stage', 'lost_reason'],
   },
+  {
+    template_key: 'discovery_call_reminder_client',
+    name: 'Discovery Call Reminder (Client)',
+    recipient_type: 'client',
+    description: 'Sent to the lead ahead of their scheduled discovery call. Timing is set by the "Reminder timing" booking setting.',
+    subject: 'Reminder: Your Discovery Call is Coming Up',
+    body_html: `<p>TODO: write this reminder email, then activate it.</p>`,
+    available_variables: ['full_name', 'company_name', 'email', 'phone', 'scheduled_day', 'scheduled_time', 'classification'],
+  },
+  {
+    template_key: 'discovery_call_reminder_team',
+    name: 'Discovery Call Reminder (Team)',
+    recipient_type: 'team',
+    description: 'Sent to admin/sales ahead of a lead\'s scheduled discovery call. Timing is set by the "Reminder timing" booking setting.',
+    subject: 'Reminder: Upcoming Discovery Call with {{full_name}}',
+    body_html: `<p>TODO: write this reminder email, then activate it.</p>`,
+    available_variables: ['full_name', 'company_name', 'email', 'phone', 'scheduled_day', 'scheduled_time', 'classification', 'total_score'],
+  },
 ]
 
 const VARIABLE_LABELS = {
