@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES } from '../lib/scoring'
+import { DEFAULT_TIMEZONE, convertScheduledTime } from '../lib/timezone'
 import LeadDetail from '../components/LeadDetail/LeadDetail'
 import PeriodSelector, { filterByPeriod } from '../components/PeriodSelector/PeriodSelector'
 import './Pipeline.css'
@@ -19,6 +20,8 @@ export default function Pipeline() {
   const { profile } = useAuth()
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
+  const [teamTimezone, setTeamTimezone] = useState(DEFAULT_TIMEZONE)
+  const myTimezone = profile?.timezone || teamTimezone
   const [draggedLead, setDraggedLead] = useState(null)
   const [dragOverStage, setDragOverStage] = useState(null)
   const [moveMenuId, setMoveMenuId] = useState(null)
@@ -33,6 +36,11 @@ export default function Pipeline() {
   const [period, setPeriod] = useState({ mode: 'all', month: now.getMonth(), year: now.getFullYear() })
 
   useEffect(() => { fetchLeads() }, [])
+
+  useEffect(() => {
+    supabase.from('system_settings').select('value').eq('key', 'team_timezone').maybeSingle()
+      .then(({ data }) => { if (data?.value) setTeamTimezone(data.value) })
+  }, [])
 
   useEffect(() => {
     function handleClick(e) {
@@ -100,6 +108,7 @@ export default function Pipeline() {
   }
 
   async function moveLead(lead, targetStage) {
+    const previousStage = lead.current_stage
     setLeads(prev =>
       prev.map(l => l.id === lead.id ? { ...l, current_stage: targetStage } : l)
     )
@@ -107,6 +116,9 @@ export default function Pipeline() {
     await supabase.from('lead_stage_history').insert({
       lead_id: lead.id, stage: targetStage, moved_by: profile?.id,
     })
+    supabase.functions.invoke('notify-lead-stage', {
+      body: { lead_id: lead.id, event: 'stage_changed', previous_stage: previousStage },
+    }).catch(err => console.error('[Email] notify-lead-stage invoke failed:', err))
     setMoveMenuId(null)
   }
 
@@ -134,6 +146,10 @@ export default function Pipeline() {
         lead_id: lostModal.id, stage: 'Lost', moved_by: profile?.id,
       })
 
+      supabase.functions.invoke('notify-lead-stage', {
+        body: { lead_id: lostModal.id, event: 'lost' },
+      }).catch(err => console.error('[Email] notify-lead-stage invoke failed:', err))
+
       // Remove from local state
       setLeads(prev => prev.filter(l => l.id !== lostModal.id))
       setLostModal(null)
@@ -147,10 +163,10 @@ export default function Pipeline() {
   function badgeClass(c) { return `badge badge-${c}` }
 
   function formatDate(lead) {
-    if (lead.scheduled_day && lead.scheduled_time) {
-      return `${lead.scheduled_day} · ${lead.scheduled_time}`
-    }
-    return null
+    if (!lead.scheduled_date || !lead.scheduled_time) return null
+    const converted = convertScheduledTime(lead.scheduled_date, lead.scheduled_time, teamTimezone, myTimezone)
+    if (converted) return `${converted.dayShort} · ${converted.time}`
+    return `${lead.scheduled_day} · ${lead.scheduled_time}`
   }
 
   // Gap 3: Lead aging — calculate days in current stage

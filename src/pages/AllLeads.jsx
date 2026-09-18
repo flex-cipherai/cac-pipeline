@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES } from '../lib/scoring'
 import { exportCSV, exportLeadsPDF } from '../lib/exportUtils'
 import LeadDetail from '../components/LeadDetail/LeadDetail'
@@ -7,6 +8,7 @@ import PeriodSelector, { filterByPeriod } from '../components/PeriodSelector/Per
 import './AllLeads.css'
 
 export default function AllLeads() {
+  const { profile } = useAuth()
   const [allLeads, setAllLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -129,11 +131,28 @@ export default function AllLeads() {
   async function handleBulkAction() {
     if (bulkAction === 'move' && bulkStage) {
       const ids = [...selected]
+      const previousStages = new Map(allLeads.filter(l => selected.has(l.id)).map(l => [l.id, l.current_stage]))
       await Promise.all(ids.map(id => supabase.from('leads').update({ current_stage: bulkStage }).eq('id', id)))
+      await Promise.all(ids.map(id => supabase.from('lead_stage_history').insert({
+        lead_id: id, stage: bulkStage, moved_by: profile?.id,
+      })))
+      ids.forEach(id => {
+        supabase.functions.invoke('notify-lead-stage', {
+          body: { lead_id: id, event: 'stage_changed', previous_stage: previousStages.get(id) },
+        }).catch(err => console.error('[Email] notify-lead-stage invoke failed:', err))
+      })
       setAllLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, current_stage: bulkStage } : l))
     } else if (bulkAction === 'lost') {
       const ids = [...selected]
       await Promise.all(ids.map(id => supabase.from('leads').update({ is_lost: true, lost_reason: 'Bulk action' }).eq('id', id)))
+      await Promise.all(ids.map(id => supabase.from('lead_stage_history').insert({
+        lead_id: id, stage: 'Lost', moved_by: profile?.id,
+      })))
+      ids.forEach(id => {
+        supabase.functions.invoke('notify-lead-stage', {
+          body: { lead_id: id, event: 'lost' },
+        }).catch(err => console.error('[Email] notify-lead-stage invoke failed:', err))
+      })
       setAllLeads(prev => prev.map(l => selected.has(l.id) ? { ...l, is_lost: true, lost_reason: 'Bulk action' } : l))
     }
     setSelected(new Set())

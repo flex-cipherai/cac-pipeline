@@ -207,6 +207,15 @@ const DEFAULT_TEMPLATES = [
     available_variables: ['full_name', 'company_name', 'email', 'classification', 'total_score', 'current_stage', 'lost_reason'],
   },
   {
+    template_key: 'lead_lost_client',
+    name: 'Lead Lost (Client)',
+    recipient_type: 'client',
+    description: 'Sent to the lead themselves when they are marked as lost from the pipeline.',
+    subject: 'Following Up — SDFM Group Limited',
+    body_html: `<p>TODO: write this email, then activate it.</p>`,
+    available_variables: ['full_name', 'company_name', 'email', 'classification', 'current_stage', 'lost_reason'],
+  },
+  {
     template_key: 'discovery_call_reminder_client',
     name: 'Discovery Call Reminder (Client)',
     recipient_type: 'client',
@@ -223,6 +232,29 @@ const DEFAULT_TEMPLATES = [
     subject: 'Reminder: Upcoming Discovery Call with {{full_name}}',
     body_html: `<p>TODO: write this reminder email, then activate it.</p>`,
     available_variables: ['full_name', 'company_name', 'email', 'phone', 'scheduled_day', 'scheduled_time', 'classification', 'total_score'],
+  },
+  {
+    template_key: 'password_reset',
+    name: 'Password Reset',
+    recipient_type: 'client',
+    description: 'Sent when someone requests a password reset, or when an admin creates/resets a team account. Contains the one-time reset link.',
+    subject: 'Reset Your SDFM Group Password',
+    body_html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 560px; margin: 0 auto; color: #201E1D;">
+  <div style="padding: 32px 0 24px; text-align: center;">
+    <span style="font-size: 22px; font-weight: 700; color: #EC3013;">SDFM GROUP</span>
+    <span style="font-size: 12px; display: block; letter-spacing: 0.15em; color: #201E1D;">LIMITED</span>
+  </div>
+  <div style="background: #F3F2F2; border-radius: 10px; padding: 32px; margin-bottom: 24px;">
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">Reset Your Password</h1>
+    <p style="font-size: 14px; color: #666; line-height: 1.6; margin: 0 0 24px;">Hi {{full_name}}, we received a request to reset your password. Click below to choose a new one. This link expires in {{expires_in}}.</p>
+    <div style="text-align: center; margin: 0 0 8px;">
+      <a href="{{reset_link}}" style="display: inline-block; background: #EC3013; color: white; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-size: 14px; font-weight: 600;">Reset Password</a>
+    </div>
+    <p style="font-size: 12px; color: #999; margin: 24px 0 0;">If you did not request this, you can safely ignore this email.</p>
+  </div>
+  <p style="font-size: 12px; color: #999; text-align: center;">SDFM Group Limited · Transforming Kenyan Businesses</p>
+</div>`,
+    available_variables: ['full_name', 'email', 'reset_link', 'expires_in'],
   },
 ]
 

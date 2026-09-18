@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { QUALIFICATION_QUESTIONS, DAYS_OF_WEEK, scoreLead } from '../lib/scoring'
+import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, detectTimezone, convertScheduledTime, formatOffsetLabel } from '../lib/timezone'
 import './LeadIntakeForm.css'
 
 const STEPS = [
@@ -47,6 +48,8 @@ export default function LeadIntakeForm() {
   const [calYear, setCalYear] = useState(new Date().getFullYear())
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedTime, setSelectedTime] = useState(null)
+  const [teamTimezone, setTeamTimezone] = useState(DEFAULT_TIMEZONE)
+  const [leadTimezone, setLeadTimezone] = useState(detectTimezone())
 
   // Source tracking via URL param, UTM, or referrer
   const [source, setSource] = useState('Website')
@@ -93,7 +96,7 @@ export default function LeadIntakeForm() {
         supabase.from('calendar_availability').select('*').eq('is_available', true).order('day_of_week').order('time_slot'),
         supabase.from('booked_slots').select('*'),
         supabase.from('system_settings').select('key, value').in('key', [
-          'booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes'
+          'booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes', 'team_timezone'
         ]),
       ])
 
@@ -112,7 +115,9 @@ export default function LeadIntakeForm() {
       if (configRes.data) {
         const cfg = { ...DEFAULT_CONFIG }
         configRes.data.forEach(row => {
-          if (row.key && row.value) cfg[row.key] = parseInt(row.value, 10)
+          if (!row.key || !row.value) return
+          if (row.key === 'team_timezone') setTeamTimezone(row.value)
+          else cfg[row.key] = parseInt(row.value, 10)
         })
         setBookingConfig(cfg)
       }
@@ -275,6 +280,7 @@ export default function LeadIntakeForm() {
           scheduled_time: selectedTime,
           scheduled_date: scheduledDateStr,
           source,
+          timezone: leadTimezone,
         })
 
       if (leadError) throw leadError
@@ -298,11 +304,12 @@ export default function LeadIntakeForm() {
       supabase.functions.invoke('notify-lead', { body: { lead_id: leadId } })
         .catch(err => console.error('[Email] notify-lead invoke failed:', err))
 
+      const leadLocal = convertScheduledTime(scheduledDateStr, selectedTime, teamTimezone, leadTimezone)
       setSubmitResult({
         qualified: isQualified,
         classification: scoreResult.classification,
-        scheduledDay: dayLabel,
-        scheduledTime: selectedTime,
+        scheduledDay: leadLocal ? leadLocal.dayShort : dayLabel,
+        scheduledTime: leadLocal ? leadLocal.time : selectedTime,
         scheduledDate: selectedDate,
       })
       setSubmitted(true)
@@ -480,6 +487,18 @@ export default function LeadIntakeForm() {
               )}
             </p>
 
+            <div className="form-group" style={{ maxWidth: 320 }}>
+              <label className="form-label" htmlFor="lead-timezone">Your Timezone</label>
+              <select id="lead-timezone" className="form-input" value={leadTimezone} onChange={e => setLeadTimezone(e.target.value)}>
+                {!COMMON_TIMEZONES.includes(leadTimezone) && (
+                  <option value={leadTimezone}>{formatOffsetLabel(leadTimezone)}</option>
+                )}
+                {COMMON_TIMEZONES.map(tz => (
+                  <option key={tz} value={tz}>{formatOffsetLabel(tz)}</option>
+                ))}
+              </select>
+            </div>
+
             {loadingSlots ? (
               <div className="cal-loading">
                 <div className="skeleton" style={{ width: '100%', height: 300, borderRadius: 'var(--radius-md)' }} />
@@ -517,19 +536,27 @@ export default function LeadIntakeForm() {
                         if (openSlots.length === 0) {
                           return <p className="cal-times-empty">No available times on this date.</p>
                         }
+                        const dateStr = formatDateStr(selectedDate)
                         return (
                           <div className="cal-times-list">
-                            {openSlots.map(time => (
-                              <button
-                                key={time}
-                                type="button"
-                                className={`cal-time-slot ${selectedTime === time ? 'selected' : ''}`}
-                                onClick={() => setSelectedTime(time)}
-                              >
-                                <span className="cal-time-slot-time">{time}</span>
-                                <span className="cal-time-slot-dur">{bookingConfig.booking_duration_minutes} min</span>
-                              </button>
-                            ))}
+                            {openSlots.map(time => {
+                              const converted = convertScheduledTime(dateStr, time, teamTimezone, leadTimezone)
+                              const showConverted = converted && leadTimezone !== teamTimezone
+                              return (
+                                <button
+                                  key={time}
+                                  type="button"
+                                  className={`cal-time-slot ${selectedTime === time ? 'selected' : ''}`}
+                                  onClick={() => setSelectedTime(time)}
+                                >
+                                  <span className="cal-time-slot-time">{showConverted ? converted.time : time}</span>
+                                  <span className="cal-time-slot-dur">
+                                    {bookingConfig.booking_duration_minutes} min
+                                    {showConverted && ` · ${time} team time (${converted.sameDay ? formatDateShort(selectedDate) : converted.dayShort})`}
+                                  </span>
+                                </button>
+                              )
+                            })}
                           </div>
                         )
                       })()}
@@ -549,12 +576,19 @@ export default function LeadIntakeForm() {
             )}
 
             {/* Selected summary */}
-            {selectedDate && selectedTime && (
-              <div className="cal-selection-summary">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 4.5V8l2.5 1.5" /></svg>
-                <span>{formatDateShort(selectedDate)} at {selectedTime} ({bookingConfig.booking_duration_minutes} min)</span>
-              </div>
-            )}
+            {selectedDate && selectedTime && (() => {
+              const converted = convertScheduledTime(formatDateStr(selectedDate), selectedTime, teamTimezone, leadTimezone)
+              const showConverted = converted && leadTimezone !== teamTimezone
+              return (
+                <div className="cal-selection-summary">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 4.5V8l2.5 1.5" /></svg>
+                  <span>
+                    {showConverted ? `${converted.dayShort} at ${converted.time}` : `${formatDateShort(selectedDate)} at ${selectedTime}`}
+                    {' '}({bookingConfig.booking_duration_minutes} min)
+                  </span>
+                </div>
+              )
+            })()}
 
             <div className="intake-nav">
               <button className="btn btn-secondary" onClick={goBack}>← Back</button>

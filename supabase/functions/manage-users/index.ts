@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { issuePasswordReset } from '../_shared/passwordReset.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
 
     // ── Create User ──
     if (action === 'create_user') {
-      const { email, name, role } = body
+      const { email, name, role, redirect_origin } = body
       if (!email || !name || !role) {
         return jsonResponse({ success: false, error: 'Name, email, and role are required' })
       }
@@ -76,8 +77,17 @@ Deno.serve(async (req) => {
         .update({ name, role, email })
         .eq('id', newUser.user.id)
 
-      // Generate password reset link
-      await adminClient.auth.resetPasswordForEmail(email)
+      // Send a set-password link so they can set their initial password
+      try {
+        await issuePasswordReset(adminClient, {
+          userId: newUser.user.id,
+          email,
+          fullName: name,
+          redirectOrigin: redirect_origin || Deno.env.get('SUPABASE_URL')!,
+        })
+      } catch (err) {
+        console.error('[manage-users] create_user reset email failed:', err.message)
+      }
 
       return jsonResponse({ success: true, user_id: newUser.user.id })
     }
@@ -127,12 +137,25 @@ Deno.serve(async (req) => {
         return jsonResponse({ success: false, error: 'Email is required' })
       }
 
-      const { error } = await adminClient.auth.resetPasswordForEmail(email, {
-        redirectTo: redirect_to || undefined,
-      })
+      const { data: targetProfile } = await adminClient
+        .from('profiles')
+        .select('id, name')
+        .ilike('email', email)
+        .maybeSingle()
 
-      if (error) {
-        return jsonResponse({ success: false, error: error.message })
+      if (!targetProfile) {
+        return jsonResponse({ success: false, error: 'No user found with that email' })
+      }
+
+      try {
+        await issuePasswordReset(adminClient, {
+          userId: targetProfile.id,
+          email,
+          fullName: targetProfile.name,
+          redirectOrigin: redirect_to || Deno.env.get('SUPABASE_URL')!,
+        })
+      } catch (err) {
+        return jsonResponse({ success: false, error: err.message })
       }
 
       return jsonResponse({ success: true })

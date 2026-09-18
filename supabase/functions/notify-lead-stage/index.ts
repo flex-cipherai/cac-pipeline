@@ -1,10 +1,10 @@
-// Supabase Edge Function: notify-lead
-// Sends the client confirmation/thank-you email and the team "new lead" alert
-// for a just-submitted lead. Runs server-side with the service role key so it
-// can read email_templates and profiles regardless of the caller's RLS access
-// (the public /intake form submits as anon, which can't read either table).
+// Supabase Edge Function: notify-lead-stage
+// Sends team + client notifications when a lead moves to a new pipeline
+// stage, or is marked lost. Runs server-side with the service role key for
+// the same reason as notify-lead: needs email_templates + profiles access
+// regardless of the caller's RLS.
 //
-// Deploy: supabase functions deploy notify-lead
+// Deploy: supabase functions deploy notify-lead-stage
 // Requires the same secrets as send-email: RESEND_API_KEY, SENDER_EMAIL
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -14,6 +14,14 @@ import { DEFAULT_TIMEZONE, leadVars } from '../_shared/datetime.ts'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Only these stage transitions have a client-facing template today — other
+// stages still get the team "stage_changed" alert, just no client email.
+const STAGE_CLIENT_TEMPLATES: Record<string, string> = {
+  'Questions Sent': 'questions_sent',
+  'Presented': 'report_ready',
+  'Contract Out': 'contract_sent',
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
@@ -31,9 +39,12 @@ Deno.serve(async (req) => {
   try {
     requireResendKey()
 
-    const { lead_id } = await req.json()
-    if (!lead_id) {
-      return jsonResponse({ success: false, error: 'Missing lead_id' }, 400)
+    const { lead_id, event, previous_stage } = await req.json()
+    if (!lead_id || !event) {
+      return jsonResponse({ success: false, error: 'Missing lead_id or event' }, 400)
+    }
+    if (event !== 'stage_changed' && event !== 'lost') {
+      return jsonResponse({ success: false, error: 'event must be stage_changed or lost' }, 400)
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -55,25 +66,28 @@ Deno.serve(async (req) => {
     const teamTimezone = teamTzRow?.value || DEFAULT_TIMEZONE
     const leadTimezone = lead.timezone || teamTimezone
 
-    const clientTemplateKey = lead.classification === 'cold' ? 'cold_rejection' : 'call_confirmed'
+    const teamTemplateKey = event === 'lost' ? 'lead_lost' : 'stage_changed'
+    const clientTemplateKey = event === 'lost' ? 'lead_lost_client' : STAGE_CLIENT_TEMPLATES[lead.current_stage]
 
+    const templateKeys = [teamTemplateKey, ...(clientTemplateKey ? [clientTemplateKey] : [])]
     const { data: templates, error: templatesError } = await adminClient
       .from('email_templates')
       .select('*')
-      .in('template_key', [clientTemplateKey, 'new_lead_alert'])
+      .in('template_key', templateKeys)
 
     if (templatesError) {
       return jsonResponse({ success: false, error: templatesError.message }, 500)
     }
 
-    const clientTemplate = templates?.find(t => t.template_key === clientTemplateKey)
-    const teamTemplate = templates?.find(t => t.template_key === 'new_lead_alert')
+    const teamTemplate = templates?.find(t => t.template_key === teamTemplateKey)
+    const clientTemplate = clientTemplateKey ? templates?.find(t => t.template_key === clientTemplateKey) : null
 
     const results: Record<string, unknown> = {}
+    const baseVars = { ...lead, previous_stage: previous_stage || '' }
 
     if (clientTemplate?.is_active && lead.email) {
       try {
-        const vars = leadVars(lead, teamTimezone, leadTimezone)
+        const vars = leadVars(baseVars, teamTimezone, leadTimezone)
         await sendViaResend([lead.email], renderTemplate(clientTemplate.subject, vars), renderTemplate(clientTemplate.body_html, vars))
         results.client = { success: true }
       } catch (err) {
@@ -91,7 +105,7 @@ Deno.serve(async (req) => {
 
       if (!staffError && recipients.length > 0) {
         const sends = await Promise.allSettled(recipients.map(p => {
-          const vars = leadVars(lead, teamTimezone, p.timezone || teamTimezone)
+          const vars = leadVars(baseVars, teamTimezone, p.timezone || teamTimezone)
           return sendViaResend([p.email], renderTemplate(teamTemplate.subject, vars), renderTemplate(teamTemplate.body_html, vars))
         }))
         const failed = sends.filter(s => s.status === 'rejected').length

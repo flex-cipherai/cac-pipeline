@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { DAYS_OF_WEEK, CLASSIFICATION_THRESHOLDS, HARD_DISQUALIFIERS } from '../lib/scoring'
+import { COMMON_TIMEZONES, detectTimezone, formatOffsetLabel } from '../lib/timezone'
 import './Settings.css'
 
 const ALL_TIME_SLOTS = [
@@ -24,6 +25,7 @@ export default function Settings() {
     booking_duration_minutes: '60',
     booking_buffer_minutes: '0',
     reminder_hours_before_call: '24',
+    team_timezone: 'Africa/Nairobi',
   })
   const [savingConfig, setSavingConfig] = useState(false)
 
@@ -31,6 +33,7 @@ export default function Settings() {
   const [myName, setMyName] = useState('')
   const [myPhone, setMyPhone] = useState('')
   const [myJobTitle, setMyJobTitle] = useState('')
+  const [myTimezone, setMyTimezone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
   const [newPassword, setNewPassword] = useState('')
@@ -94,7 +97,7 @@ export default function Settings() {
     // Fetch booking config from system_settings
     const { data: configData } = await supabase
       .from('system_settings').select('key, value')
-      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes', 'reminder_hours_before_call'])
+      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes', 'reminder_hours_before_call', 'team_timezone'])
     if (configData) {
       const cfg = { ...bookingConfig }
       configData.forEach(row => { if (row.key && row.value) cfg[row.key] = row.value })
@@ -106,6 +109,7 @@ export default function Settings() {
       setMyName(currentUser.name || '')
       setMyPhone(currentUser.phone || '')
       setMyJobTitle(currentUser.job_title || '')
+      setMyTimezone(currentUser.timezone || detectTimezone())
     }
 
     setLoading(false)
@@ -114,7 +118,7 @@ export default function Settings() {
   async function saveMyProfile() {
     setSavingProfile(true)
     try {
-      const updates = { name: myName.trim(), phone: myPhone.trim(), job_title: myJobTitle.trim() }
+      const updates = { name: myName.trim(), phone: myPhone.trim(), job_title: myJobTitle.trim(), timezone: myTimezone }
       const { error } = await supabase.from('profiles').update(updates).eq('id', currentUser.id)
       if (error) throw error
       showToast('success', 'Profile updated')
@@ -206,7 +210,7 @@ export default function Settings() {
     setAddingUser(true)
     try {
       const { data, error } = await supabase.functions.invoke('manage-users', {
-        body: { action: 'create_user', email: newUser.email, name: newUser.name, role: newUser.role },
+        body: { action: 'create_user', email: newUser.email, name: newUser.name, role: newUser.role, redirect_origin: window.location.origin },
       })
       if (error) throw new Error('Could not reach the server. Please try again.')
       if (!data?.success) throw new Error(data?.error || 'Failed to create user')
@@ -305,6 +309,18 @@ export default function Settings() {
             <div className="form-group">
               <label className="form-label">Phone Number</label>
               <input className="form-input" value={myPhone} onChange={e => setMyPhone(e.target.value)} placeholder="+254 700 000 000" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">My Timezone</label>
+              <select className="form-input" value={myTimezone} onChange={e => setMyTimezone(e.target.value)}>
+                {!COMMON_TIMEZONES.includes(myTimezone) && myTimezone && (
+                  <option value={myTimezone}>{formatOffsetLabel(myTimezone)}</option>
+                )}
+                {COMMON_TIMEZONES.map(tz => (
+                  <option key={tz} value={tz}>{formatOffsetLabel(tz)}</option>
+                ))}
+              </select>
+              <span className="form-hint">Scheduled call times shown to you across the app and in team emails use this timezone.</span>
             </div>
           </div>
           <div className="profile-actions-row">
@@ -563,6 +579,18 @@ export default function Settings() {
                 <option value="24">24 hours before</option>
                 <option value="48">48 hours before</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Team timezone</label>
+              <select className="form-input" value={bookingConfig.team_timezone} onChange={e => setBookingConfig({ ...bookingConfig, team_timezone: e.target.value })}>
+                {!COMMON_TIMEZONES.includes(bookingConfig.team_timezone) && bookingConfig.team_timezone && (
+                  <option value={bookingConfig.team_timezone}>{formatOffsetLabel(bookingConfig.team_timezone)}</option>
+                )}
+                {COMMON_TIMEZONES.map(tz => (
+                  <option key={tz} value={tz}>{formatOffsetLabel(tz)}</option>
+                ))}
+              </select>
+              <span className="form-hint">The timezone Calendar Availability slots above are defined in.</span>
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-md)' }}>

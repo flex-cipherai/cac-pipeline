@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import { QUALIFICATION_QUESTIONS, PIPELINE_STAGES } from '../../lib/scoring'
+import { DEFAULT_TIMEZONE, convertScheduledTime } from '../../lib/timezone'
 import './LeadDetail.css'
 
 export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
@@ -15,7 +16,14 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
   const [followUpDate, setFollowUpDate] = useState(lead?.follow_up_date || '')
   const [savingFollowUp, setSavingFollowUp] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [teamTimezone, setTeamTimezone] = useState(DEFAULT_TIMEZONE)
+  const myTimezone = profile?.timezone || teamTimezone
   const textareaRef = useRef(null)
+
+  useEffect(() => {
+    supabase.from('system_settings').select('value').eq('key', 'team_timezone').maybeSingle()
+      .then(({ data }) => { if (data?.value) setTeamTimezone(data.value) })
+  }, [])
 
   useEffect(() => {
     if (lead) {
@@ -78,6 +86,9 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
 
     await supabase.from('leads').update({ is_lost: false, lost_reason: null, current_stage: restoreTo }).eq('id', lead.id)
     await supabase.from('lead_stage_history').insert({ lead_id: lead.id, stage: restoreTo, moved_by: profile?.id })
+    supabase.functions.invoke('notify-lead-stage', {
+      body: { lead_id: lead.id, event: 'stage_changed', previous_stage: 'Lost' },
+    }).catch(err => console.error('[Email] notify-lead-stage invoke failed:', err))
     setRestoring(false)
     if (onLeadUpdated) onLeadUpdated({ ...lead, is_lost: false, lost_reason: null, current_stage: restoreTo })
     onClose()
@@ -209,12 +220,18 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
                   <span className="lead-detail-field-label">Current Stage</span>
                   <span className="lead-detail-field-value">{lead.is_lost ? 'Lost' : lead.is_disqualified ? 'Disqualified' : lead.current_stage}</span>
                 </div>
-                {lead.scheduled_day && (
-                  <div className="lead-detail-field">
-                    <span className="lead-detail-field-label">Scheduled Call</span>
-                    <span className="lead-detail-field-value">{lead.scheduled_day} at {lead.scheduled_time}</span>
-                  </div>
-                )}
+                {lead.scheduled_day && (() => {
+                  const converted = lead.scheduled_date && convertScheduledTime(lead.scheduled_date, lead.scheduled_time, teamTimezone, myTimezone)
+                  return (
+                    <div className="lead-detail-field">
+                      <span className="lead-detail-field-label">Scheduled Call</span>
+                      <span className="lead-detail-field-value">
+                        {converted ? `${converted.day} at ${converted.time}` : `${lead.scheduled_day} at ${lead.scheduled_time}`}
+                        {converted && ` (${converted.zoneAbbr})`}
+                      </span>
+                    </div>
+                  )
+                })()}
                 {lead.is_lost && lead.lost_reason && (
                   <div className="lead-detail-field">
                     <span className="lead-detail-field-label">Lost Reason</span>

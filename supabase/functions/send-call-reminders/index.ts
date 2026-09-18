@@ -9,15 +9,15 @@
 // Requires the same secrets as send-email: RESEND_API_KEY, SENDER_EMAIL
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { DateTime } from 'https://esm.sh/luxon@3.5.0'
+import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
+import { DEFAULT_TIMEZONE, leadVars } from '../_shared/datetime.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-const SENDER_EMAIL = Deno.env.get('SENDER_EMAIL') || 'notifications@sdfmgroup.com'
-const SENDER_NAME = 'SDFM Group Limited'
 const DEFAULT_REMINDER_HOURS = 24
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
@@ -27,53 +27,28 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   })
 }
 
-function renderTemplate(str: string, vars: Record<string, unknown>) {
-  return str.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
-    const value = vars[key]
-    return value === null || value === undefined ? '' : String(value)
-  })
-}
-
-async function sendViaResend(to: string[], subject: string, html: string) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
-    },
-    body: JSON.stringify({
-      from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
-      to,
-      subject,
-      html,
-    }),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.message || 'Resend API error')
-  return data
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    if (!RESEND_API_KEY) {
-      throw new Error('RESEND_API_KEY is not configured. Set it via: supabase secrets set RESEND_API_KEY=re_xxxxx')
-    }
+    requireResendKey()
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const adminClient = createClient(supabaseUrl, serviceRoleKey)
 
-    const { data: settingRow } = await adminClient
+    const { data: settingsRows } = await adminClient
       .from('system_settings')
-      .select('value')
-      .eq('key', 'reminder_hours_before_call')
-      .maybeSingle()
-    const reminderHours = parseInt(settingRow?.value, 10) || DEFAULT_REMINDER_HOURS
+      .select('key, value')
+      .in('key', ['reminder_hours_before_call', 'team_timezone'])
+    const settings: Record<string, string> = {}
+    ;(settingsRows || []).forEach(r => { settings[r.key] = r.value })
+
+    const reminderHours = parseInt(settings.reminder_hours_before_call, 10) || DEFAULT_REMINDER_HOURS
     const reminderMs = reminderHours * 60 * 60 * 1000
+    const teamTimezone = settings.team_timezone || DEFAULT_TIMEZONE
 
     const { data: candidates, error: candidatesError } = await adminClient
       .from('leads')
@@ -88,10 +63,9 @@ Deno.serve(async (req) => {
     }
 
     const now = Date.now()
-    // scheduled_date/scheduled_time are treated as UTC wall-clock values —
-    // this app doesn't do explicit timezone handling anywhere else either.
+    // scheduled_date/scheduled_time are a wall-clock reading in team_timezone.
     const due = (candidates || []).filter(lead => {
-      const scheduledAt = new Date(`${lead.scheduled_date}T${lead.scheduled_time}:00Z`).getTime()
+      const scheduledAt = DateTime.fromISO(`${lead.scheduled_date}T${lead.scheduled_time}`, { zone: teamTimezone }).toMillis()
       return scheduledAt > now && scheduledAt - now <= reminderMs
     })
 
@@ -114,32 +88,34 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, reminded: 0, note: 'No active reminder templates' })
     }
 
-    let teamEmails: string[] = []
+    let recipients: { email: string; timezone: string | null }[] = []
     if (teamTemplate?.is_active) {
-      const { data: staff } = await adminClient.from('profiles').select('email').in('role', ['admin', 'sales'])
-      teamEmails = (staff || []).map(p => p.email).filter(Boolean)
+      const { data: staff } = await adminClient.from('profiles').select('email, timezone').in('role', ['admin', 'sales'])
+      recipients = (staff || []).filter(p => p.email)
     }
 
     const results = []
     for (const lead of due) {
       const leadResult: Record<string, unknown> = { lead_id: lead.id }
+      const leadTimezone = lead.timezone || teamTimezone
 
       if (clientTemplate?.is_active && lead.email) {
         try {
-          await sendViaResend([lead.email], renderTemplate(clientTemplate.subject, lead), renderTemplate(clientTemplate.body_html, lead))
+          const vars = leadVars(lead, teamTimezone, leadTimezone)
+          await sendViaResend([lead.email], renderTemplate(clientTemplate.subject, vars), renderTemplate(clientTemplate.body_html, vars))
           leadResult.client = { success: true }
         } catch (err) {
           leadResult.client = { success: false, error: err.message }
         }
       }
 
-      if (teamTemplate?.is_active && teamEmails.length > 0) {
-        try {
-          await sendViaResend(teamEmails, renderTemplate(teamTemplate.subject, lead), renderTemplate(teamTemplate.body_html, lead))
-          leadResult.team = { success: true, recipients: teamEmails.length }
-        } catch (err) {
-          leadResult.team = { success: false, error: err.message }
-        }
+      if (teamTemplate?.is_active && recipients.length > 0) {
+        const sends = await Promise.allSettled(recipients.map(p => {
+          const vars = leadVars(lead, teamTimezone, p.timezone || teamTimezone)
+          return sendViaResend([p.email], renderTemplate(teamTemplate.subject, vars), renderTemplate(teamTemplate.body_html, vars))
+        }))
+        const failed = sends.filter(s => s.status === 'rejected').length
+        leadResult.team = { success: failed === 0, recipients: recipients.length, failed }
       }
 
       await adminClient.from('leads').update({ reminder_sent_at: new Date().toISOString() }).eq('id', lead.id)

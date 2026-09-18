@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import './Login.css'
 
 export default function ResetPassword() {
+  const [searchParams] = useSearchParams()
+  const token = searchParams.get('token')
+
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -12,7 +15,7 @@ export default function ResetPassword() {
   const [success, setSuccess] = useState(false)
   const navigate = useNavigate()
 
-  const passwordValid = password.length >= 6
+  const passwordValid = password.length >= 8
   const confirmValid = confirm === password && confirm.length > 0
 
   async function handleReset(e) {
@@ -22,15 +25,44 @@ export default function ResetPassword() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.updateUser({ password })
+      const { data, error } = await supabase.functions.invoke('confirm-password-reset', {
+        body: { token, password },
+      })
       if (error) throw error
+      if (!data?.success) throw new Error(data?.error || 'Could not update password')
       setSuccess(true)
       setTimeout(() => navigate('/login'), 3000)
     } catch (err) {
-      setError('Could not update password. The link may have expired — request a new one.')
+      setError(err.message || 'Could not update password. The link may have expired — request a new one.')
     } finally {
       setLoading(false)
     }
+  }
+
+  // No token in the URL at all — don't even show the form.
+  if (!token) {
+    return (
+      <div className="login-page">
+        <div className="login-brand">
+          <div className="login-brand-content">
+            <div className="login-brand-logo">
+              <img src="/sdfm-logo-white.png" alt="SDFM Group Limited" className="login-brand-logo-img" />
+            </div>
+            <h2 className="login-brand-name">Sales Pipeline Management</h2>
+            <p className="login-brand-tagline">Transforming Kenyan Businesses</p>
+          </div>
+        </div>
+        <div className="login-form-panel">
+          <div className="login-form-container">
+            <h1 className="login-title">Invalid reset link</h1>
+            <p className="login-subtitle">
+              This link is missing or malformed. Request a new password reset link and try again.
+            </p>
+            <Link to="/login" className="login-back-link">← Back to sign in</Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -72,7 +104,7 @@ export default function ResetPassword() {
                       id="new-password"
                       type={showPassword ? 'text' : 'password'}
                       className="form-input"
-                      placeholder="At least 6 characters"
+                      placeholder="At least 8 characters"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       autoComplete="new-password"

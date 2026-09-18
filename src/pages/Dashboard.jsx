@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { PIPELINE_STAGES, estimatePipelineValue } from '../lib/scoring'
 import { exportCSV, exportDashboardPDF } from '../lib/exportUtils'
+import { DEFAULT_TIMEZONE, convertScheduledTime, todayISODateInZone } from '../lib/timezone'
 import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../components/PeriodSelector/PeriodSelector'
 import './Dashboard.css'
 
@@ -21,10 +22,17 @@ export default function Dashboard() {
   const [allLeads, setAllLeads] = useState([])
   const [stageHistory, setStageHistory] = useState([])
   const [loading, setLoading] = useState(true)
+  const [teamTimezone, setTeamTimezone] = useState(DEFAULT_TIMEZONE)
+  const myTimezone = profile?.timezone || teamTimezone
   const now = new Date()
   const [period, setPeriod] = useState({ mode: 'all', month: now.getMonth(), year: now.getFullYear() })
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    supabase.from('system_settings').select('value').eq('key', 'team_timezone').maybeSingle()
+      .then(({ data }) => { if (data?.value) setTeamTimezone(data.value) })
+  }, [])
 
   async function fetchData() {
     const [leadsRes, historyRes] = await Promise.all([
@@ -79,21 +87,21 @@ export default function Dashboard() {
     return String(value)
   }
 
-  // Upcoming calls (always based on all leads, not period-filtered)
-  const todayStr = new Date().toISOString().slice(0, 10)
+  // Upcoming calls (always based on all leads, not period-filtered).
+  // scheduled_date/time is a team-local wall-clock reading — convert into
+  // the viewer's own timezone before comparing against "today"/"this week".
+  const todayStr = todayISODateInZone(myTimezone)
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-  const upcomingCalls = allLeads.filter(l =>
-    l.current_stage === 'Scheduled' && !l.is_lost && !l.is_disqualified && l.scheduled_date
-  ).sort((a, b) => {
-    const dateA = `${a.scheduled_date} ${a.scheduled_time || ''}`
-    const dateB = `${b.scheduled_date} ${b.scheduled_time || ''}`
-    return dateA.localeCompare(dateB)
-  })
-  const todaysCalls = upcomingCalls.filter(l => l.scheduled_date === todayStr)
+  const upcomingCallsRaw = allLeads
+    .filter(l => l.current_stage === 'Scheduled' && !l.is_lost && !l.is_disqualified && l.scheduled_date)
+    .map(l => ({ lead: l, converted: convertScheduledTime(l.scheduled_date, l.scheduled_time, teamTimezone, myTimezone) }))
+    .filter(({ converted }) => converted)
+  const upcomingCalls = upcomingCallsRaw
+    .sort((a, b) => a.converted.dateTime.toMillis() - b.converted.dateTime.toMillis())
+    .map(({ lead, converted }) => ({ ...lead, _localTime: converted.time, _localISODate: converted.dateTime.toISODate() }))
+  const todaysCalls = upcomingCalls.filter(l => l._localISODate === todayStr)
   const thisWeekCalls = upcomingCalls.filter(l => {
-    if (!l.scheduled_date) return false
-    const d = new Date(l.scheduled_date)
-    const diffDays = Math.floor((d - now) / 86400000)
+    const diffDays = Math.floor((new Date(l._localISODate) - new Date(todayStr)) / 86400000)
     return diffDays >= 0 && diffDays <= 7
   })
 
@@ -185,7 +193,7 @@ export default function Dashboard() {
               <div className="dash-calls-list">
                 {todaysCalls.map(l => (
                   <div key={l.id} className="dash-call-item">
-                    <span className="dash-call-time">{l.scheduled_time}</span>
+                    <span className="dash-call-time">{l._localTime || l.scheduled_time}</span>
                     <div className="dash-call-info">
                       <span className="dash-call-name">{l.full_name}</span>
                       <span className="dash-call-company">{l.company_name}</span>

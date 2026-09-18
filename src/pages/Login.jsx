@@ -46,13 +46,14 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      const { data, error } = await supabase.functions.invoke('request-password-reset', {
+        body: { email, redirect_origin: window.location.origin },
       })
       if (error) throw error
+      if (!data?.success) throw new Error(data?.error || 'Could not send reset email')
       setView('forgot-sent')
     } catch (err) {
-      setError('Could not send reset email. Please check the address and try again.')
+      setError('Could not send reset email. Please try again.')
     } finally {
       setLoading(false)
     }
