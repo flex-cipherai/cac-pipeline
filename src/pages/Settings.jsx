@@ -46,6 +46,8 @@ export default function Settings() {
   const [showAddUser, setShowAddUser] = useState(false)
   const [newUser, setNewUser] = useState({ name: '', email: '', role: 'sales' })
   const [addingUser, setAddingUser] = useState(false)
+  const [deletingUser, setDeletingUser] = useState(null)
+  const [deletingUserBusy, setDeletingUserBusy] = useState(false)
 
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
 
@@ -271,6 +273,25 @@ export default function Settings() {
     }
   }
 
+  async function handleDeleteUser() {
+    if (!deletingUser) return
+    setDeletingUserBusy(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-users', {
+        body: { action: 'delete_user', user_id: deletingUser.id },
+      })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to delete user')
+      showToast('success', `${deletingUser.name} was deleted`)
+      setDeletingUser(null)
+      fetchData()
+    } catch (err) {
+      showToast('error', err.message || 'Failed to delete user')
+    } finally {
+      setDeletingUserBusy(false)
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -394,6 +415,7 @@ export default function Settings() {
                                 ) : (
                                   <button className="action-menu-item action-danger" onClick={() => handleToggleActive(user)}>Deactivate</button>
                                 )}
+                                <button className="action-menu-item action-danger" onClick={() => { setDeletingUser(user); setActionMenuId(null) }}>Delete Account</button>
                               </div>
                             )}
                           </div>
@@ -432,6 +454,7 @@ export default function Settings() {
                             ) : (
                               <button className="action-menu-item action-danger" onClick={() => handleToggleActive(user)}>Deactivate</button>
                             )}
+                            <button className="action-menu-item action-danger" onClick={() => { setDeletingUser(user); setActionMenuId(null) }}>Delete Account</button>
                           </div>
                         )}
                       </div>
@@ -495,6 +518,24 @@ export default function Settings() {
                 <div className="modal-actions">
                   <button className="btn btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>
                   <button className="btn btn-primary" onClick={() => handleUpdateRole(editingUser.id)}>Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {deletingUser && (
+            <div className="modal-overlay" onClick={() => !deletingUserBusy && setDeletingUser(null)}>
+              <div className="modal-card" onClick={e => e.stopPropagation()}>
+                <h3 className="modal-title">Delete Account</h3>
+                <p className="modal-subtitle">
+                  Permanently delete <strong>{deletingUser.name}</strong>'s account ({deletingUser.email})? They will lose access immediately.
+                  This cannot be undone — deactivate instead if you might need to restore access later. Their past notes and stage history stay on the leads, just without attribution.
+                </p>
+                <div className="modal-actions">
+                  <button className="btn btn-secondary" onClick={() => setDeletingUser(null)} disabled={deletingUserBusy}>Cancel</button>
+                  <button className="btn btn-danger" onClick={handleDeleteUser} disabled={deletingUserBusy}>
+                    {deletingUserBusy ? 'Deleting...' : 'Delete Account'}
+                  </button>
                 </div>
               </div>
             </div>

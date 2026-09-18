@@ -203,6 +203,17 @@ input, select, textarea {
   box-shadow: 0 2px 8px rgba(236, 48, 19, 0.3);
 }
 
+.btn-danger {
+  background: var(--charcoal);
+  color: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-danger:hover {
+  background: #333;
+  box-shadow: var(--shadow-md);
+}
+
 .btn-secondary {
   background: var(--white);
   color: var(--text-primary);

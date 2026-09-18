@@ -130,6 +130,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true })
     }
 
+    // ── Delete User ──
+    if (action === 'delete_user') {
+      const { user_id } = body
+      if (!user_id) {
+        return jsonResponse({ success: false, error: 'User ID is required' })
+      }
+      if (user_id === caller.id) {
+        return jsonResponse({ success: false, error: 'You cannot delete your own account' })
+      }
+
+      const { error } = await adminClient.auth.admin.deleteUser(user_id)
+      if (error) {
+        return jsonResponse({ success: false, error: error.message })
+      }
+
+      return jsonResponse({ success: true })
+    }
+
     // ── Resend Password Reset ──
     if (action === 'reset_password') {
       const { email, redirect_to } = body
