@@ -253,9 +253,16 @@ export default function LeadIntakeForm() {
       const initialStage = isQualified ? 'Scheduled' : 'Disqualified'
       const dayOfWeek = getJsDayOfWeek(selectedDate)
 
-      const { data: lead, error: leadError } = await supabase
+      // Generate the id client-side so we don't need `.select()` (RETURNING)
+      // on the insert — anon has no SELECT policy on leads (by design, so
+      // the public can't read other people's lead data), and requesting
+      // RETURNING as anon fails RLS even though the insert itself is allowed.
+      const leadId = crypto.randomUUID()
+
+      const { error: leadError } = await supabase
         .from('leads')
         .insert({
+          id: leadId,
           ...contact,
           q1_revenue: q1Option?.label,
           q2_challenge: q2Option?.label,
@@ -269,20 +276,18 @@ export default function LeadIntakeForm() {
           scheduled_date: scheduledDateStr,
           source,
         })
-        .select()
-        .single()
 
       if (leadError) throw leadError
 
       if (isQualified) {
         await supabase.from('booked_slots').insert({
-          lead_id: lead.id,
+          lead_id: leadId,
           slot_date: scheduledDateStr,
           time_slot: selectedTime,
           day_of_week: dayOfWeek,
         })
         await supabase.from('lead_stage_history').insert({
-          lead_id: lead.id,
+          lead_id: leadId,
           stage: 'Scheduled',
         })
       }
