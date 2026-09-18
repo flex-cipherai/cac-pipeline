@@ -292,6 +292,12 @@ export default function LeadIntakeForm() {
         })
       }
 
+      // Fire-and-forget: don't let email delivery delay or break the
+      // confirmation screen. Runs server-side (service role) since anon
+      // can't read email_templates or profiles to build the emails itself.
+      supabase.functions.invoke('notify-lead', { body: { lead_id: leadId } })
+        .catch(err => console.error('[Email] notify-lead invoke failed:', err))
+
       setSubmitResult({
         qualified: isQualified,
         classification: scoreResult.classification,
