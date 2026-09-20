@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Sidebar from './Sidebar'
+import NotificationBell from '../NotificationBell/NotificationBell'
 import './Layout.css'
 
 export default function Layout({ children }) {
@@ -8,6 +9,7 @@ export default function Layout({ children }) {
   return (
     <div className="layout">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <NotificationBell />
 
       {/* Mobile header */}
       <div className="mobile-header">

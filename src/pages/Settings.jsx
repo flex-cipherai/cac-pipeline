@@ -40,6 +40,22 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPasswordForm, setShowPasswordForm] = useState(false)
 
+  // Social Media Management — Connected Accounts & Content Defaults (admin only)
+  const [connectedAccount, setConnectedAccount] = useState(null)
+  const [accountNameDraft, setAccountNameDraft] = useState('')
+  const [savingAccount, setSavingAccount] = useState(false)
+  const [hashtagSets, setHashtagSets] = useState([])
+  const [newHashtagSetName, setNewHashtagSetName] = useState('')
+  const [newHashtagSetTags, setNewHashtagSetTags] = useState('')
+  const [contentDefaults, setContentDefaults] = useState({
+    sm_approval_workflow_enabled: 'false',
+    sm_default_utm_source: 'linkedin',
+    sm_default_utm_medium: 'social',
+    sm_signature_link: '',
+    app_base_url: '',
+  })
+  const [savingDefaults, setSavingDefaults] = useState(false)
+
   // Admin modals
   const [editingUser, setEditingUser] = useState(null)
   const [editRole, setEditRole] = useState('')
@@ -81,6 +97,21 @@ export default function Settings() {
     if (isAdmin) {
       const { data: profileData } = await supabase.from('profiles').select('*').order('created_at')
       if (profileData) setProfiles(profileData)
+
+      const { data: accountData } = await supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').maybeSingle()
+      if (accountData) { setConnectedAccount(accountData); setAccountNameDraft(accountData.account_name) }
+
+      const { data: hashtagData } = await supabase.from('hashtag_sets').select('*').order('name')
+      if (hashtagData) setHashtagSets(hashtagData)
+
+      const { data: defaultsData } = await supabase
+        .from('system_settings').select('key, value')
+        .in('key', ['sm_approval_workflow_enabled', 'sm_default_utm_source', 'sm_default_utm_medium', 'sm_signature_link', 'app_base_url'])
+      if (defaultsData) {
+        const cfg = { ...contentDefaults }
+        defaultsData.forEach(row => { if (row.key && row.value !== null) cfg[row.key] = row.value })
+        setContentDefaults(cfg)
+      }
     }
 
     const { data: availData } = await supabase
@@ -170,6 +201,56 @@ export default function Settings() {
     } finally {
       setSavingConfig(false)
     }
+  }
+
+  // ── Connected Accounts ──
+  async function saveAccountName() {
+    if (!connectedAccount || !accountNameDraft.trim()) return
+    setSavingAccount(true)
+    const { error } = await supabase.from('connected_accounts').update({ account_name: accountNameDraft.trim() }).eq('id', connectedAccount.id)
+    setSavingAccount(false)
+    if (error) { showToast('error', 'Failed to update account'); return }
+    setConnectedAccount(prev => ({ ...prev, account_name: accountNameDraft.trim() }))
+    showToast('success', 'Account updated')
+  }
+
+  async function toggleAccountStatus() {
+    if (!connectedAccount) return
+    const newStatus = connectedAccount.status === 'active' ? 'disconnected' : 'active'
+    const { error } = await supabase.from('connected_accounts').update({ status: newStatus }).eq('id', connectedAccount.id)
+    if (error) { showToast('error', 'Failed to update status'); return }
+    setConnectedAccount(prev => ({ ...prev, status: newStatus }))
+    showToast('success', newStatus === 'active' ? 'Account reactivated' : 'Account disconnected')
+  }
+
+  // ── Content Defaults ──
+  async function saveContentDefaults() {
+    setSavingDefaults(true)
+    try {
+      for (const [key, value] of Object.entries(contentDefaults)) {
+        await supabase.from('system_settings').upsert({ key, value: String(value) }, { onConflict: 'key' })
+      }
+      showToast('success', 'Content defaults saved')
+    } catch {
+      showToast('error', 'Failed to save content defaults')
+    } finally {
+      setSavingDefaults(false)
+    }
+  }
+
+  async function addHashtagSet() {
+    if (!newHashtagSetName.trim()) return
+    const hashtags = newHashtagSetTags.split(/[\s,]+/).map(h => h.replace(/^#/, '').trim()).filter(Boolean)
+    const { data, error } = await supabase.from('hashtag_sets').insert({ name: newHashtagSetName.trim(), hashtags }).select().single()
+    if (error) { showToast('error', 'Failed to add hashtag set'); return }
+    setHashtagSets(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+    setNewHashtagSetName('')
+    setNewHashtagSetTags('')
+  }
+
+  async function deleteHashtagSet(id) {
+    await supabase.from('hashtag_sets').delete().eq('id', id)
+    setHashtagSets(prev => prev.filter(h => h.id !== id))
   }
 
   function isSlotActive(day, time) {
@@ -641,6 +722,116 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* ── Connected Accounts (Admin only) ── */}
+      {isAdmin && (
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <h2 className="settings-section-title">Connected Accounts</h2>
+          </div>
+          <div className="section-card" style={{ padding: 'var(--space-lg)' }}>
+            {connectedAccount ? (
+              <>
+                <div className="sm-account-row">
+                  <div>
+                    <div className="sm-account-platform">LinkedIn Company Page</div>
+                    <span className={`status-badge status-${connectedAccount.status === 'active' ? 'posted' : 'draft'}`}>{connectedAccount.status === 'active' ? 'Active' : 'Disconnected'}</span>
+                    <span className="status-badge" style={{ marginLeft: 6, color: 'var(--text-secondary)', background: 'var(--bg-gray)' }}>
+                      {connectedAccount.mode === 'automated' ? 'Automated Mode' : 'Assisted Mode'}
+                    </span>
+                  </div>
+                  <button className="btn btn-secondary btn-sm" onClick={toggleAccountStatus}>
+                    {connectedAccount.status === 'active' ? 'Disconnect' : 'Reconnect'}
+                  </button>
+                </div>
+                <div className="profile-edit-grid" style={{ marginTop: 'var(--space-md)' }}>
+                  <div className="form-group">
+                    <label className="form-label">Account Name</label>
+                    <input className="form-input" value={accountNameDraft} onChange={e => setAccountNameDraft(e.target.value)} />
+                  </div>
+                </div>
+                <p className="form-hint">
+                  Assisted Mode is used until LinkedIn's Marketing Developer Platform access is approved — publishing and
+                  analytics stay manual until then. This switches automatically once API access is granted; there's nothing to toggle here.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-sm)' }}>
+                  <button className="btn btn-primary btn-sm" onClick={saveAccountName} disabled={savingAccount}>{savingAccount ? 'Saving...' : 'Save'}</button>
+                </div>
+              </>
+            ) : (
+              <p className="form-hint">No LinkedIn account connected yet.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Content Defaults (Admin only) ── */}
+      {isAdmin && (
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <h2 className="settings-section-title">Content Defaults</h2>
+          </div>
+          <div className="section-card" style={{ padding: 'var(--space-lg)' }}>
+            <label className="checkbox-label" style={{ marginBottom: 'var(--space-md)' }}>
+              <input
+                type="checkbox"
+                checked={contentDefaults.sm_approval_workflow_enabled === 'true'}
+                onChange={e => setContentDefaults(prev => ({ ...prev, sm_approval_workflow_enabled: e.target.checked ? 'true' : 'false' }))}
+              />
+              Require Admin approval before posts can be scheduled
+            </label>
+
+            <div className="profile-edit-grid">
+              <div className="form-group">
+                <label className="form-label">Default UTM Source</label>
+                <input className="form-input" value={contentDefaults.sm_default_utm_source} onChange={e => setContentDefaults(prev => ({ ...prev, sm_default_utm_source: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Default UTM Medium</label>
+                <input className="form-input" value={contentDefaults.sm_default_utm_medium} onChange={e => setContentDefaults(prev => ({ ...prev, sm_default_utm_medium: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Signature Link</label>
+                <input className="form-input" value={contentDefaults.sm_signature_link} onChange={e => setContentDefaults(prev => ({ ...prev, sm_signature_link: e.target.value }))} placeholder="https://sdfmgroup.com" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">App URL (for links in emails)</label>
+                <input className="form-input" value={contentDefaults.app_base_url} onChange={e => setContentDefaults(prev => ({ ...prev, app_base_url: e.target.value }))} placeholder="https://your-site.netlify.app" />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-lg)' }}>
+              <button className="btn btn-primary btn-sm" onClick={saveContentDefaults} disabled={savingDefaults}>{savingDefaults ? 'Saving...' : 'Save Defaults'}</button>
+            </div>
+
+            <h3 className="settings-disq-title" style={{ padding: 0, marginBottom: 'var(--space-sm)' }}>Hashtag Sets</h3>
+            {hashtagSets.length > 0 && (
+              <div className="sm-hashtag-list">
+                {hashtagSets.map(set => (
+                  <div key={set.id} className="sm-hashtag-row">
+                    <div>
+                      <strong>{set.name}</strong>
+                      <span className="form-hint" style={{ marginLeft: 8 }}>{set.hashtags.map(h => `#${h}`).join(' ')}</span>
+                    </div>
+                    <button className="action-menu-item action-danger" style={{ width: 'auto', padding: '4px 8px' }} onClick={() => deleteHashtagSet(set.id)}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="profile-edit-grid" style={{ marginTop: 'var(--space-sm)' }}>
+              <div className="form-group">
+                <label className="form-label">New Set Name</label>
+                <input className="form-input" value={newHashtagSetName} onChange={e => setNewHashtagSetName(e.target.value)} placeholder="e.g. Case Studies" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Hashtags</label>
+                <input className="form-input" value={newHashtagSetTags} onChange={e => setNewHashtagSetTags(e.target.value)} placeholder="#AI #KenyaBusiness" />
+              </div>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={addHashtagSet}>Add Hashtag Set</button>
+          </div>
+        </div>
+      )}
 
       {/* ── Scoring (Admin only) ── */}
       {isAdmin && (

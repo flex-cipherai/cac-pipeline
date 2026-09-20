@@ -1,6 +1,6 @@
 # SDFM Sales Management Pipeline
 
-Sales pipeline management system for SDFM Group Limited. Manages the full sales lifecycle from lead intake through contract signing.
+Business management system for SDFM Group Limited. Manages the full sales lifecycle from lead intake through contract signing, plus LinkedIn social media management (composer, calendar, bulk scheduling, approvals, analytics, activity inbox) under `/social/*` — see `SDFM Social Media Management System Description.pdf` for the module spec. Both modules share the same Supabase project, roles (`admin`, `sales`, `marketing`), and deploy pipeline.
 
 ## Tech Stack
 
@@ -16,16 +16,24 @@ cac-pipeline/
 ├── public/              # Static assets
 ├── src/
 │   ├── components/      # Reusable components
-│   │   └── Layout/      # Sidebar and layout
+│   │   ├── Layout/      # Sidebar and layout
+│   │   └── LinkedInPostPreview/  # Composer live preview
 │   ├── pages/           # Route pages
-│   ├── lib/             # Supabase client, scoring logic, auth
-│   └── styles/          # Global CSS and variables
+│   │   └── social/      # Social Media Management module (composer, calendar, etc.)
+│   ├── lib/             # Supabase client, scoring logic, auth, UTM builder
+│   └── styles/          # Global CSS, variables, and shared-ui (modal/toast/status-badge)
 ├── supabase/
-│   └── schema.sql       # Database schema
+│   ├── schema.sql               # Core sales pipeline schema
+│   ├── migration-social-media.sql          # Social media data model, RLS, storage bucket
+│   ├── migration-social-notifications.sql  # In-app notifications + email templates
+│   ├── migration-social-scheduler-cron.sql # pg_cron jobs for the social media module
+│   └── functions/sm-*/          # Social media Edge Functions
 ├── .env                 # Environment variables (not committed)
 ├── netlify.toml         # Netlify SPA routing config
 └── vite.config.js       # Vite configuration
 ```
+
+Run the `migration-social-*.sql` files (in that order) in the Supabase SQL Editor after `schema.sql`, deploy the `sm-*` Edge Functions, and set `app_base_url` in Settings → Content Defaults once the site is live, to enable the Social Media Management module.
 
 ## Running Locally
 

@@ -498,6 +498,37 @@
   }
 }
 
+/* ─── Social Media: Connected Accounts & Content Defaults ─── */
+.sm-account-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.sm-account-platform {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.sm-hashtag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-md);
+}
+
+.sm-hashtag-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-gray);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
 /* ─── My Profile ─── */
 .profile-edit-grid {
   display: grid;

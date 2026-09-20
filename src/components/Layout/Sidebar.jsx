@@ -46,6 +46,33 @@ const icons = {
       <rect x="14" y="2" width="4" height="16" rx="1" />
     </svg>
   ),
+  compose: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 3l4 4-9.5 9.5L3 18l1.5-4.5L13 3z" />
+    </svg>
+  ),
+  library: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="12" height="12" rx="1.5" />
+      <path d="M6 17.5h10a1.5 1.5 0 0 0 1.5-1.5V6" />
+    </svg>
+  ),
+  calendarIcon: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="16" height="14" rx="2" />
+      <path d="M2 8h16M6 2v4M14 2v4" />
+    </svg>
+  ),
+  approvals: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 10l3.5 3.5L16 5" />
+    </svg>
+  ),
+  activity: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 10h3l2-6 4 12 2-6h5" />
+    </svg>
+  ),
   external: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10" />
@@ -66,11 +93,24 @@ export default function Sidebar({ isOpen, onClose }) {
   const { profile, signOut } = useAuth()
   const role = profile?.role || 'admin'
 
+  // Social Media Management nav — shared by admin and marketing (spec's role
+  // table gives both full access to composer/calendar/library; approvals,
+  // analytics, and activity get added here as those pages are built).
+  const socialNavItems = [
+    { to: '/social/calendar', icon: icons.calendarIcon, label: 'Content Calendar' },
+    { to: '/social/composer', icon: icons.compose, label: 'New Post' },
+    { to: '/social/library', icon: icons.library, label: 'Content Library' },
+    { to: '/social/approvals', icon: icons.approvals, label: 'Approvals' },
+    { to: '/social/analytics', icon: icons.analytics, label: 'Social Analytics' },
+    { to: '/social/activity', icon: icons.activity, label: 'Activity Inbox' },
+  ]
+
   const getNavItems = () => {
     switch (role) {
       case 'marketing':
         return [
-          { to: '/analytics', icon: icons.analytics, label: 'Analytics' },
+          ...socialNavItems,
+          { to: '/analytics', icon: icons.analytics, label: 'Lead Analytics' },
         ]
       case 'sales':
         return [
@@ -86,6 +126,8 @@ export default function Sidebar({ isOpen, onClose }) {
           { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard' },
           { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline' },
           { to: '/leads', icon: icons.leads, label: 'All Leads' },
+          ...socialNavItems,
+          { to: '/analytics', icon: icons.analytics, label: 'Lead Analytics' },
           { to: '/notifications', icon: icons.notifications, label: 'Notifications' },
           { to: '/settings', icon: icons.settings, label: 'Settings' },
         ]

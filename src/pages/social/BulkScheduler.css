@@ -1,0 +1,15 @@
+@import '../../styles/shared-ui.css';
+
+.bulk-table-wrap {
+  overflow-x: auto;
+}
+
+.bulk-issue-error {
+  font-size: var(--text-xs);
+  color: var(--sdfm-red);
+}
+
+.bulk-issue-warning {
+  font-size: var(--text-xs);
+  color: #b45309;
+}

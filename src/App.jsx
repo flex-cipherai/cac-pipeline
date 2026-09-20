@@ -10,6 +10,13 @@ import Settings from './pages/Settings'
 import Notifications from './pages/Notifications'
 import MarketingAnalytics from './pages/MarketingAnalytics'
 import ResetPassword from './pages/ResetPassword'
+import ContentComposer from './pages/social/ContentComposer'
+import ContentLibrary from './pages/social/ContentLibrary'
+import ContentCalendar from './pages/social/ContentCalendar'
+import BulkScheduler from './pages/social/BulkScheduler'
+import ApprovalQueue from './pages/social/ApprovalQueue'
+import SocialAnalytics from './pages/social/SocialAnalytics'
+import ActivityInbox from './pages/social/ActivityInbox'
 
 // Protected route wrapper
 function ProtectedRoute({ children, allowedRoles }) {
@@ -120,8 +127,74 @@ function AppRoutes() {
       <Route
         path="/analytics"
         element={
-          <ProtectedRoute allowedRoles={['marketing']}>
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
             <MarketingAnalytics />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Social Media Management */}
+      <Route
+        path="/social/composer"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <ContentComposer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/composer/:id"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <ContentComposer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/library"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <ContentLibrary />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/calendar"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <ContentCalendar />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/bulk-schedule"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <BulkScheduler />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/approvals"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <ApprovalQueue />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/analytics"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <SocialAnalytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/activity"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <ActivityInbox />
           </ProtectedRoute>
         }
       />

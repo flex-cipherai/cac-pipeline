@@ -1,0 +1,65 @@
+@import '../../styles/shared-ui.css';
+
+.aq-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.aq-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-gray);
+  border-radius: var(--radius-sm);
+}
+
+.aq-item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.aq-item-caption {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.aq-item-meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.aq-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.aq-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.aq-history-item {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-sm);
+}
+
+.aq-history-meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.aq-history-comment {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: 4px;
+}

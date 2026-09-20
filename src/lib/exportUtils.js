@@ -106,6 +106,98 @@ export function exportLeadsPDF(leads, filename) {
   doc.save(`${filename}.pdf`)
 }
 
+export function exportSocialAnalyticsPDF(metrics, filename) {
+  const doc = new jsPDF('portrait')
+  addSDFMHeader(doc)
+
+  let y = 40
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(32, 30, 29)
+  doc.text('LinkedIn Performance Report', 14, y)
+  y += 7
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(120, 120, 120)
+  doc.text(`${metrics.periodLabel} · Generated ${new Date().toLocaleString('en-GB')}`, 14, y)
+  y += 14
+
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(236, 48, 19)
+  doc.text('Performance', 14, y)
+  y += 2
+
+  autoTable(doc, {
+    startY: y,
+    body: [
+      ['Impressions', String(metrics.totalImpressions)],
+      ['Reach', String(metrics.totalReach)],
+      ['Engagement Rate', `${metrics.avgEngagementRate}%`],
+      ['Reactions', String(metrics.totalReactions)],
+      ['Comments', String(metrics.totalComments)],
+      ['Shares', String(metrics.totalShares)],
+      ['Clicks', String(metrics.totalClicks)],
+      ['Video Views', String(metrics.totalVideoViews)],
+      ['Follower Growth', String(metrics.followerGrowth)],
+    ],
+    theme: 'plain',
+    styles: { fontSize: 9, cellPadding: 4, font: 'helvetica' },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 70, textColor: [32, 30, 29] },
+      1: { halign: 'right', textColor: [80, 80, 80] },
+    },
+    margin: { left: 14, right: 14 },
+  })
+
+  y = doc.lastAutoTable.finalY + 12
+
+  if (metrics.pillarRollup && metrics.pillarRollup.length > 0) {
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(236, 48, 19)
+    doc.text('By Content Pillar', 14, y)
+    y += 2
+
+    autoTable(doc, {
+      startY: y,
+      head: [['Pillar', 'Posts', 'Impressions', 'Engagement']],
+      body: metrics.pillarRollup.map(r => [r.name, String(r.posts), String(r.impressions), String(r.engagement)]),
+      styles: { fontSize: 9, cellPadding: 4, font: 'helvetica' },
+      headStyles: { fillColor: [32, 30, 29], textColor: [255, 255, 255], fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+      margin: { left: 14, right: 14 },
+    })
+
+    y = doc.lastAutoTable.finalY + 12
+  }
+
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(236, 48, 19)
+  doc.text('Pipeline Attribution', 14, y)
+  y += 2
+
+  autoTable(doc, {
+    startY: y,
+    body: [
+      ['Leads sourced from LinkedIn', String(metrics.leadsFromLinkedIn)],
+      ['Qualified (Hot + Warm)', String(metrics.qualifiedFromLinkedIn)],
+      ['Discovery calls booked', String(metrics.discoveryCallsFromLinkedIn)],
+    ],
+    theme: 'plain',
+    styles: { fontSize: 9, cellPadding: 4, font: 'helvetica' },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 90, textColor: [32, 30, 29] },
+      1: { halign: 'right', textColor: [80, 80, 80] },
+    },
+    margin: { left: 14, right: 14 },
+  })
+
+  addFooter(doc)
+  doc.save(`${filename}.pdf`)
+}
+
 export function exportDashboardPDF(metrics, filename) {
   const doc = new jsPDF('portrait')
   addSDFMHeader(doc)
