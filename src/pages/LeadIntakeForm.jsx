@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { QUALIFICATION_QUESTIONS, DAYS_OF_WEEK, scoreLead } from '../lib/scoring'
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, detectTimezone, convertScheduledTime, formatOffsetLabel } from '../lib/timezone'
+import CookieConsent from '../components/CookieConsent/CookieConsent'
 import './LeadIntakeForm.css'
 
 const STEPS = [
@@ -359,6 +360,7 @@ export default function LeadIntakeForm() {
   if (submitted && submitResult) {
     return (
       <div className="intake-page">
+        <CookieConsent />
         <div className="intake-container">
           <div className="intake-logo">
             {SDFM_LOGO}
@@ -404,6 +406,7 @@ export default function LeadIntakeForm() {
   // ── Main form ──
   return (
     <div className="intake-page">
+      <CookieConsent />
       <div className="intake-container">
         <div className="intake-logo">
           {SDFM_LOGO}
