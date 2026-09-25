@@ -7,6 +7,8 @@ import LeadDetail from '../components/LeadDetail/LeadDetail'
 import PeriodSelector, { filterByPeriod } from '../components/PeriodSelector/PeriodSelector'
 import './AllLeads.css'
 
+const LEAD_SOURCES = ['Website', 'LinkedIn (Organic)', 'LinkedIn (Paid)', 'Referral']
+
 export default function AllLeads() {
   const { profile } = useAuth()
   const [allLeads, setAllLeads] = useState([])
@@ -30,14 +32,17 @@ export default function AllLeads() {
   const [bulkAction, setBulkAction] = useState('')
   const [bulkStage, setBulkStage] = useState('')
   const [showBulkBar, setShowBulkBar] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Manual lead creation
   const [showCreateLead, setShowCreateLead] = useState(false)
   const [creatingLead, setCreatingLead] = useState(false)
   const [newLead, setNewLead] = useState({
     full_name: '', company_name: '', email: '', phone: '', has_whatsapp: false,
-    classification: 'warm', current_stage: PIPELINE_STAGES[0].key, source: 'Manual Entry',
+    classification: 'warm', current_stage: PIPELINE_STAGES[0].key, source: LEAD_SOURCES[0],
   })
+  const [customSourceMode, setCustomSourceMode] = useState(false)
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
 
   useEffect(() => { fetchLeads() }, [])
@@ -64,7 +69,7 @@ export default function AllLeads() {
         has_whatsapp: newLead.has_whatsapp,
         classification: newLead.classification,
         current_stage: newLead.current_stage,
-        source: newLead.source.trim() || 'Manual Entry',
+        source: newLead.source.trim() || LEAD_SOURCES[0],
       })
       .select()
       .single()
@@ -82,7 +87,8 @@ export default function AllLeads() {
     setAllLeads(prev => [data, ...prev])
     setCreatingLead(false)
     setShowCreateLead(false)
-    setNewLead({ full_name: '', company_name: '', email: '', phone: '', has_whatsapp: false, classification: 'warm', current_stage: PIPELINE_STAGES[0].key, source: 'Manual Entry' })
+    setNewLead({ full_name: '', company_name: '', email: '', phone: '', has_whatsapp: false, classification: 'warm', current_stage: PIPELINE_STAGES[0].key, source: LEAD_SOURCES[0] })
+    setCustomSourceMode(false)
     showToast('success', `${data.full_name} added to the pipeline`)
   }
 
@@ -181,6 +187,10 @@ export default function AllLeads() {
   }
 
   async function handleBulkAction() {
+    if (bulkAction === 'delete') {
+      setShowDeleteConfirm(true)
+      return
+    }
     if (bulkAction === 'move' && bulkStage) {
       const ids = [...selected]
       const previousStages = new Map(allLeads.filter(l => selected.has(l.id)).map(l => [l.id, l.current_stage]))
@@ -210,6 +220,23 @@ export default function AllLeads() {
     setSelected(new Set())
     setBulkAction('')
     setBulkStage('')
+  }
+
+  async function handleConfirmDelete() {
+    const ids = [...selected]
+    setDeleting(true)
+    const { error } = await supabase.from('leads').delete().in('id', ids)
+    if (error) {
+      showToast('error', error.message || 'Failed to delete lead(s)')
+      setDeleting(false)
+      return
+    }
+    setAllLeads(prev => prev.filter(l => !selected.has(l.id)))
+    setSelected(new Set())
+    setBulkAction('')
+    setDeleting(false)
+    setShowDeleteConfirm(false)
+    showToast('success', `${ids.length} lead${ids.length !== 1 ? 's' : ''} deleted`)
   }
 
   // Export handlers
@@ -367,6 +394,7 @@ export default function AllLeads() {
             <option value="">Choose action...</option>
             <option value="move">Move to Stage</option>
             <option value="lost">Mark as Lost</option>
+            <option value="delete">Delete</option>
           </select>
           {bulkAction === 'move' && (
             <select className="leads-filter-select" value={bulkStage} onChange={e => setBulkStage(e.target.value)}>
@@ -384,6 +412,22 @@ export default function AllLeads() {
           setAllLeads(prev => prev.map(l => l.id === updated.id ? updated : l))
           setSelectedLead(null)
         }} />
+      )}
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => !deleting && setShowDeleteConfirm(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Delete {selected.size} lead{selected.size !== 1 ? 's' : ''}?</h3>
+            <p className="modal-subtitle">
+              This also deletes their notes, stage history, and any quotations tied to them. This cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleConfirmDelete} disabled={deleting}>{deleting ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Create Lead Modal */}
@@ -431,7 +475,32 @@ export default function AllLeads() {
               </div>
               <div className="form-group">
                 <label className="form-label">Source</label>
-                <input className="form-input" value={newLead.source} onChange={e => setNewLead({ ...newLead, source: e.target.value })} />
+                <select
+                  className="form-input"
+                  value={customSourceMode ? 'custom' : newLead.source}
+                  onChange={e => {
+                    if (e.target.value === 'custom') {
+                      setCustomSourceMode(true)
+                      setNewLead({ ...newLead, source: '' })
+                    } else {
+                      setCustomSourceMode(false)
+                      setNewLead({ ...newLead, source: e.target.value })
+                    }
+                  }}
+                >
+                  {LEAD_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                  <option value="custom">Custom…</option>
+                </select>
+                {customSourceMode && (
+                  <input
+                    className="form-input"
+                    style={{ marginTop: 8 }}
+                    placeholder="Enter custom source"
+                    required
+                    value={newLead.source}
+                    onChange={e => setNewLead({ ...newLead, source: e.target.value })}
+                  />
+                )}
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateLead(false)}>Cancel</button>

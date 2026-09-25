@@ -28,6 +28,13 @@ function money(n) {
   return num === 0 ? 'Free' : num.toLocaleString('en-US')
 }
 
+function sanitizeFilename(str) {
+  return String(str || 'Client')
+    .replace(/[/\\:*?"<>|]/g, '-')
+    .trim()
+    .replace(/\s+/g, '_')
+}
+
 // Draws "label value" right-aligned at x, ending at y, with the value in
 // front (closer to x) and the label immediately to its left.
 function rightAlignedLabelValue(doc, label, value, x, y, { valueBold = true } = {}) {
@@ -201,5 +208,6 @@ export async function generateQuotationPDF({ quotation, items, lead }) {
   doc.setFont('helvetica', 'italic'); doc.setTextColor(...RED)
   doc.text(line2, startX + w1, pageHeight - 10)
 
-  doc.save(`SDFM_Quotation_${quotation.quote_number}.pdf`)
+  const clientName = sanitizeFilename(lead?.company_name)
+  doc.save(`${clientName}_Quotation_${quotation.quote_number}.pdf`)
 }

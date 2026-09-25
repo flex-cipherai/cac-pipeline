@@ -140,8 +140,19 @@
   letter-spacing: 0.04em;
 }
 
+.quote-mobile-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .quote-mobile-download {
-  width: 100%;
+  flex: 1;
+}
+
+.quote-row-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {

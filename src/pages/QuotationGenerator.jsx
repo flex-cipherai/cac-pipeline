@@ -55,6 +55,8 @@ export default function QuotationGenerator() {
   const [downloadingId, setDownloadingId] = useState(null)
   const [newQuote, setNewQuote] = useState(emptyForm)
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
+  const [deletingQuote, setDeletingQuote] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { fetchQuotations(); fetchLeads() }, [])
   useEffect(() => {
@@ -190,6 +192,21 @@ export default function QuotationGenerator() {
     setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status } : q))
   }
 
+  async function handleConfirmDelete() {
+    if (!deletingQuote) return
+    setDeleting(true)
+    const { error } = await supabase.from('quotations').delete().eq('id', deletingQuote.id)
+    if (error) {
+      showToast('error', error.message || 'Failed to delete quotation')
+      setDeleting(false)
+      return
+    }
+    setQuotations(prev => prev.filter(q => q.id !== deletingQuote.id))
+    showToast('success', `${deletingQuote.quote_number} deleted`)
+    setDeleting(false)
+    setDeletingQuote(null)
+  }
+
   function formatMoney(quotation) {
     return `${quotation.currency} ${Number(quotation.total).toLocaleString('en-US')}`
   }
@@ -268,10 +285,11 @@ export default function QuotationGenerator() {
                     </td>
                     <td>{formatDate(q.issue_date)}</td>
                     <td>{formatDate(q.valid_until)}</td>
-                    <td>
+                    <td className="quote-row-actions">
                       <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(q)} disabled={downloadingId === q.id}>
                         {downloadingId === q.id ? '...' : 'Download'}
                       </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDeletingQuote(q)}>Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -298,13 +316,32 @@ export default function QuotationGenerator() {
                   <span className="quote-mobile-meta"><span className="quote-mobile-label">Total</span>{formatMoney(q)}</span>
                   <span className="quote-mobile-meta"><span className="quote-mobile-label">Valid Until</span>{formatDate(q.valid_until)}</span>
                 </div>
-                <button className="btn btn-secondary btn-sm quote-mobile-download" onClick={() => handleDownload(q)} disabled={downloadingId === q.id}>
-                  {downloadingId === q.id ? 'Preparing...' : 'Download PDF'}
-                </button>
+                <div className="quote-mobile-actions">
+                  <button className="btn btn-secondary btn-sm quote-mobile-download" onClick={() => handleDownload(q)} disabled={downloadingId === q.id}>
+                    {downloadingId === q.id ? 'Preparing...' : 'Download PDF'}
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={() => setDeletingQuote(q)}>Delete</button>
+                </div>
               </div>
             ))}
           </div>
         </>
+      )}
+
+      {/* Delete Confirmation */}
+      {deletingQuote && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeletingQuote(null)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Delete {deletingQuote.quote_number}?</h3>
+            <p className="modal-subtitle">
+              This permanently deletes the quotation for <strong>{deletingQuote.leads?.company_name || 'this client'}</strong>. This cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setDeletingQuote(null)} disabled={deleting}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleConfirmDelete} disabled={deleting}>{deleting ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Create Quotation Modal */}
