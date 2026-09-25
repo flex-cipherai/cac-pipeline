@@ -412,7 +412,7 @@
 }
 
 /* ─── Mobile ─── */
-@media (max-width: 520px) {
+@media (max-width: 768px) {
   .lead-detail-drawer {
     width: 100vw;
   }
@@ -431,6 +431,11 @@
 
   .lead-detail-tab {
     margin-right: var(--space-lg);
+  }
+
+  .lead-detail-close {
+    width: 40px;
+    height: 40px;
   }
 }
 

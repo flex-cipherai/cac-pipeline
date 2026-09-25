@@ -364,9 +364,9 @@ export default function QuotationGenerator() {
                   </div>
                   {newQuote.items.map((item, idx) => (
                     <div className="quote-item-row" key={idx}>
-                      <input className="form-input" placeholder="Description" value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} />
-                      <input className="form-input" type="number" min="0" step="1" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
-                      <input className="form-input" type="number" min="0" step="0.01" placeholder="0" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} />
+                      <input className="form-input quote-item-desc" placeholder="Description" value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} />
+                      <input className="form-input quote-item-qty" type="number" min="0" step="1" placeholder="Qty" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} />
+                      <input className="form-input quote-item-price" type="number" min="0" step="0.01" placeholder="0" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)} />
                       <span className="quote-item-amount">{((Number(item.quantity) || 0) * (Number(item.unit_price) || 0)).toLocaleString('en-US')}</span>
                       <button type="button" className="quote-item-remove" onClick={() => removeItem(idx)} aria-label="Remove item">×</button>
                     </div>

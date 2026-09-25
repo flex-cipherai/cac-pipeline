@@ -216,8 +216,8 @@
 }
 
 .quote-item-remove {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -264,5 +264,41 @@
   .quote-items-head,
   .quote-item-row {
     grid-template-columns: 1fr 40px 70px 70px 20px;
+  }
+}
+
+/* Below ~480px there isn't room for 5 columns in a row — stack the
+   description on its own line and put qty/price/amount below it. */
+@media (max-width: 480px) {
+  .quote-items-head {
+    display: none;
+  }
+
+  .quote-item-row {
+    grid-template-columns: 1fr 1fr 1fr 32px;
+    grid-template-areas:
+      "desc desc desc remove"
+      "qty price amount remove";
+    row-gap: 6px;
+    padding: 10px;
+  }
+
+  .quote-item-desc { grid-area: desc; }
+  .quote-item-qty { grid-area: qty; }
+  .quote-item-price { grid-area: price; }
+
+  .quote-item-amount {
+    grid-area: amount;
+    text-align: left;
+    align-self: center;
+    padding-left: 2px;
+  }
+
+  .quote-item-remove {
+    grid-area: remove;
+    align-self: center;
+    justify-self: center;
+    width: 32px;
+    height: 32px;
   }
 }

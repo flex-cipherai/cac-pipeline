@@ -362,10 +362,12 @@ export default function SocialAnalytics() {
         {pillarRollup.length === 0 ? (
           <div className="empty-state"><p className="empty-state-desc">No post-level metrics logged yet.</p></div>
         ) : (
-          <table className="data-table">
-            <thead><tr><th>Pillar</th><th>Posts</th><th>Impressions</th><th>Engagement</th></tr></thead>
-            <tbody>{pillarRollup.map(r => <tr key={r.name}><td>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td><td>{r.engagement.toLocaleString()}</td></tr>)}</tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Pillar</th><th>Posts</th><th>Impressions</th><th>Engagement</th></tr></thead>
+              <tbody>{pillarRollup.map(r => <tr key={r.name}><td>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td><td>{r.engagement.toLocaleString()}</td></tr>)}</tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -373,19 +375,23 @@ export default function SocialAnalytics() {
         <div className="section-card">
           <div className="section-card-header"><h2 className="section-card-title">By Campaign</h2></div>
           {campaignRollup.length === 0 ? <div className="empty-state"><p className="empty-state-desc">No campaign data yet.</p></div> : (
-            <table className="data-table">
-              <thead><tr><th>Campaign</th><th>Posts</th><th>Impressions</th></tr></thead>
-              <tbody>{campaignRollup.map(r => <tr key={r.name}><td>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td></tr>)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>Campaign</th><th>Posts</th><th>Impressions</th></tr></thead>
+                <tbody>{campaignRollup.map(r => <tr key={r.name}><td>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td></tr>)}</tbody>
+              </table>
+            </div>
           )}
         </div>
         <div className="section-card">
           <div className="section-card-header"><h2 className="section-card-title">By Format</h2></div>
           {formatRollup.length === 0 ? <div className="empty-state"><p className="empty-state-desc">No format data yet.</p></div> : (
-            <table className="data-table">
-              <thead><tr><th>Format</th><th>Posts</th><th>Impressions</th></tr></thead>
-              <tbody>{formatRollup.map(r => <tr key={r.name}><td style={{ textTransform: 'capitalize' }}>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td></tr>)}</tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>Format</th><th>Posts</th><th>Impressions</th></tr></thead>
+                <tbody>{formatRollup.map(r => <tr key={r.name}><td style={{ textTransform: 'capitalize' }}>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td></tr>)}</tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -416,20 +422,22 @@ export default function SocialAnalytics() {
         {postDrillDown.length === 0 ? (
           <div className="empty-state"><p className="empty-state-desc">No post-level metrics logged yet.</p></div>
         ) : (
-          <table className="data-table">
-            <thead><tr><th>Post</th><th>Pillar</th><th>Impressions</th><th>Engagement</th><th></th></tr></thead>
-            <tbody>
-              {postDrillDown.map(e => (
-                <tr key={e.post.id}>
-                  <td>{(e.post.caption || '').slice(0, 60) || '(No caption)'}</td>
-                  <td>{e.post.content_pillars?.name || '—'}</td>
-                  <td>{e.impressions.toLocaleString()}</td>
-                  <td>{e.engagement.toLocaleString()}</td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => openDrillDown(e)}>Details</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Post</th><th>Pillar</th><th>Impressions</th><th>Engagement</th><th></th></tr></thead>
+              <tbody>
+                {postDrillDown.map(e => (
+                  <tr key={e.post.id}>
+                    <td>{(e.post.caption || '').slice(0, 60) || '(No caption)'}</td>
+                    <td>{e.post.content_pillars?.name || '—'}</td>
+                    <td>{e.impressions.toLocaleString()}</td>
+                    <td>{e.engagement.toLocaleString()}</td>
+                    <td><button className="btn btn-secondary btn-sm" onClick={() => openDrillDown(e)}>Details</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -473,17 +481,19 @@ export default function SocialAnalytics() {
           <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
             <h3 className="modal-title">{(drillDownPost.caption || '').slice(0, 80) || '(No caption)'}</h3>
             {drillDownSnapshots.length === 0 ? <p className="modal-subtitle">No snapshots logged.</p> : (
-              <table className="data-table">
-                <thead><tr><th>Date</th><th>Impressions</th><th>Reactions</th><th>Comments</th><th>Shares</th><th>Clicks</th></tr></thead>
-                <tbody>
-                  {drillDownSnapshots.map(s => (
-                    <tr key={s.id}>
-                      <td>{DateTime.fromISO(s.captured_at).toFormat('d LLL yyyy')}</td>
-                      <td>{s.impressions}</td><td>{s.reactions}</td><td>{s.comments}</td><td>{s.shares}</td><td>{s.clicks}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead><tr><th>Date</th><th>Impressions</th><th>Reactions</th><th>Comments</th><th>Shares</th><th>Clicks</th></tr></thead>
+                  <tbody>
+                    {drillDownSnapshots.map(s => (
+                      <tr key={s.id}>
+                        <td>{DateTime.fromISO(s.captured_at).toFormat('d LLL yyyy')}</td>
+                        <td>{s.impressions}</td><td>{s.reactions}</td><td>{s.comments}</td><td>{s.shares}</td><td>{s.clicks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             <div className="modal-actions"><button className="btn btn-primary" onClick={() => setDrillDownPost(null)}>Close</button></div>
           </div>

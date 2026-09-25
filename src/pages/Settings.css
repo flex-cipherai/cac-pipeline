@@ -298,6 +298,8 @@
   padding: var(--space-xl);
   width: 100%;
   max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-xl);
   animation: modalIn var(--duration-normal) var(--ease-out);
 }
@@ -399,8 +401,6 @@
 
   .modal-card {
     margin: var(--space-md);
-    max-height: 90vh;
-    overflow-y: auto;
   }
 }
 

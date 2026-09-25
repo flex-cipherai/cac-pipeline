@@ -202,6 +202,20 @@
   .leads-mobile-list {
     display: flex;
   }
+
+  .leads-bulk-bar {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  @keyframes bulkBarIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
 /* ─── Clickable rows ─── */

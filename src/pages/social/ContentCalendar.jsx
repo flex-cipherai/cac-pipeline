@@ -317,28 +317,30 @@ export default function ContentCalendar() {
               <button className="btn btn-danger btn-sm" onClick={bulkDelete}>Delete</button>
             </div>
           )}
-          <table className="data-table">
-            <thead>
-              <tr><th></th><th>Scheduled</th><th>Caption</th><th>Type</th><th>Pillar</th><th>Status</th><th>Author</th><th></th></tr>
-            </thead>
-            <tbody>
-              {filteredPosts.map(post => (
-                <tr key={post.id}>
-                  <td><input type="checkbox" checked={selectedIds.includes(post.id)} onChange={() => toggleSelect(post.id)} /></td>
-                  <td>{post.scheduled_at ? DateTime.fromISO(post.scheduled_at).toFormat('d LLL, HH:mm') : '—'}</td>
-                  <td>{captionPreview(post.caption)}</td>
-                  <td>{post.post_type}</td>
-                  <td>{post.content_pillars?.name || '—'}</td>
-                  <td><span className={`status-badge status-${post.status}`}>{STATUS_LABELS[post.status]}</span></td>
-                  <td>{post.profiles?.name || '—'}</td>
-                  <td><button className="btn btn-secondary btn-sm" onClick={() => navigate(`/social/composer/${post.id}`)}>Edit</button></td>
-                </tr>
-              ))}
-              {filteredPosts.length === 0 && (
-                <tr><td colSpan={8}><div className="empty-state"><p className="empty-state-desc">No posts match these filters.</p></div></td></tr>
-              )}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr><th></th><th>Scheduled</th><th>Caption</th><th>Type</th><th>Pillar</th><th>Status</th><th>Author</th><th></th></tr>
+              </thead>
+              <tbody>
+                {filteredPosts.map(post => (
+                  <tr key={post.id}>
+                    <td><input type="checkbox" checked={selectedIds.includes(post.id)} onChange={() => toggleSelect(post.id)} /></td>
+                    <td>{post.scheduled_at ? DateTime.fromISO(post.scheduled_at).toFormat('d LLL, HH:mm') : '—'}</td>
+                    <td>{captionPreview(post.caption)}</td>
+                    <td>{post.post_type}</td>
+                    <td>{post.content_pillars?.name || '—'}</td>
+                    <td><span className={`status-badge status-${post.status}`}>{STATUS_LABELS[post.status]}</span></td>
+                    <td>{post.profiles?.name || '—'}</td>
+                    <td><button className="btn btn-secondary btn-sm" onClick={() => navigate(`/social/composer/${post.id}`)}>Edit</button></td>
+                  </tr>
+                ))}
+                {filteredPosts.length === 0 && (
+                  <tr><td colSpan={8}><div className="empty-state"><p className="empty-state-desc">No posts match these filters.</p></div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className={`cal-grid ${viewMode === 'week' ? 'cal-grid-week' : ''}`}>
