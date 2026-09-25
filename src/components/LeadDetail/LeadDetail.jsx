@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
-import { QUALIFICATION_QUESTIONS, PIPELINE_STAGES } from '../../lib/scoring'
+import { QUALIFICATION_QUESTIONS, PIPELINE_STAGES, scoreLead } from '../../lib/scoring'
 import { DEFAULT_TIMEZONE, convertScheduledTime } from '../../lib/timezone'
 import './LeadDetail.css'
+
+const Q_FIELD_MAP = { q1: 'q1_revenue', q2: 'q2_challenge', q3: 'q3_role', q4: 'q4_priority', q5: 'q5_timeline' }
 
 export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
   const { profile } = useAuth()
@@ -19,6 +21,13 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
   const [teamTimezone, setTeamTimezone] = useState(DEFAULT_TIMEZONE)
   const myTimezone = profile?.timezone || teamTimezone
   const textareaRef = useRef(null)
+
+  // Editing qualification responses (e.g. for a manually-added lead that
+  // skipped the intake form's 5-question flow)
+  const [editingResponses, setEditingResponses] = useState(false)
+  const [responseForm, setResponseForm] = useState({ q1: '', q2: '', q3: '', q4: '', q5: '' })
+  const [savingResponses, setSavingResponses] = useState(false)
+  const [responsesError, setResponsesError] = useState('')
 
   useEffect(() => {
     supabase.from('system_settings').select('value').eq('key', 'team_timezone').maybeSingle()
@@ -58,6 +67,46 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
       .select('*, profiles:created_by(name)').single()
     if (data && !error) { setNotes(prev => [data, ...prev]); setNewNote('') }
     setSaving(false)
+  }
+
+  function handleEditResponses() {
+    const initial = {}
+    for (const key of Object.keys(Q_FIELD_MAP)) {
+      const storedLabel = lead[Q_FIELD_MAP[key]]
+      const match = QUALIFICATION_QUESTIONS[key].options.find(o => o.label === storedLabel)
+      initial[key] = match ? match.value : ''
+    }
+    setResponseForm(initial)
+    setResponsesError('')
+    setEditingResponses(true)
+  }
+
+  async function handleSaveResponses() {
+    setSavingResponses(true)
+    setResponsesError('')
+
+    const scored = scoreLead(responseForm)
+    const updates = {
+      q1_score: scored.q1_score, q2_score: scored.q2_score, q3_score: scored.q3_score,
+      q4_score: scored.q4_score, q5_score: scored.q5_score,
+      total_score: scored.total_score,
+      classification: scored.classification,
+      is_disqualified: scored.is_disqualified,
+      disqualifier_reason: scored.disqualifier_reason,
+    }
+    for (const key of Object.keys(Q_FIELD_MAP)) {
+      const option = QUALIFICATION_QUESTIONS[key].options.find(o => o.value === responseForm[key])
+      updates[Q_FIELD_MAP[key]] = option ? option.label : null
+    }
+
+    const { error } = await supabase.from('leads').update(updates).eq('id', lead.id)
+    setSavingResponses(false)
+    if (error) {
+      setResponsesError(error.message || 'Failed to save responses')
+      return
+    }
+    setEditingResponses(false)
+    if (onLeadUpdated) onLeadUpdated({ ...lead, ...updates })
   }
 
   // Gap 4: Follow-up reminders
@@ -269,22 +318,46 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
 
           {activeTab === 'responses' && (
             <div className="lead-detail-section">
-              <div className="lead-detail-responses">
-                {qResponses.map((q, idx) => (
-                  <div key={q.key} className="lead-detail-response">
-                    <div className="lead-detail-response-header">
-                      <span className="lead-detail-response-num">{idx + 1}</span>
-                      <span className="lead-detail-response-label">{q.label}</span>
-                      <span className="lead-detail-response-score">{q.score} pts</span>
+              {!editingResponses ? (
+                <>
+                  <div className="lead-detail-responses">
+                    {qResponses.map((q, idx) => (
+                      <div key={q.key} className="lead-detail-response">
+                        <div className="lead-detail-response-header">
+                          <span className="lead-detail-response-num">{idx + 1}</span>
+                          <span className="lead-detail-response-label">{q.label}</span>
+                          <span className="lead-detail-response-score">{q.score} pts</span>
+                        </div>
+                        <p className="lead-detail-response-value">{q.value || '—'}</p>
+                      </div>
+                    ))}
+                    <div className="lead-detail-response-total">
+                      <span>Total Score</span>
+                      <span className="lead-detail-response-total-value">{lead.total_score}/21</span>
                     </div>
-                    <p className="lead-detail-response-value">{q.value || '—'}</p>
                   </div>
-                ))}
-                <div className="lead-detail-response-total">
-                  <span>Total Score</span>
-                  <span className="lead-detail-response-total-value">{lead.total_score}/21</span>
-                </div>
-              </div>
+                  <button className="btn btn-secondary btn-sm lead-detail-response-edit-btn" onClick={handleEditResponses}>
+                    Edit Responses
+                  </button>
+                </>
+              ) : (
+                <form onSubmit={e => { e.preventDefault(); handleSaveResponses() }}>
+                  {Object.entries(QUALIFICATION_QUESTIONS).map(([key, q], idx) => (
+                    <div className="form-group" key={key}>
+                      <label className="form-label">{idx + 1}. {q.question}</label>
+                      <select className="form-input" value={responseForm[key]} onChange={e => setResponseForm({ ...responseForm, [key]: e.target.value })}>
+                        <option value="">Not answered</option>
+                        {q.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                  {responsesError && <p className="lead-detail-response-error">{responsesError}</p>}
+                  <div className="lead-detail-response-form-actions">
+                    <button type="button" className="btn btn-secondary" onClick={() => setEditingResponses(false)} disabled={savingResponses}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={savingResponses}>{savingResponses ? 'Saving...' : 'Save Responses'}</button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 

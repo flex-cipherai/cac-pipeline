@@ -285,6 +285,23 @@
   font-weight: 700;
 }
 
+.lead-detail-response-edit-btn {
+  margin-top: var(--space-md);
+}
+
+.lead-detail-response-form-actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: flex-end;
+  margin-top: var(--space-lg);
+}
+
+.lead-detail-response-error {
+  color: var(--sdfm-red);
+  font-size: var(--text-sm);
+  margin-top: var(--space-sm);
+}
+
 /* ─── Notes ─── */
 .lead-detail-note-form {
   margin-bottom: var(--space-xl);
