@@ -1,4 +1,4 @@
-# SDFM Sales Management Pipeline
+# SDFM Business Management Solution
 
 Business management system for SDFM Group Limited. Manages the full sales lifecycle from lead intake through contract signing, plus LinkedIn social media management (composer, calendar, bulk scheduling, approvals, analytics, activity inbox) under `/social/*` — see `SDFM Social Media Management System Description.pdf` for the module spec. Both modules share the same Supabase project, roles (`admin`, `sales`, `marketing`), and deploy pipeline.
 

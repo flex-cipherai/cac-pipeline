@@ -31,8 +31,60 @@ export default function AllLeads() {
   const [bulkStage, setBulkStage] = useState('')
   const [showBulkBar, setShowBulkBar] = useState(false)
 
+  // Manual lead creation
+  const [showCreateLead, setShowCreateLead] = useState(false)
+  const [creatingLead, setCreatingLead] = useState(false)
+  const [newLead, setNewLead] = useState({
+    full_name: '', company_name: '', email: '', phone: '', has_whatsapp: false,
+    classification: 'warm', current_stage: PIPELINE_STAGES[0].key, source: 'Manual Entry',
+  })
+  const [toast, setToast] = useState({ show: false, type: '', text: '' })
+
   useEffect(() => { fetchLeads() }, [])
   useEffect(() => { setShowBulkBar(selected.size > 0) }, [selected.size])
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => setToast({ show: false, type: '', text: '' }), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast.show])
+
+  function showToast(type, text) { setToast({ show: true, type, text }) }
+
+  async function handleCreateLead(e) {
+    e.preventDefault()
+    setCreatingLead(true)
+    const { data, error } = await supabase
+      .from('leads')
+      .insert({
+        full_name: newLead.full_name.trim(),
+        company_name: newLead.company_name.trim(),
+        email: newLead.email.trim(),
+        phone: newLead.phone.trim(),
+        has_whatsapp: newLead.has_whatsapp,
+        classification: newLead.classification,
+        current_stage: newLead.current_stage,
+        source: newLead.source.trim() || 'Manual Entry',
+      })
+      .select()
+      .single()
+
+    if (error || !data) {
+      showToast('error', error?.message || 'Failed to create lead')
+      setCreatingLead(false)
+      return
+    }
+
+    await supabase.from('lead_stage_history').insert({ lead_id: data.id, stage: data.current_stage, moved_by: profile?.id })
+    supabase.functions.invoke('notify-lead', { body: { lead_id: data.id, team_only: true } })
+      .catch(err => console.error('[Email] notify-lead invoke failed:', err))
+
+    setAllLeads(prev => [data, ...prev])
+    setCreatingLead(false)
+    setShowCreateLead(false)
+    setNewLead({ full_name: '', company_name: '', email: '', phone: '', has_whatsapp: false, classification: 'warm', current_stage: PIPELINE_STAGES[0].key, source: 'Manual Entry' })
+    showToast('success', `${data.full_name} added to the pipeline`)
+  }
 
   async function fetchLeads() {
     const { data } = await supabase.from('leads').select('*').order('created_at', { ascending: false })
@@ -209,6 +261,7 @@ export default function AllLeads() {
               </div>
             </>
           )}
+          <button className="btn btn-primary btn-sm" onClick={() => setShowCreateLead(true)}>+ Create Lead</button>
         </div>
       </div>
 
@@ -331,6 +384,74 @@ export default function AllLeads() {
           setAllLeads(prev => prev.map(l => l.id === updated.id ? updated : l))
           setSelectedLead(null)
         }} />
+      )}
+
+      {/* Create Lead Modal */}
+      {showCreateLead && (
+        <div className="modal-overlay" onClick={() => setShowCreateLead(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Create Lead</h3>
+            <p className="modal-subtitle">Manually add a lead straight into the pipeline.</p>
+            <form onSubmit={handleCreateLead}>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input className="form-input" required value={newLead.full_name} onChange={e => setNewLead({ ...newLead, full_name: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Company</label>
+                <input className="form-input" required value={newLead.company_name} onChange={e => setNewLead({ ...newLead, company_name: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="form-input" type="email" required value={newLead.email} onChange={e => setNewLead({ ...newLead, email: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone</label>
+                <input className="form-input" required value={newLead.phone} onChange={e => setNewLead({ ...newLead, phone: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
+                  <input type="checkbox" checked={newLead.has_whatsapp} onChange={e => setNewLead({ ...newLead, has_whatsapp: e.target.checked })} />
+                  Has WhatsApp
+                </label>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Classification</label>
+                <select className="form-input" value={newLead.classification} onChange={e => setNewLead({ ...newLead, classification: e.target.value })}>
+                  <option value="hot">Hot</option>
+                  <option value="warm">Warm</option>
+                  <option value="cold">Cold</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Pipeline Stage</label>
+                <select className="form-input" value={newLead.current_stage} onChange={e => setNewLead({ ...newLead, current_stage: e.target.value })}>
+                  {PIPELINE_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Source</label>
+                <input className="form-input" value={newLead.source} onChange={e => setNewLead({ ...newLead, source: e.target.value })} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateLead(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={creatingLead}>{creatingLead ? 'Creating...' : 'Create Lead'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast.show && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' ? (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 8.5l3 3 5-6" /></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3.5M8 10.5v.5" /></svg>
+          )}
+          {toast.text}
+        </div>
       )}
     </div>
   )

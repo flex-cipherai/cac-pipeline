@@ -1,8 +1,24 @@
-import { NavLink } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
 import './Sidebar.css'
 
 const icons = {
+  salesModule: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 3h15l-5.5 7.5v5L8 17v-6.5L2.5 3z" />
+    </svg>
+  ),
+  socialModule: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 4h14a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-4 3.5V13H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+    </svg>
+  ),
+  chevron: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5.5l3 3 3-3" />
+    </svg>
+  ),
   dashboard: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="7" height="7" rx="1.5" />
@@ -25,6 +41,12 @@ const icons = {
       <path d="M2 17c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5" />
       <circle cx="14.5" cy="6.5" r="2" />
       <path d="M14.5 11c2 0 3.5 1.5 3.5 3.5" />
+    </svg>
+  ),
+  quotation: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 2h10v15l-2-1.5-1.5 1.5-1.5-1.5-1.5 1.5-1.5-1.5L5 17V2z" />
+      <path d="M7.5 6h5M7.5 9h5M7.5 12h3" />
     </svg>
   ),
   notifications: (
@@ -89,57 +111,70 @@ const icons = {
   ),
 }
 
+// The system has two modules — Sales Pipeline Management and Social Media
+// Management — each rendered as a collapsible group in the sidebar. Items
+// are filtered per role below; a group with no items for the current role
+// is omitted entirely rather than shown empty.
+const MODULES = [
+  {
+    key: 'pipeline',
+    label: 'Sales Pipeline',
+    icon: icons.salesModule,
+    items: [
+      { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard', roles: ['admin', 'sales'] },
+      { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline', roles: ['admin', 'sales'] },
+      { to: '/leads', icon: icons.leads, label: 'All Leads', roles: ['admin', 'sales'] },
+      { to: '/quotations', icon: icons.quotation, label: 'Quotations', roles: ['admin', 'sales'] },
+      { to: '/analytics', icon: icons.analytics, label: 'Lead Analytics', roles: ['admin', 'marketing'] },
+      { to: '/notifications', icon: icons.notifications, label: 'Notifications', roles: ['admin', 'sales'] },
+    ],
+  },
+  {
+    key: 'social',
+    label: 'Social Media',
+    icon: icons.socialModule,
+    items: [
+      { to: '/social/calendar', icon: icons.calendarIcon, label: 'Content Calendar', roles: ['admin', 'marketing'] },
+      { to: '/social/composer', icon: icons.compose, label: 'New Post', roles: ['admin', 'marketing'] },
+      { to: '/social/library', icon: icons.library, label: 'Content Library', roles: ['admin', 'marketing'] },
+      { to: '/social/approvals', icon: icons.approvals, label: 'Approvals', roles: ['admin', 'marketing'] },
+      { to: '/social/analytics', icon: icons.analytics, label: 'Social Analytics', roles: ['admin', 'marketing'] },
+      { to: '/social/activity', icon: icons.activity, label: 'Activity Inbox', roles: ['admin', 'marketing'] },
+    ],
+  },
+]
+
+// Items that don't belong to either module.
+const STANDALONE_ITEMS = [
+  { to: '/settings', icon: icons.settings, label: 'Settings', roles: ['admin', 'sales'] },
+]
+
+const roleLabels = {
+  admin: 'Admin',
+  sales: 'Sales Manager',
+  marketing: 'Marketing',
+}
+
 export default function Sidebar({ isOpen, onClose }) {
   const { profile, signOut } = useAuth()
+  const location = useLocation()
   const role = profile?.role || 'admin'
 
-  // Social Media Management nav — shared by admin and marketing (spec's role
-  // table gives both full access to composer/calendar/library; approvals,
-  // analytics, and activity get added here as those pages are built).
-  const socialNavItems = [
-    { to: '/social/calendar', icon: icons.calendarIcon, label: 'Content Calendar' },
-    { to: '/social/composer', icon: icons.compose, label: 'New Post' },
-    { to: '/social/library', icon: icons.library, label: 'Content Library' },
-    { to: '/social/approvals', icon: icons.approvals, label: 'Approvals' },
-    { to: '/social/analytics', icon: icons.analytics, label: 'Social Analytics' },
-    { to: '/social/activity', icon: icons.activity, label: 'Activity Inbox' },
-  ]
+  const modules = MODULES
+    .map(m => ({ ...m, items: m.items.filter(i => i.roles.includes(role)) }))
+    .filter(m => m.items.length > 0)
+  const standaloneItems = STANDALONE_ITEMS.filter(i => i.roles.includes(role))
 
-  const getNavItems = () => {
-    switch (role) {
-      case 'marketing':
-        return [
-          ...socialNavItems,
-          { to: '/analytics', icon: icons.analytics, label: 'Lead Analytics' },
-        ]
-      case 'sales':
-        return [
-          { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard' },
-          { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline' },
-          { to: '/leads', icon: icons.leads, label: 'All Leads' },
-          { to: '/notifications', icon: icons.notifications, label: 'Notifications' },
-          { to: '/settings', icon: icons.settings, label: 'Settings' },
-        ]
-      case 'admin':
-      default:
-        return [
-          { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard' },
-          { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline' },
-          { to: '/leads', icon: icons.leads, label: 'All Leads' },
-          ...socialNavItems,
-          { to: '/analytics', icon: icons.analytics, label: 'Lead Analytics' },
-          { to: '/notifications', icon: icons.notifications, label: 'Notifications' },
-          { to: '/settings', icon: icons.settings, label: 'Settings' },
-        ]
-    }
-  }
+  const [openModule, setOpenModule] = useState(null)
 
-  const navItems = getNavItems()
+  // Auto-expand whichever module contains the page the user is currently on.
+  useEffect(() => {
+    const active = modules.find(m => m.items.some(i => location.pathname.startsWith(i.to)))
+    if (active) setOpenModule(active.key)
+  }, [location.pathname])
 
-  const roleLabels = {
-    admin: 'Admin',
-    sales: 'Sales Manager',
-    marketing: 'Marketing',
+  function toggleModule(key) {
+    setOpenModule(prev => (prev === key ? null : key))
   }
 
   const initial = profile?.name?.charAt(0)?.toUpperCase() || 'U'
@@ -167,7 +202,45 @@ export default function Sidebar({ isOpen, onClose }) {
 
           {/* Navigation */}
           <nav className="sidebar-nav" role="navigation" aria-label="Main navigation">
-            {navItems.map(item => (
+            {modules.map(module => {
+              const isOpen = openModule === module.key
+              const hasActiveChild = module.items.some(i => location.pathname.startsWith(i.to))
+              return (
+                <div key={module.key} className="sidebar-module">
+                  <button
+                    type="button"
+                    className={`sidebar-nav-item sidebar-module-toggle ${hasActiveChild ? 'active' : ''}`}
+                    onClick={() => toggleModule(module.key)}
+                    aria-expanded={isOpen}
+                  >
+                    <span className="sidebar-nav-icon">{module.icon}</span>
+                    <span className="sidebar-module-label">{module.label}</span>
+                    <span className={`sidebar-module-chevron ${isOpen ? 'open' : ''}`}>{icons.chevron}</span>
+                  </button>
+                  <div className={`sidebar-submenu-wrap ${isOpen ? 'open' : ''}`}>
+                    <div className="sidebar-submenu">
+                      {module.items.map(item => (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          onClick={handleNavClick}
+                          className={({ isActive }) =>
+                            `sidebar-nav-item sidebar-submenu-item ${isActive ? 'active' : ''}`
+                          }
+                        >
+                          <span className="sidebar-nav-icon">{item.icon}</span>
+                          <span>{item.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {standaloneItems.length > 0 && <div className="sidebar-nav-divider" />}
+
+            {standaloneItems.map(item => (
               <NavLink
                 key={item.to}
                 to={item.to}

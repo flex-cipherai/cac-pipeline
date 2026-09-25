@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   try {
     requireResendKey()
 
-    const { lead_id } = await req.json()
+    const { lead_id, team_only } = await req.json()
     if (!lead_id) {
       return jsonResponse({ success: false, error: 'Missing lead_id' }, 400)
     }
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
 
     const results: Record<string, unknown> = {}
 
-    if (clientTemplate?.is_active && lead.email) {
+    if (!team_only && clientTemplate?.is_active && lead.email) {
       try {
         const vars = leadVars(lead, teamTimezone, leadTimezone)
         await sendViaResend([lead.email], renderTemplate(clientTemplate.subject, vars), renderTemplate(clientTemplate.body_html, vars))

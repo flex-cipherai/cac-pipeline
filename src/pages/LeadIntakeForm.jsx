@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { QUALIFICATION_QUESTIONS, DAYS_OF_WEEK, scoreLead } from '../lib/scoring'
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, detectTimezone, convertScheduledTime, formatOffsetLabel } from '../lib/timezone'
@@ -54,6 +54,22 @@ export default function LeadIntakeForm() {
 
   // Source tracking via URL param, UTM, or referrer
   const [source, setSource] = useState('Website')
+
+  // Fire the LinkedIn conversion event once, when a qualified lead reaches
+  // the confirmation screen. Skipped entirely if the Insight Tag hasn't
+  // loaded (visitor hasn't accepted cookies) since window.lintrk won't exist.
+  const conversionFiredRef = useRef(false)
+  useEffect(() => {
+    if (
+      submitted &&
+      submitResult?.qualified &&
+      !conversionFiredRef.current &&
+      typeof window.lintrk === 'function'
+    ) {
+      conversionFiredRef.current = true
+      window.lintrk('track', { conversion_id: 31302201 })
+    }
+  }, [submitted, submitResult])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)

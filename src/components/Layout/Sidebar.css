@@ -85,6 +85,62 @@
   flex-shrink: 0;
 }
 
+/* ─── Module groups (Sales Pipeline / Social Media) ─── */
+.sidebar-module-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.sidebar-module-label {
+  flex: 1;
+}
+
+.sidebar-module-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.35);
+  transition: transform var(--duration-fast);
+}
+
+.sidebar-module-chevron.open {
+  transform: rotate(180deg);
+}
+
+.sidebar-submenu-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-normal) var(--ease-out);
+}
+
+.sidebar-submenu-wrap.open {
+  grid-template-rows: 1fr;
+}
+
+.sidebar-submenu {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-submenu-item {
+  padding-left: 42px;
+  font-size: var(--text-sm);
+}
+
+.sidebar-nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: var(--space-sm) 4px;
+}
+
 /* ─── Bottom section ─── */
 .sidebar-bottom {
   padding: var(--space-lg);

@@ -6,6 +6,7 @@ import LeadIntakeForm from './pages/LeadIntakeForm'
 import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
+import QuotationGenerator from './pages/QuotationGenerator'
 import Settings from './pages/Settings'
 import Notifications from './pages/Notifications'
 import MarketingAnalytics from './pages/MarketingAnalytics'
@@ -105,6 +106,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['admin', 'sales']}>
             <AllLeads />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/quotations"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'sales']}>
+            <QuotationGenerator />
           </ProtectedRoute>
         }
       />
