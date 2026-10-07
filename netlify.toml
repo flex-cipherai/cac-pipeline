@@ -2,3 +2,11 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# First-party website tracker, loaded by sdfmgroup.com and the intake form.
+# Short cache so tracker fixes reach visitors within the hour.
+[[headers]]
+  for = "/sdfm-tracker.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=3600"

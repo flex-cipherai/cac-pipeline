@@ -17,6 +17,7 @@ import ContentCalendar from './pages/social/ContentCalendar'
 import BulkScheduler from './pages/social/BulkScheduler'
 import ApprovalQueue from './pages/social/ApprovalQueue'
 import SocialAnalytics from './pages/social/SocialAnalytics'
+import WebsiteAnalytics from './pages/social/WebsiteAnalytics'
 import ActivityInbox from './pages/social/ActivityInbox'
 
 // Protected route wrapper
@@ -196,6 +197,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['admin', 'marketing']}>
             <SocialAnalytics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/social/website-analytics"
+        element={
+          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
+            <WebsiteAnalytics />
           </ProtectedRoute>
         }
       />

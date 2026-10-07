@@ -19,6 +19,9 @@ function setConsent(value) {
   } catch {
     /* storage unavailable (private mode, blocked cookies) — consent re-asked next visit */
   }
+  // Tell the first-party website tracker (public/sdfm-tracker.js) so it can
+  // add — or remove — its returning-visitor id immediately, not next page load.
+  window.dispatchEvent(new CustomEvent('sdfm:consent', { detail: value }))
 }
 
 function loadLinkedInInsightTag() {

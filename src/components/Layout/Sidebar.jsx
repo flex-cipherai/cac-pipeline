@@ -68,6 +68,13 @@ const icons = {
       <rect x="14" y="2" width="4" height="16" rx="1" />
     </svg>
   ),
+  website: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="7.5" />
+      <path d="M2.5 10h15" />
+      <path d="M10 2.5c2 2.2 3 4.7 3 7.5s-1 5.3-3 7.5c-2-2.2-3-4.7-3-7.5s1-5.3 3-7.5z" />
+    </svg>
+  ),
   compose: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M13 3l4 4-9.5 9.5L3 18l1.5-4.5L13 3z" />
@@ -139,6 +146,7 @@ const MODULES = [
       { to: '/social/library', icon: icons.library, label: 'Content Library', roles: ['admin', 'marketing'] },
       { to: '/social/approvals', icon: icons.approvals, label: 'Approvals', roles: ['admin', 'marketing'] },
       { to: '/social/analytics', icon: icons.analytics, label: 'Social Analytics', roles: ['admin', 'marketing'] },
+      { to: '/social/website-analytics', icon: icons.website, label: 'Website Analytics', roles: ['admin', 'marketing'] },
       { to: '/social/activity', icon: icons.activity, label: 'Activity Inbox', roles: ['admin', 'marketing'] },
     ],
   },

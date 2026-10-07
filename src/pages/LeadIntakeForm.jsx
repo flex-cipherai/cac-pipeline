@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { QUALIFICATION_QUESTIONS, DAYS_OF_WEEK, scoreLead } from '../lib/scoring'
 import { COMMON_TIMEZONES, DEFAULT_TIMEZONE, detectTimezone, convertScheduledTime, formatOffsetLabel } from '../lib/timezone'
 import CookieConsent from '../components/CookieConsent/CookieConsent'
+import { initTracker, track } from '../lib/analytics'
 import './LeadIntakeForm.css'
 
 const STEPS = [
@@ -54,6 +55,36 @@ export default function LeadIntakeForm() {
 
   // Source tracking via URL param, UTM, or referrer
   const [source, setSource] = useState('Website')
+
+  // ── Website analytics (funnel events) ──
+  // Events carry no personal data: step numbers, durations, and the selected
+  // qualification option values only. The lead id is sent on submit solely so
+  // the visit can be linked to the lead it produced.
+  const formOpenedAtRef = useRef(Date.now())
+  const stepStartedAtRef = useRef(Date.now())
+  const startedRef = useRef(false)
+
+  useEffect(() => {
+    initTracker()
+    track('form_view')
+  }, [])
+
+  useEffect(() => {
+    stepStartedAtRef.current = Date.now()
+    track('form_step_view', { step: String(step) })
+  }, [step])
+
+  function markStarted() {
+    if (startedRef.current) return
+    startedRef.current = true
+    track('form_start')
+  }
+
+  function selectAnswer(key, value) {
+    markStarted()
+    track('form_answer', { q: key, value })
+    setResponses(prev => ({ ...prev, [key]: value }))
+  }
 
   // Fire the LinkedIn conversion event once, when a qualified lead reaches
   // the confirmation screen. Skipped entirely if the Insight Tag hasn't
@@ -253,8 +284,27 @@ export default function LeadIntakeForm() {
     return selectedDate !== null && selectedTime !== null
   }
 
-  function goNext() { if (step < 3) setStep(step + 1) }
-  function goBack() { if (step > 1) setStep(step - 1) }
+  function goNext() {
+    if (step >= 3) return
+    track('form_step_complete', { step: String(step), duration_ms: Date.now() - stepStartedAtRef.current })
+    setStep(step + 1)
+  }
+  function goBack() {
+    if (step <= 1) return
+    track('form_back', { from_step: String(step) })
+    setStep(step - 1)
+  }
+
+  function updateContact(patch) {
+    markStarted()
+    setContact(prev => ({ ...prev, ...patch }))
+  }
+
+  function selectTime(time) {
+    markStarted()
+    track('form_slot_selected')
+    setSelectedTime(time)
+  }
 
   // ── Submit ──
   async function handleSubmit() {
@@ -321,6 +371,15 @@ export default function LeadIntakeForm() {
       supabase.functions.invoke('notify-lead', { body: { lead_id: leadId } })
         .catch(err => console.error('[Email] notify-lead invoke failed:', err))
 
+      // The lead row exists now — report it so this visit is tied to its
+      // source, and so the funnel's final step is the real thing.
+      track('form_submit', {
+        lead_id: leadId,
+        qualified: isQualified,
+        classification: scoreResult.classification,
+        duration_ms: Date.now() - formOpenedAtRef.current,
+      })
+
       const leadLocal = convertScheduledTime(scheduledDateStr, selectedTime, teamTimezone, leadTimezone)
       setSubmitResult({
         qualified: isQualified,
@@ -332,6 +391,7 @@ export default function LeadIntakeForm() {
       setSubmitted(true)
     } catch (err) {
       console.error('Submission error:', err)
+      track('form_error', { stage: 'submit' })
       alert('Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
@@ -375,7 +435,7 @@ export default function LeadIntakeForm() {
   // ── Confirmation screen ──
   if (submitted && submitResult) {
     return (
-      <div className="intake-page">
+      <div className="intake-page" data-sdfm-ignore>
         <CookieConsent />
         <div className="intake-container">
           <div className="intake-logo">
@@ -420,8 +480,10 @@ export default function LeadIntakeForm() {
   }
 
   // ── Main form ──
+  // data-sdfm-ignore: the form is instrumented explicitly above, so the
+  // tracker's generic click capture would only add noise (calendar days, etc).
   return (
-    <div className="intake-page">
+    <div className="intake-page" data-sdfm-ignore>
       <CookieConsent />
       <div className="intake-container">
         <div className="intake-logo">
@@ -448,19 +510,19 @@ export default function LeadIntakeForm() {
             <h2 className="intake-section-title">Your Contact Details</h2>
             <div className="form-group">
               <label className="form-label" htmlFor="full_name">Full Name</label>
-              <input id="full_name" type="text" className="form-input" placeholder="Full Name" value={contact.full_name} onChange={e => setContact({ ...contact, full_name: e.target.value })} />
+              <input id="full_name" type="text" className="form-input" placeholder="Full Name" value={contact.full_name} onChange={e => updateContact({ full_name: e.target.value })} />
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="company_name">Company Name</label>
-              <input id="company_name" type="text" className="form-input" placeholder="Company Name" value={contact.company_name} onChange={e => setContact({ ...contact, company_name: e.target.value })} />
+              <input id="company_name" type="text" className="form-input" placeholder="Company Name" value={contact.company_name} onChange={e => updateContact({ company_name: e.target.value })} />
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="email">Email Address</label>
-              <input id="email" type="email" className="form-input" placeholder="Email Address" value={contact.email} onChange={e => setContact({ ...contact, email: e.target.value })} />
+              <input id="email" type="email" className="form-input" placeholder="Email Address" value={contact.email} onChange={e => updateContact({ email: e.target.value })} />
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="phone">Phone Number</label>
-              <input id="phone" type="tel" className="form-input" placeholder="Phone Number" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} />
+              <input id="phone" type="tel" className="form-input" placeholder="Phone Number" value={contact.phone} onChange={e => updateContact({ phone: e.target.value })} />
             </div>
             <div className="intake-nav">
               <button className="btn btn-primary" onClick={goNext} disabled={!isStep1Valid()}>Continue →</button>
@@ -480,7 +542,7 @@ export default function LeadIntakeForm() {
                 </p>
                 <div className="radio-group">
                   {question.options.map(option => (
-                    <div key={option.value} className={`radio-option ${responses[key] === option.value ? 'selected' : ''}`} onClick={() => setResponses({ ...responses, [key]: option.value })}>
+                    <div key={option.value} className={`radio-option ${responses[key] === option.value ? 'selected' : ''}`} onClick={() => selectAnswer(key, option.value)}>
                       <input type="radio" name={key} value={option.value} checked={responses[key] === option.value} readOnly />
                       <label>{option.label}</label>
                     </div>
@@ -566,7 +628,7 @@ export default function LeadIntakeForm() {
                                   key={time}
                                   type="button"
                                   className={`cal-time-slot ${selectedTime === time ? 'selected' : ''}`}
-                                  onClick={() => setSelectedTime(time)}
+                                  onClick={() => selectTime(time)}
                                 >
                                   <span className="cal-time-slot-time">{showConverted ? converted.time : time}</span>
                                   <span className="cal-time-slot-dur">
