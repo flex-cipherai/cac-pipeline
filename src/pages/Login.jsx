@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import './Login.css'
 
 export default function Login() {
@@ -171,9 +171,9 @@ export default function Login() {
               </form>
 
               <div className="login-footer">
-                <Link to="/intake" className="login-intake-link">
-                  View the public lead intake form →
-                </Link>
+                <a href="https://sdfmgroup.com/book" className="login-intake-link">
+                  View the public booking page →
+                </a>
               </div>
             </>
           )}

@@ -22,10 +22,12 @@ export default function Settings() {
   const [bookingConfig, setBookingConfig] = useState({
     booking_window_days: '14',
     booking_min_notice_hours: '4',
-    booking_duration_minutes: '60',
+    booking_duration_minutes: '30',
     booking_buffer_minutes: '0',
     reminder_hours_before_call: '24',
     team_timezone: 'Africa/Nairobi',
+    meeting_link: '',
+    whatsapp_number: '254757230579',
   })
   const [savingConfig, setSavingConfig] = useState(false)
 
@@ -167,7 +169,7 @@ export default function Settings() {
     // Fetch booking config from system_settings
     const { data: configData } = await supabase
       .from('system_settings').select('key, value')
-      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes', 'reminder_hours_before_call', 'team_timezone'])
+      .in('key', ['booking_window_days', 'booking_min_notice_hours', 'booking_duration_minutes', 'booking_buffer_minutes', 'reminder_hours_before_call', 'team_timezone', 'meeting_link', 'whatsapp_number'])
     if (configData) {
       const cfg = { ...bookingConfig }
       configData.forEach(row => { if (row.key && row.value) cfg[row.key] = row.value })
@@ -790,6 +792,16 @@ export default function Settings() {
                 ))}
               </select>
               <span className="form-hint">The timezone Calendar Availability slots above are defined in.</span>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Meeting link (Google Meet)</label>
+              <input className="form-input" type="url" placeholder="https://meet.google.com/abc-defg-hij" value={bookingConfig.meeting_link} onChange={e => setBookingConfig({ ...bookingConfig, meeting_link: e.target.value.trim() })} />
+              <span className="form-hint">Shown on the booking confirmation page and in the confirmation email and calendar invite. Leave empty to say the link will be emailed.</span>
+            </div>
+            <div className="form-group">
+              <label className="form-label">WhatsApp number</label>
+              <input className="form-input" type="tel" placeholder="254757230579" value={bookingConfig.whatsapp_number} onChange={e => setBookingConfig({ ...bookingConfig, whatsapp_number: e.target.value.replace(/D/g, '') })} />
+              <span className="form-hint">Digits only, country code first. Used for the WhatsApp links in booking emails and on the booking page.</span>
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-md)' }}>

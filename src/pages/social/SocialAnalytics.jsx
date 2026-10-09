@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { DateTime } from 'luxon'
 import { supabase } from '../../lib/supabase'
 import { exportCSV, exportSocialAnalyticsPDF } from '../../lib/exportUtils'
+import { isQualified } from '../../lib/scoring'
 import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../../components/PeriodSelector/PeriodSelector'
 import '../Dashboard.css'
 import '../MarketingAnalytics.css'
@@ -72,7 +73,7 @@ export default function SocialAnalytics() {
       supabase.from('analytics_snapshots').select('*').is('post_id', null).order('captured_at'),
       supabase.from('analytics_snapshots').select('*, posts(id, caption, post_type, pillar_id, campaign_id, status, content_pillars(name), content_campaigns(name))').not('post_id', 'is', null).order('captured_at'),
       supabase.from('content_campaigns').select('*'),
-      supabase.from('leads').select('id, classification, is_disqualified, scheduled_date, source').ilike('source', '%linkedin%'),
+      supabase.from('leads').select('id, classification, is_disqualified, current_stage, scheduled_date, source').ilike('source', '%linkedin%'),
       supabase.from('posts').select('id, caption, status').eq('status', 'posted'),
     ])
     if (accSnap.data) setAccountSnapshots(accSnap.data)
@@ -150,7 +151,7 @@ export default function SocialAnalytics() {
 
   const pipelineAttribution = useMemo(() => {
     const total = linkedInLeads.length
-    const qualified = linkedInLeads.filter(l => l.classification !== 'cold' && !l.is_disqualified).length
+    const qualified = linkedInLeads.filter(isQualified).length
     const calls = linkedInLeads.filter(l => l.scheduled_date).length
     return { total, qualified, calls }
   }, [linkedInLeads])

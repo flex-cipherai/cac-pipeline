@@ -25,6 +25,29 @@
 }
 
 /* ─── Stats Row ─── */
+.dash-incomplete-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--hot-color);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: var(--text-sm);
+}
+
+.dash-incomplete-banner a {
+  color: var(--hot-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.dash-incomplete-banner a:hover { text-decoration: underline; }
+
 .dash-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -62,6 +85,7 @@
 .classification-segment.hot { background: var(--hot-color); }
 .classification-segment.warm { background: var(--warm-color); }
 .classification-segment.cold { background: #b0b0b0; }
+.classification-segment.unscored { background: repeating-linear-gradient(135deg, #d9d9d9, #d9d9d9 4px, #ececec 4px, #ececec 8px); }
 
 /* ─── Legend ─── */
 .classification-legend {
@@ -87,6 +111,7 @@
 .legend-dot.hot { background: var(--hot-color); }
 .legend-dot.warm { background: var(--warm-color); }
 .legend-dot.cold { background: #b0b0b0; }
+.legend-dot.unscored { background: repeating-linear-gradient(135deg, #d9d9d9, #d9d9d9 3px, #ececec 3px, #ececec 6px); }
 
 .legend-label {
   flex: 1;

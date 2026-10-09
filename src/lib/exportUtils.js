@@ -1,6 +1,7 @@
 // Export utilities — CSV and PDF generation for SDFM Pipeline
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { tierLabel } from './scoring'
 
 // ── CSV Export ──
 
@@ -83,8 +84,8 @@ export function exportLeadsPDF(leads, filename) {
     l.company_name || '',
     l.email || '',
     l.phone || '',
-    l.is_disqualified ? 'Cold' : (l.classification || '').charAt(0).toUpperCase() + (l.classification || '').slice(1),
-    `${l.total_score}/21`,
+    tierLabel(l),
+    l.classification === 'unscored' || l.current_stage === 'Incomplete' ? '' : `${l.total_score}/21`,
     l.is_lost ? 'Lost' : (l.current_stage || ''),
     l.source || 'Website',
     l.created_at ? new Date(l.created_at).toLocaleDateString('en-GB') : '',

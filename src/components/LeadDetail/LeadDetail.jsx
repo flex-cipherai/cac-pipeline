@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
-import { QUALIFICATION_QUESTIONS, PIPELINE_STAGES, scoreLead } from '../../lib/scoring'
+import { QUALIFICATION_QUESTIONS, PIPELINE_STAGES, scoreLead, isRejected, isIncomplete, tierLabel, tierBadgeClass, whatsappUrl } from '../../lib/scoring'
 import { DEFAULT_TIMEZONE, convertScheduledTime } from '../../lib/timezone'
 import './LeadDetail.css'
 
@@ -91,8 +91,11 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
       q4_score: scored.q4_score, q5_score: scored.q5_score,
       total_score: scored.total_score,
       classification: scored.classification,
-      is_disqualified: scored.is_disqualified,
+      // Only leads the old intake form auto-rejected keep a disqualified flag. A lead who booked
+      // through the new flow is never turned away because of how the questions are answered.
+      is_disqualified: lead.current_stage === 'Disqualified' ? scored.is_disqualified : false,
       disqualifier_reason: scored.disqualifier_reason,
+      qualification_completed_at: scored.classification === 'unscored' ? lead.qualification_completed_at : (lead.qualification_completed_at || new Date().toISOString()),
     }
     for (const key of Object.keys(Q_FIELD_MAP)) {
       const option = QUALIFICATION_QUESTIONS[key].options.find(o => o.value === responseForm[key])
@@ -167,8 +170,9 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
 
   if (!lead) return null
 
-  const badgeClass = lead.is_disqualified ? 'badge badge-cold' : `badge badge-${lead.classification}`
-  const classLabel = lead.is_disqualified ? 'Cold' : lead.classification.charAt(0).toUpperCase() + lead.classification.slice(1)
+  const badgeClass = tierBadgeClass(lead)
+  const classLabel = tierLabel(lead)
+  const waHref = whatsappUrl(lead.phone, `Hi ${String(lead.full_name || '').split(' ')[0]}, this is SDFM Group. ${isIncomplete(lead) ? 'You started booking a free AI Gap Assessment call on our website. Would you like help picking a time?' : ''}`.trim())
 
   const qResponses = [
     { key: 'q1', label: 'Annual Revenue', value: lead.q1_revenue, score: lead.q1_score },
@@ -201,7 +205,7 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
           </div>
           <div className="lead-detail-meta-row">
             <span className={badgeClass}>{classLabel}</span>
-            <span className="lead-detail-score">{lead.total_score}/21</span>
+            {lead.classification !== 'unscored' && !isIncomplete(lead) && <span className="lead-detail-score">{lead.total_score}/21</span>}
             {lead.is_lost && <span className="lead-detail-lost-tag">Lost</span>}
           </div>
 
@@ -219,8 +223,8 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
                 Call
               </a>
             )}
-            {lead.phone && lead.has_whatsapp && (
-              <a href={`https://wa.me/${lead.phone.replace(/[^0-9+]/g, '')}`} target="_blank" rel="noopener noreferrer" className="lead-detail-contact-btn lead-detail-contact-wa" title="WhatsApp">
+            {waHref && (lead.has_whatsapp || isIncomplete(lead)) && (
+              <a href={waHref} target="_blank" rel="noopener noreferrer" className="lead-detail-contact-btn lead-detail-contact-wa" title="WhatsApp">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1A6 6 0 0 0 1.7 10L1 13l3.1-.7A6 6 0 1 0 7 1zm3.2 8.5c-.1.4-.8.7-1.1.8-.3 0-.6.1-2-.4A7.3 7.3 0 0 1 4.2 7c-.6-.7-.9-1.5-.9-2.2 0-.7.3-1 .4-1.2.1-.1.3-.2.4-.2h.3c.1 0 .3 0 .4.3s.5 1.3.6 1.4c.1.1 0 .3-.1.4l-.3.3c-.1.1-.2.2-.1.4.1.2.6 1 1.2 1.6.8.7 1.5 1 1.7 1 .2.1.3 0 .5-.1l.5-.6c.2-.2.3-.2.5-.1l1.4.7c.2.1.3.2.4.3 0 .1 0 .5-.2.9z" /></svg>
                 WhatsApp
               </a>
@@ -267,7 +271,7 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
                 </div>
                 <div className="lead-detail-field">
                   <span className="lead-detail-field-label">Current Stage</span>
-                  <span className="lead-detail-field-value">{lead.is_lost ? 'Lost' : lead.is_disqualified ? 'Disqualified' : lead.current_stage}</span>
+                  <span className="lead-detail-field-value">{lead.is_lost ? 'Lost' : isRejected(lead) ? 'Disqualified' : isIncomplete(lead) ? 'Incomplete — no time picked' : lead.current_stage}</span>
                 </div>
                 {lead.scheduled_day && (() => {
                   const converted = lead.scheduled_date && convertScheduledTime(lead.scheduled_date, lead.scheduled_time, teamTimezone, myTimezone)
@@ -287,6 +291,18 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
                     <span className="lead-detail-field-value lead-detail-field-lost">{lead.lost_reason}</span>
                   </div>
                 )}
+                {lead.challenge_notes && (
+                  <div className="lead-detail-field">
+                    <span className="lead-detail-field-label">Wants to fix first</span>
+                    <span className="lead-detail-field-value">{lead.challenge_notes}</span>
+                  </div>
+                )}
+                {!lead.is_disqualified && lead.disqualifier_reason && (
+                  <div className="lead-detail-field">
+                    <span className="lead-detail-field-label">Flagged answer</span>
+                    <span className="lead-detail-field-value">{lead.disqualifier_reason}</span>
+                  </div>
+                )}
                 {lead.is_disqualified && lead.disqualifier_reason && (
                   <div className="lead-detail-field">
                     <span className="lead-detail-field-label">Disqualifier</span>
@@ -300,7 +316,7 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
               </div>
 
               {/* Gap 4: Follow-up reminder */}
-              {!lead.is_disqualified && (
+              {!isRejected(lead) && (
                 <div className="lead-detail-followup">
                   <div className="lead-detail-followup-header">
                     <span className="lead-detail-field-label">Follow-up Date</span>
@@ -333,7 +349,7 @@ export default function LeadDetail({ lead, onClose, onLeadUpdated }) {
                     ))}
                     <div className="lead-detail-response-total">
                       <span>Total Score</span>
-                      <span className="lead-detail-response-total-value">{lead.total_score}/21</span>
+                      <span className="lead-detail-response-total-value">{lead.classification === 'unscored' ? 'Not scored yet' : `${lead.total_score}/21`}</span>
                     </div>
                   </div>
                   <button className="btn btn-secondary btn-sm lead-detail-response-edit-btn" onClick={handleEditResponses}>

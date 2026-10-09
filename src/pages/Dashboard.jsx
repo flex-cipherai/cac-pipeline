@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { PIPELINE_STAGES, estimatePipelineValue } from '../lib/scoring'
+import { PIPELINE_STAGES, estimatePipelineValue, isIncomplete, isRejected, isQualified, isPipelineLead } from '../lib/scoring'
 import { exportCSV, exportDashboardPDF } from '../lib/exportUtils'
 import { DEFAULT_TIMEZONE, convertScheduledTime, todayISODateInZone } from '../lib/timezone'
 import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../components/PeriodSelector/PeriodSelector'
@@ -49,14 +50,20 @@ export default function Dashboard() {
 
   // ── Metrics ──
   const totalLeads = leads.length
-  const qualifiedLeads = leads.filter(l => l.classification !== 'cold' && !l.is_disqualified)
+  // Booked leads are confirmed whatever their tier; the prep questions only score them.
+  // See the lead state helpers in lib/scoring.js.
+  const qualifiedLeads = leads.filter(isQualified)
   const qualifiedCount = qualifiedLeads.length
-  const qualificationRate = totalLeads > 0 ? Math.round((qualifiedCount / totalLeads) * 100) : 0
-  const pipelineLeads = leads.filter(l => !l.is_disqualified && l.classification !== 'cold' && !l.is_lost && l.current_stage !== 'Converted')
+  const incompleteCount = leads.filter(isIncomplete).length
+  const hotCount = leads.filter(l => !isRejected(l) && !isIncomplete(l) && l.classification === 'hot').length
+  const warmCount = leads.filter(l => !isRejected(l) && !isIncomplete(l) && l.classification === 'warm').length
+  const coldCount = leads.filter(l => isRejected(l) || (!isIncomplete(l) && l.classification === 'cold')).length
+  const unscoredCount = leads.filter(l => !isRejected(l) && !isIncomplete(l) && l.classification === 'unscored').length
+  // Rate among leads that have actually been scored (answered the questions or were turned away).
+  const scoredCount = hotCount + warmCount + coldCount
+  const qualificationRate = scoredCount > 0 ? Math.round((qualifiedCount / scoredCount) * 100) : 0
+  const pipelineLeads = leads.filter(isPipelineLead)
   const inPipeline = pipelineLeads.length
-  const hotCount = leads.filter(l => l.classification === 'hot' && !l.is_disqualified).length
-  const warmCount = leads.filter(l => l.classification === 'warm' && !l.is_disqualified).length
-  const coldCount = leads.filter(l => l.classification === 'cold' || l.is_disqualified).length
   const sources = {}
   leads.forEach(l => { const src = l.source || 'Website'; sources[src] = (sources[src] || 0) + 1 })
   const convertedCount = leads.filter(l => l.current_stage === 'Converted').length
@@ -68,7 +75,7 @@ export default function Dashboard() {
   const stageValueMap = {}
   PIPELINE_STAGES.forEach(s => { stageCountMap[s.key] = 0; stageValueMap[s.key] = 0 })
   leads.forEach(l => {
-    if (l.current_stage && stageCountMap[l.current_stage] !== undefined && !l.is_lost && !l.is_disqualified) {
+    if (l.current_stage && stageCountMap[l.current_stage] !== undefined && !l.is_lost && !isRejected(l)) {
       stageCountMap[l.current_stage]++
       stageValueMap[l.current_stage] += estimatePipelineValue(l.q1_revenue)
     }
@@ -124,7 +131,7 @@ export default function Dashboard() {
   const funnelMax = Math.max(...funnelStages.map(s => s.count), 1)
 
   const roleLabel = profile?.role === 'sales' ? 'Sales' : 'Admin'
-  const classTotal = hotCount + warmCount + coldCount
+  const classTotal = hotCount + warmCount + coldCount + unscoredCount
   const sourcesArr = Object.entries(sources).sort((a, b) => b[1] - a[1])
   const stageCounts = PIPELINE_STAGES.map(s => [s.label, stageCountMap[s.key]])
 
@@ -230,6 +237,13 @@ export default function Dashboard() {
         </div>
       )}
 
+      {incompleteCount > 0 && (
+        <div className="dash-incomplete-banner">
+          <span><strong>{incompleteCount}</strong> {incompleteCount === 1 ? 'person started' : 'people started'} booking a call but did not pick a time.</span>
+          <Link to="/leads?stage=Incomplete">Follow up →</Link>
+        </div>
+      )}
+
       {/* Lead Metrics */}
       <div className="dash-stats-row">
         <div className="stat-card"><div className="stat-icon">{StatIcons.total}</div><div className="stat-label">Total Leads</div><div className="stat-value">{totalLeads}</div></div>
@@ -247,11 +261,13 @@ export default function Dashboard() {
               {hotCount > 0 && <div className="classification-segment hot" style={{ flex: hotCount }} />}
               {warmCount > 0 && <div className="classification-segment warm" style={{ flex: warmCount }} />}
               {coldCount > 0 && <div className="classification-segment cold" style={{ flex: coldCount }} />}
+              {unscoredCount > 0 && <div className="classification-segment unscored" style={{ flex: unscoredCount }} />}
             </div>
             <div className="classification-legend">
               <div className="legend-item"><span className="legend-dot hot" /><span className="legend-label">Hot</span><span className="legend-value">{hotCount}</span></div>
               <div className="legend-item"><span className="legend-dot warm" /><span className="legend-label">Warm</span><span className="legend-value">{warmCount}</span></div>
               <div className="legend-item"><span className="legend-dot cold" /><span className="legend-label">Cold</span><span className="legend-value">{coldCount}</span></div>
+              <div className="legend-item"><span className="legend-dot unscored" /><span className="legend-label">Not scored yet</span><span className="legend-value">{unscoredCount}</span></div>
             </div>
           </>) : (<div className="empty-state"><p className="empty-state-desc">No leads yet</p></div>)}
         </div>

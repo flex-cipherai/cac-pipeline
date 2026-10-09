@@ -1,8 +1,8 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/Layout/Layout'
 import Login from './pages/Login'
-import LeadIntakeForm from './pages/LeadIntakeForm'
 import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
@@ -70,11 +70,21 @@ function PublicRoute({ children }) {
   return children
 }
 
+const BOOKING_URL = 'https://sdfmgroup.com/book'
+
+// Sends the visitor to another site, keeping any ?source= / utm_ params they arrived with.
+function ExternalRedirect({ to }) {
+  useEffect(() => { window.location.replace(to + window.location.search) }, [to])
+  return null
+}
+
 function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/intake" element={<LeadIntakeForm />} />
+      {/* The public booking form now lives on the marketing site (sdfmgroup.com/book).
+          netlify.toml 301s this path; the route is the fallback for local/dev use. */}
+      <Route path="/intake" element={<ExternalRedirect to={BOOKING_URL} />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/login"

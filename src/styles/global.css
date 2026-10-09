@@ -64,6 +64,13 @@ input, select, textarea {
   background: var(--cold-bg);
 }
 
+.badge-unscored,
+.badge-incomplete {
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+
 /* ─── Stat Cards ─── */
 .stat-card {
   background: var(--white);

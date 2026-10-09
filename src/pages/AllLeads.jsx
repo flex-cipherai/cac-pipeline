@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { PIPELINE_STAGES } from '../lib/scoring'
+import { PIPELINE_STAGES, INCOMPLETE_STAGE, isRejected, isIncomplete, leadTier, tierLabel, tierBadgeClass } from '../lib/scoring'
 import { exportCSV, exportLeadsPDF } from '../lib/exportUtils'
 import LeadDetail from '../components/LeadDetail/LeadDetail'
 import PeriodSelector, { filterByPeriod } from '../components/PeriodSelector/PeriodSelector'
@@ -20,7 +21,9 @@ export default function AllLeads() {
 
   // Gap 1: Filters
   const [filterClass, setFilterClass] = useState('')
-  const [filterStage, setFilterStage] = useState('')
+  // ?stage=Incomplete opens the list on unfinished bookings (linked from the dashboard)
+  const [searchParams] = useSearchParams()
+  const [filterStage, setFilterStage] = useState(searchParams.get('stage') || '')
   const [filterStatus, setFilterStatus] = useState('')
 
   // Gap 1: Sorting
@@ -101,15 +104,8 @@ export default function AllLeads() {
   // Apply period filter first
   const leads = filterByPeriod(allLeads, period)
 
-  function badgeClass(lead) {
-    if (lead.is_disqualified) return 'badge badge-cold'
-    return `badge badge-${lead.classification}`
-  }
-
-  function classLabel(lead) {
-    if (lead.is_disqualified) return 'Cold'
-    return lead.classification.charAt(0).toUpperCase() + lead.classification.slice(1)
-  }
+  const badgeClass = tierBadgeClass
+  const classLabel = tierLabel
 
   function stageLabel(lead) {
     if (lead.is_lost) return 'Lost'
@@ -119,13 +115,14 @@ export default function AllLeads() {
   function stageClass(lead) {
     if (lead.is_lost) return 'stage-lost'
     if (lead.current_stage === 'Converted') return 'stage-converted'
-    if (lead.current_stage === 'Disqualified') return 'stage-disqualified'
+    if (lead.current_stage === 'Disqualified' || isIncomplete(lead)) return 'stage-disqualified'
     return ''
   }
 
   function getStatus(lead) {
     if (lead.is_lost) return 'lost'
-    if (lead.is_disqualified || lead.classification === 'cold') return 'disqualified'
+    if (isRejected(lead)) return 'disqualified'
+    if (isIncomplete(lead)) return 'incomplete'
     return 'active'
   }
 
@@ -136,7 +133,8 @@ export default function AllLeads() {
       if (!l.full_name?.toLowerCase().includes(q) && !l.company_name?.toLowerCase().includes(q) && !l.email?.toLowerCase().includes(q)) return false
     }
     if (filterClass) {
-      const cls = l.is_disqualified ? 'cold' : l.classification
+      const tier = leadTier(l)
+      const cls = tier === 'rejected' ? 'cold' : tier
       if (cls !== filterClass) return false
     }
     if (filterStage) {
@@ -300,16 +298,19 @@ export default function AllLeads() {
             <option value="hot">Hot</option>
             <option value="warm">Warm</option>
             <option value="cold">Cold</option>
+            <option value="unscored">Not scored yet</option>
           </select>
           <select className="leads-filter-select" value={filterStage} onChange={e => setFilterStage(e.target.value)}>
             <option value="">All Stages</option>
             {PIPELINE_STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
             <option value="Disqualified">Disqualified</option>
+            <option value={INCOMPLETE_STAGE}>Incomplete (no time picked)</option>
             <option value="Lost">Lost</option>
           </select>
           <select className="leads-filter-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
             <option value="">All Status</option>
             <option value="active">Active</option>
+            <option value="incomplete">Incomplete</option>
             <option value="lost">Lost</option>
             <option value="disqualified">Disqualified</option>
           </select>

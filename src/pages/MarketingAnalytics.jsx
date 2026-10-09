@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { exportCSV } from '../lib/exportUtils'
+import { isQualified, isRejected, isIncomplete } from '../lib/scoring'
 import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../components/PeriodSelector/PeriodSelector'
 import './Dashboard.css'
 import './MarketingAnalytics.css'
@@ -27,11 +28,14 @@ export default function MarketingAnalytics() {
   const leads = filterByPeriod(allLeads, period)
 
   const totalLeads = leads.length
-  const qualifiedCount = leads.filter(l => l.classification !== 'cold' && !l.is_disqualified).length
-  const qualificationRate = totalLeads > 0 ? Math.round((qualifiedCount / totalLeads) * 100) : 0
-  const coldCount = leads.filter(l => l.classification === 'cold' || l.is_disqualified).length
-  const hotCount = leads.filter(l => l.classification === 'hot' && !l.is_disqualified).length
-  const warmCount = leads.filter(l => l.classification === 'warm' && !l.is_disqualified).length
+  // Qualified = Hot or Warm. Booked leads that have not answered the prep questions yet
+  // (unscored) and unfinished bookings are not scored, so they stay out of the rate.
+  const qualifiedCount = leads.filter(isQualified).length
+  const coldCount = leads.filter(l => isRejected(l) || (!isIncomplete(l) && l.classification === 'cold')).length
+  const hotCount = leads.filter(l => !isRejected(l) && !isIncomplete(l) && l.classification === 'hot').length
+  const warmCount = leads.filter(l => !isRejected(l) && !isIncomplete(l) && l.classification === 'warm').length
+  const scoredCount = hotCount + warmCount + coldCount
+  const qualificationRate = scoredCount > 0 ? Math.round((qualifiedCount / scoredCount) * 100) : 0
   const lostCount = leads.filter(l => l.is_lost).length
 
   // Source breakdown with quality
@@ -40,8 +44,8 @@ export default function MarketingAnalytics() {
     const src = l.source || 'Website'
     if (!sourceData[src]) sourceData[src] = { total: 0, qualified: 0, cold: 0 }
     sourceData[src].total++
-    if (l.classification !== 'cold' && !l.is_disqualified) sourceData[src].qualified++
-    else sourceData[src].cold++
+    if (isQualified(l)) sourceData[src].qualified++
+    else if (isRejected(l) || l.classification === 'cold') sourceData[src].cold++
   })
   const sourcesArr = Object.entries(sourceData).sort((a, b) => b[1].total - a[1].total)
   const maxSourceCount = sourcesArr.length > 0 ? Math.max(...sourcesArr.map(([, d]) => d.total)) : 1
@@ -59,7 +63,8 @@ export default function MarketingAnalytics() {
     monthlyTrend.push({
       label: `${SHORT_MONTHS[m]}`,
       total: monthLeads.length,
-      qualified: monthLeads.filter(l => l.classification !== 'cold' && !l.is_disqualified).length,
+      qualified: monthLeads.filter(isQualified).length,
+      scored: monthLeads.filter(l => isRejected(l) || (!isIncomplete(l) && ['hot', 'warm', 'cold'].includes(l.classification))).length,
     })
   }
   const trendMax = Math.max(...monthlyTrend.map(m => m.total), 1)
@@ -67,7 +72,7 @@ export default function MarketingAnalytics() {
   // Quality trend (qualification rate per month)
   const qualityTrend = monthlyTrend.map(m => ({
     ...m,
-    rate: m.total > 0 ? Math.round((m.qualified / m.total) * 100) : 0,
+    rate: m.scored > 0 ? Math.round((m.qualified / m.scored) * 100) : 0,
   }))
 
   function handleExportCSV() {

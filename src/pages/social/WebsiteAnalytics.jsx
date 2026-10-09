@@ -35,16 +35,16 @@ const PRESETS = [
 
 const FUNNEL_STEPS = [
   { key: 'sessions', label: 'Website sessions' },
-  { key: 'viewed_form', label: 'Opened the intake form' },
+  { key: 'viewed_form', label: 'Opened the booking page' },
   { key: 'started_form', label: 'Started filling it in' },
-  { key: 'contact_done', label: 'Completed contact details' },
-  { key: 'qualification_done', label: 'Answered the qualification questions' },
+  { key: 'contact_done', label: 'Saved contact details — lead created' },
   { key: 'picked_slot', label: 'Picked a call time' },
-  { key: 'submitted', label: 'Submitted — lead created' },
-  { key: 'qualified', label: 'Qualified lead' },
+  { key: 'submitted', label: 'Booked the call' },
+  { key: 'prep_done', label: 'Answered the prep questions (optional)' },
+  { key: 'qualified', label: 'Hot or warm lead' },
 ]
 
-const STEP_LABELS = { 1: 'Contact details', 2: 'Qualification', 3: 'Schedule call' }
+const STEP_LABELS = { 1: 'Contact details', 2: 'Pick a time', 3: 'Booked' }
 
 const DEFAULT_TZ = 'Africa/Nairobi'
 
@@ -351,7 +351,8 @@ export default function WebsiteAnalytics() {
       r.drop = prev ? prev - r.count : 0
       // The first step (all sessions -> opened the form) is mostly people who
       // were never going to book, so the "biggest leak" callout starts after it.
-      if (i >= 2 && prev > 0 && r.drop / prev > worstDrop) { worstDrop = r.drop / prev; worst = i }
+      // Only the steps up to booking count: the prep questions are optional, so a drop there is expected.
+      if (i >= 2 && r.key !== 'prep_done' && r.key !== 'qualified' && prev > 0 && r.drop / prev > worstDrop) { worstDrop = r.drop / prev; worst = i }
     })
     if (worst >= 0 && worstDrop > 0) rows[worst].worst = true
     return rows
@@ -471,7 +472,7 @@ export default function WebsiteAnalytics() {
         <div className="section-card wa-onboarding">
           <h2 className="section-card-title">No website activity recorded yet</h2>
           <p className="wa-hint">
-            The Lead Intake Form is tracked automatically. To see how visitors find and browse sdfmgroup.com too, add the tracker snippet to that site.
+            The booking page (sdfmgroup.com/book) is tracked by the same snippet as the rest of sdfmgroup.com. Add the tracker snippet to the website to see how visitors find, browse and book.
           </p>
           <button className="btn btn-primary btn-sm" onClick={() => setShowInstall(true)}>Show install snippet</button>
         </div>
@@ -758,7 +759,7 @@ export default function WebsiteAnalytics() {
             </div>
           )}
 
-          <Section title="Intake funnel" hint="Each step counts visits that reached it. The red marker shows where the most people are lost after opening the form.">
+          <Section title="Booking funnel" hint="Each step counts visits that reached it. Contact details, booking and prep answers come from the leads table, so they cannot be inflated. The red marker shows where the most people are lost on the way to a booked call.">
             <div className="wa-funnel">
               {funnelRows.map((r, i) => (
                 <div className={`wa-funnel-row ${r.worst ? 'worst' : ''}`} key={r.key}>
@@ -775,10 +776,10 @@ export default function WebsiteAnalytics() {
           </Section>
 
           <div className="dash-grid-2">
-            <Section title="Intake form steps" hint="Where visitors spend time and who goes back.">
+            <Section title="Booking page steps" hint="Where visitors spend time and who goes back.">
               <DataTable
                 rows={conv?.steps?.map(s => ({ ...s, name: STEP_LABELS[s.step] || `Step ${s.step}` }))}
-                empty="No intake form activity in this period."
+                empty="No booking page activity in this period."
                 columns={[
                   { key: 'name', label: 'Step' },
                   { key: 'views', label: 'Reached', num: true, render: r => num(r.views) },
@@ -834,7 +835,7 @@ export default function WebsiteAnalytics() {
             </Section>
           </div>
 
-          <Section title="Who answers what" hint="The option each visitor settled on (their last choice) for every qualification question. Options marked “disqualifies” rule a lead out — a large share there means the wrong audience is reaching the form.">
+          <Section title="Who answers what" hint="The option each visitor settled on (their last choice) for every prep question, asked after a call is booked. Options marked “flagged” never block a booking, but a large share there means the wrong audience is reaching the page.">
             <div className="wa-answers">
               {Object.entries(answersByQuestion).map(([q, a]) => (
                 <div className="wa-answer-block" key={q}>
@@ -842,7 +843,7 @@ export default function WebsiteAnalytics() {
                   <div className="wa-barlist">
                     {a.options.map(o => (
                       <div className="wa-barlist-row" key={o.name}>
-                        <span className="wa-barlist-label wa-wide" title={o.name}>{o.name}{o.disqualifier && <span className="wa-chip wa-chip-warn">disqualifies</span>}</span>
+                        <span className="wa-barlist-label wa-wide" title={o.name}>{o.name}{o.disqualifier && <span className="wa-chip wa-chip-warn">flagged</span>}</span>
                         <div className="wa-barlist-track"><div className={`wa-barlist-fill ${o.disqualifier ? 'warn' : ''}`} style={{ width: `${a.total ? (o.sessions / a.total) * 100 : 0}%` }} /></div>
                         <span className="wa-barlist-value">{num(o.sessions)} <span className="wa-muted">{pct(o.sessions, a.total, 0)}</span></span>
                       </div>
@@ -864,7 +865,7 @@ export default function WebsiteAnalytics() {
                 { key: 'campaign', label: 'Campaign', render: r => r.campaign || '—' },
                 { key: 'pageviews', label: 'Pages', num: true, render: r => num(r.pageviews) },
                 { key: 'minutes_to_convert', label: 'To book', num: true, render: r => `${r.minutes_to_convert} min` },
-                { key: 'classification', label: 'Result', render: r => <span className={`wa-chip ${r.qualified ? 'wa-chip-ok' : 'wa-chip-warn'}`}>{r.qualified ? r.classification : r.is_disqualified ? 'disqualified' : r.classification}</span> },
+                { key: 'classification', label: 'Result', render: r => <span className={`wa-chip ${r.qualified ? 'wa-chip-ok' : 'wa-chip-warn'}`}>{r.is_disqualified ? 'disqualified' : r.classification}</span> },
               ]}
             />
           </Section>
@@ -877,13 +878,13 @@ export default function WebsiteAnalytics() {
           <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
             <h3 className="modal-title">Install the website tracker</h3>
             <p className="modal-subtitle">
-              The Lead Intake Form is already tracked. Paste this just before <code>&lt;/head&gt;</code> on every page of sdfmgroup.com to measure the whole site and follow visitors into the form.
+              Paste this just before <code>&lt;/head&gt;</code> on every page of sdfmgroup.com (it is already on the site). It measures the whole visitor journey, including the booking page.
             </p>
             <pre className="wa-snippet">{getTrackerSnippet()}</pre>
             <ul className="wa-install-notes">
               <li><strong>Consent:</strong> visits are always counted anonymously (no IP stored, no persistent ID). A returning-visitor ID is only added when the visitor accepts cookies — the tracker reads <code>localStorage.sdfm_cookie_consent</code> (“accepted” / “rejected”). If the marketing site's cookie banner stores consent elsewhere, call <code>window.sdfm.setConsent('accepted' | 'rejected')</code> from it.</li>
               <li><strong>Your own visits:</strong> open any page once with <code>?sdfm_ignore=1</code> (e.g. sdfmgroup.com/?sdfm_ignore=1) on each browser you use, so staff and testing don't pollute the numbers. <code>?sdfm_ignore=0</code> turns tracking back on.</li>
-              <li><strong>Call-to-action links</strong> to the intake form are detected automatically and carry the session across, so a visit that starts on the website and ends in a booking is one journey. Add <code>data-sdfm-cta</code> to any other link you want counted as a CTA.</li>
+              <li><strong>Call-to-action links:</strong> every button that leads to the booking page, WhatsApp, phone or email carries <code>data-sdfm-cta</code> and a <code>data-sdfm-label</code> naming where it sits (for example <code>hero_book</code>), so you can see which placements get clicks. Add the attribute to any new CTA you create.</li>
               <li><strong>Privacy policy:</strong> update the cookie section of your privacy policy to mention first-party analytics.</li>
             </ul>
             <div className="modal-actions">

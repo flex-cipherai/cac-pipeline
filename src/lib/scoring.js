@@ -86,9 +86,11 @@ export function scoreLead(responses) {
     }
   }
 
-  // Determine classification
-  let classification = 'cold'
-  if (!isDisqualified) {
+  // Determine classification. Until all five questions are answered the lead is simply
+  // not scored yet (same rule as the booking-prep Edge Function).
+  const allAnswered = Object.keys(questions).every(key => questions[key].options.some(o => o.value === responses[key]))
+  let classification = allAnswered ? 'cold' : 'unscored'
+  if (!isDisqualified && allAnswered) {
     if (totalScore >= CLASSIFICATION_THRESHOLDS.hot.min) {
       classification = 'hot'
     } else if (totalScore >= CLASSIFICATION_THRESHOLDS.warm.min) {
@@ -107,6 +109,72 @@ export function scoreLead(responses) {
     is_disqualified: isDisqualified,
     disqualifier_reason: disqualifierReason,
   }
+}
+
+// ── Lead state helpers ──
+// The public booking flow (sdfmgroup.com/book) changed what the lead fields mean:
+//   - Everyone who books a call is confirmed. Qualification is asked afterwards and only
+//     scores the lead, so a booked lead can be 'unscored' (hasn't answered yet) or 'cold'
+//     and is still a real, scheduled lead.
+//   - A lead is created as soon as the contact step is saved. Until a time is picked its
+//     stage is 'Incomplete' (a lead to follow up, not a pipeline lead).
+//   - 'Disqualified' / is_disqualified belong to the old auto-reject flow and to manual
+//     decisions; the booking flow never sets them.
+// Every dashboard should count leads through these so the rules live in one place.
+
+export const INCOMPLETE_STAGE = 'Incomplete'
+
+export function isIncomplete(lead) {
+  return lead.current_stage === INCOMPLETE_STAGE
+}
+
+// Turned away: auto-rejected by the old intake form, or disqualified by hand.
+export function isRejected(lead) {
+  return !!lead.is_disqualified || lead.current_stage === 'Disqualified'
+}
+
+// 'hot' | 'warm' | 'cold' | 'unscored' | 'rejected' | 'incomplete'
+export function leadTier(lead) {
+  if (isRejected(lead)) return 'rejected'
+  if (isIncomplete(lead)) return 'incomplete'
+  return lead.classification || 'unscored'
+}
+
+// Hot or warm, and not turned away. This is what "Qualified" means on every report.
+export function isQualified(lead) {
+  return !isRejected(lead) && (lead.classification === 'hot' || lead.classification === 'warm')
+}
+
+// A real, active lead in the sales pipeline (booked or later, whatever its tier).
+export function isPipelineLead(lead) {
+  return !isRejected(lead) && !isIncomplete(lead) && !lead.is_lost && lead.current_stage !== 'Converted'
+}
+
+// Label + badge class for a lead's tier column.
+export function tierLabel(lead) {
+  const tier = leadTier(lead)
+  if (tier === 'rejected') return 'Cold'
+  if (tier === 'incomplete') return 'Incomplete'
+  if (tier === 'unscored') return 'Unscored'
+  return tier.charAt(0).toUpperCase() + tier.slice(1)
+}
+
+export function tierBadgeClass(lead) {
+  const tier = leadTier(lead)
+  if (tier === 'rejected') return 'badge badge-cold'
+  return `badge badge-${tier}`
+}
+
+// WhatsApp deep link for a lead's phone number (Kenyan numbers without a country code
+// are assumed to be +254). Returns null when the number is unusable.
+export function whatsappUrl(phone, text = '') {
+  let digits = String(phone || '').replace(/\D/g, '')
+  if (!digits) return null
+  if (digits.startsWith('00')) digits = digits.slice(2)
+  else if (digits.startsWith('0')) digits = '254' + digits.slice(1)
+  else if (digits.length === 9) digits = '254' + digits
+  if (digits.length < 10) return null
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`
 }
 
 // Pipeline stages in order

@@ -105,3 +105,25 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 ## Deployment
 
 Hosted on Netlify with auto-deploy from the `main` branch. Environment variables must be set in Netlify dashboard under Site settings → Environment variables.
+
+## Booking flow (sdfmgroup.com/book)
+
+The public booking form lives on the marketing site, not in this app. Visitors go
+**details → pick a time → confirmed**, then optionally answer five prep questions.
+Everyone who picks a time is confirmed; the prep answers only score the lead
+(hot / warm / cold) for the team. A lead is saved as soon as the contact step is
+submitted (stage `Incomplete`) so abandoned bookings can be followed up.
+
+The browser never reads or writes the database. It calls Edge Functions that run
+with the service role: `booking-info`, `booking-start`, `booking-confirm`,
+`booking-prep`, plus `send-booking-nudges` (cron). Shared logic is in
+`supabase/functions/_shared/booking.ts` (its scoring mirrors `src/lib/scoring.js`).
+
+Deploy order:
+1. `migration-booking-flow.sql`, then `migration-booking-flow-analytics.sql`
+2. `supabase functions deploy booking-info booking-start booking-confirm booking-prep send-booking-nudges`
+3. Deploy sdfmgroup.com (cac-website) and this app (`/intake` now 301s to `/book`)
+4. Settings → set the Google Meet link; check the two new templates on Notifications
+5. `migration-booking-nudges-cron.sql` (fill in project URL and anon key)
+6. **Last:** `migration-booking-lockdown.sql` — removes anonymous access to leads,
+   booked slots, availability and settings

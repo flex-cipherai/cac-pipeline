@@ -1,3 +1,11 @@
+# The public booking form moved to the marketing site. Old /intake links, ads and
+# bookmarks land on the new page (query strings such as ?source= and utm_* carry over).
+[[redirects]]
+  from = "/intake"
+  to = "https://sdfmgroup.com/book"
+  status = 301
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -265,15 +265,15 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
 
         <div className="sidebar-bottom">
-          {/* Lead intake form link */}
+          {/* Public booking page (lives on the marketing site) */}
           <a
-            href="/intake"
+            href="https://sdfmgroup.com/book"
             target="_blank"
             rel="noopener noreferrer"
             className="sidebar-intake-link"
           >
             {icons.external}
-            <span>Lead Intake Form</span>
+            <span>Public Booking Page</span>
           </a>
 
           {/* User info */}
