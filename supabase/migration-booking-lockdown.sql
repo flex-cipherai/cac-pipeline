@@ -21,6 +21,10 @@
 
 -- leads: no more anonymous inserts. Staff can still add leads manually.
 drop policy if exists "Anyone can submit a lead" on public.leads;
+-- Not defined in any migration: created by hand in the dashboard on the live
+-- project, and it lets the anon key insert leads. Dropped explicitly.
+drop policy if exists "anon_insert_leads" on public.leads;
+drop policy if exists "Authenticated users can add leads" on public.leads;
 create policy "Authenticated users can add leads"
   on public.leads for insert
   to authenticated

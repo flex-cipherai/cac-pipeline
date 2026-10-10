@@ -46,6 +46,41 @@ const FUNNEL_STEPS = [
 
 const STEP_LABELS = { 1: 'Contact details', 2: 'Pick a time', 3: 'Booked' }
 
+// The ways a visitor can get in touch. Only "book" ends up in the leads table;
+// the other three happen outside the site, so they are tracked as clicks only.
+const METHODS = [
+  { key: 'book', label: 'Book on the site' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'phone', label: 'Phone call' },
+  { key: 'email', label: 'Email' },
+]
+
+// Where each call-to-action sits, from data-sdfm-label in sdfmgroup.com's markup.
+// A label not listed here (a CTA added later) is shown as written.
+const CTA_PLACEMENTS = {
+  nav_book: 'Top navigation',
+  hero_book: 'Hero', hero_whatsapp: 'Hero',
+  offer_book: 'Offer section', offer_whatsapp: 'Offer section',
+  contact_book: 'Contact section', contact_whatsapp: 'Contact section', contact_phone: 'Contact section', contact_email: 'Contact section',
+  footer_phone: 'Footer', footer_email: 'Footer',
+  mobile_book: 'Mobile action bar', mobile_whatsapp: 'Mobile action bar',
+  book_nav_whatsapp: 'Booking page · header',
+  book_side_whatsapp: 'Booking page · sidebar', book_side_phone: 'Booking page · sidebar', book_side_email: 'Booking page · sidebar',
+  book_empty_whatsapp: 'Booking page · no times open',
+  book_done_whatsapp: 'Booking page · after booking',
+  book_message_whatsapp: 'Booking page · error screen',
+  download_ics: 'Booking page · add to calendar',
+}
+
+// What the booking page reports as form_error.stage.
+const ERROR_STAGES = {
+  start: 'Contact details could not be saved',
+  slot_taken: 'Chosen time was taken by someone else',
+  confirm: 'Booking could not be confirmed',
+  rate_limited: 'Blocked for too many attempts',
+  already_booked: 'Already had a call booked',
+}
+
 const DEFAULT_TZ = 'Africa/Nairobi'
 
 // ── formatting helpers ──
@@ -58,6 +93,21 @@ function fmtDuration(seconds) {
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   return `${m}m ${String(s % 60).padStart(2, '0')}s`
+}
+
+function fmtMinutes(minutes) {
+  const m = Math.round(Number(minutes) || 0)
+  if (m < 60) return `${m} min`
+  if (m < 60 * 48) return `${Math.round(m / 6) / 10} h`
+  return `${Math.round(m / 144) / 10} days`
+}
+
+const methodLabel = key => METHODS.find(m => m.key === key)?.label || key
+const placementLabel = label => CTA_PLACEMENTS[label] || label
+// "Hero · WhatsApp": the placement alone is ambiguous where one spot holds two buttons.
+const placementWithRoute = label => {
+  const route = /_(book|whatsapp|phone|email)$/.exec(label)?.[1]
+  return route && CTA_PLACEMENTS[label] ? `${CTA_PLACEMENTS[label]} · ${methodLabel(route)}` : placementLabel(label)
 }
 
 function toDateStr(d) {
@@ -240,6 +290,21 @@ function QuestionCard({ n, question, answer, detail, active, onClick }) {
 
 const rate = (a, b) => <span className="wa-rate">{pct(a, b)}</span>
 
+// Where one lead got to. `booked` is absent until the booking-journey migration
+// has run; then the status falls back to the lead's score alone.
+function JourneyStatus({ r }) {
+  let text = r.is_disqualified ? 'flagged' : r.classification
+  let tone = r.qualified ? 'wa-chip-ok' : r.is_disqualified ? 'wa-chip-warn' : ''
+  if (r.booked === false) { text = 'details only'; tone = 'wa-chip-warn' }
+  else if (r.booked === true && !r.prep_done) { text = 'booked'; tone = '' }
+  return (
+    <>
+      <span className={`wa-chip ${tone}`}>{text}</span>
+      {r.after_reminder && <span className="wa-muted"> after reminder</span>}
+    </>
+  )
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 export default function WebsiteAnalytics() {
   const nowD = new Date()
@@ -372,6 +437,18 @@ export default function WebsiteAnalytics() {
     return out
   }, [conv])
 
+  // The booking-journey sections need migration-website-analytics-booking-journey.sql.
+  // Until it has run the keys are simply absent, so those sections stay hidden.
+  const journeyReady = !!conv && conv.follow_up !== undefined
+  const followUp = conv?.follow_up
+  const afterBooking = conv?.after_booking
+  const reach = conv?.contact_reach
+  const methodRows = useMemo(() => METHODS.map(m => {
+    const r = (conv?.contact_methods || []).find(x => x.method === m.key)
+    return { method: m.key, name: m.label, clicks: r?.clicks || 0, sessions: r?.sessions || 0, booked: r?.booked || 0 }
+  }), [conv])
+  const errorRows = useMemo(() => (conv?.errors_by_stage || []).map(r => ({ ...r, name: ERROR_STAGES[r.stage] || r.stage })), [conv])
+
   const allEmpty = !loading && !error && sessions === 0 && (beh?.kpis?.pageviews || 0) === 0 && (conv?.coverage?.leads_total || 0) === 0
 
   // ── export ──
@@ -397,9 +474,34 @@ export default function WebsiteAnalytics() {
       ['Campaign', 'Sessions', 'Leads', 'Qualified'],
       ...(acq?.campaigns || []).map(c => [c.campaign, String(c.sessions), String(c.leads), String(c.qualified)]),
       [''],
-      ['Intake funnel step', 'Sessions'],
+      ['Booking funnel step', 'Visits'],
       ...funnelRows.map(r => [r.label, String(r.count)]),
       [''],
+      ...(journeyReady ? [
+        ['Contact route', 'Visits', 'Clicks', 'Booked a call'],
+        ...methodRows.map(m => [m.name, String(m.sessions), String(m.clicks), String(m.booked)]),
+        ['Visits that went off-site and did not book', String(reach?.offsite_not_booked || 0)],
+        [''],
+        ['Call-to-action placement', 'Route', 'Clicks', 'Visits', 'Booked'],
+        ...(conv?.cta_placements || []).map(p => [placementLabel(p.label), methodLabel(p.method), String(p.clicks), String(p.sessions), String(p.booked)]),
+        [''],
+        ['Follow-up', 'Count'],
+        ['Waiting for a time', String(followUp?.waiting || 0)],
+        ['Reminded', String(followUp?.reminded || 0)],
+        ['Booked after reminder', String(followUp?.recovered || 0)],
+        ['Returning visits', String(followUp?.returns || 0)],
+        [''],
+        ['After booking', 'Count'],
+        ['Booked', String(afterBooking?.booked || 0)],
+        ['Added to calendar', String(afterBooking?.calendar_added || 0)],
+        ['Shown prep questions', String(afterBooking?.prep_shown || 0)],
+        ['Skipped prep questions', String(afterBooking?.prep_skipped || 0)],
+        ['Answered prep questions', String(afterBooking?.prep_answered || 0)],
+        [''],
+        ['Booking page problem', 'Visits'],
+        ...errorRows.map(e => [e.name, String(e.sessions)]),
+        [''],
+      ] : []),
       ['Page', 'Views', 'Avg engaged (s)', 'Avg scroll %'],
       ...(beh?.top_pages || []).map(p => [`${p.host || ''}${p.path}`, String(p.views), String(p.avg_engaged_seconds ?? ''), String(p.avg_scroll ?? '')]),
       [''],
@@ -688,7 +790,7 @@ export default function WebsiteAnalytics() {
                 rows={beh?.clicks}
                 empty="No clicks recorded in this period."
                 columns={[
-                  { key: 'label', label: 'Label' },
+                  { key: 'label', label: 'Label', title: r => r.label, render: r => placementWithRoute(r.label) },
                   { key: 'type', label: 'Type', render: r => <span className="wa-chip">{r.type.replace('_', ' ')}</span> },
                   { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
                 ]}
@@ -747,11 +849,21 @@ export default function WebsiteAnalytics() {
       {tab === 'conversion' && (
         <>
           <div className="dash-stats-row">
-            <Stat label="Leads" value={num(leads)} delta={<Delta cur={leads} prev={prevConv?.funnel?.submitted} />} sub={`${pct(leads, sessions)} of sessions`} />
-            <Stat label="Qualified leads" value={num(qualified)} delta={<Delta cur={qualified} prev={prevConv?.funnel?.qualified} />} sub={`${pct(qualified, leads, 0)} of leads`} />
-            <Stat label="Form completion" value={pct(funnel?.submitted, funnel?.started_form, 0)} sub={`${num(funnel?.started_form)} started`} />
-            <Stat label="Avg. time to book" value={conv?.timing?.avg_minutes_to_convert ? `${conv.timing.avg_minutes_to_convert} min` : '—'} sub={conv?.timing?.avg_pages_before_convert ? `${conv.timing.avg_pages_before_convert} pages first` : undefined} />
+            <Stat label="Details saved" value={num(leads)} delta={<Delta cur={leads} prev={prevAcq?.kpis?.leads} />} sub={`${pct(leads, sessions)} of sessions`} />
+            <Stat label="Calls booked" value={num(funnel?.submitted)} delta={<Delta cur={funnel?.submitted} prev={prevConv?.funnel?.submitted} />} sub={`${pct(funnel?.submitted, leads, 0)} of details saved`} />
+            <Stat label="Qualified leads" value={num(qualified)} delta={<Delta cur={qualified} prev={prevAcq?.kpis?.qualified} />} sub={`${pct(qualified, funnel?.submitted, 0)} of booked`} />
+            <Stat
+              label="Typical time to book"
+              value={conv?.timing?.median_minutes_to_book != null ? fmtMinutes(conv.timing.median_minutes_to_book) : '—'}
+              sub={conv?.timing?.avg_pages_before_convert ? `${conv.timing.avg_pages_before_convert} pages first · from first visit` : undefined}
+            />
           </div>
+
+          {conv && !journeyReady && (
+            <div className="wa-note">
+              Run <code>supabase/migration-website-analytics-booking-journey.sql</code> in the Supabase SQL Editor to unlock reminder follow-up, contact routes, after-booking and error reporting. Until then, a lead who returns through the reminder email is counted twice.
+            </div>
+          )}
 
           {conv?.coverage?.leads_total > 0 && conv.coverage.leads_tracked < conv.coverage.leads_total && (
             <div className="wa-note">
@@ -759,7 +871,7 @@ export default function WebsiteAnalytics() {
             </div>
           )}
 
-          <Section title="Booking funnel" hint="Each step counts visits that reached it. Contact details, booking and prep answers come from the leads table, so they cannot be inflated. The red marker shows where the most people are lost on the way to a booked call.">
+          <Section title="Booking funnel" hint="Each step counts fresh visits that reached it; people coming back through a reminder or prep link are not counted again. Contact details, booking and prep answers come from the leads table, so they cannot be inflated. The red marker shows where the most people are lost on the way to a booked call.">
             <div className="wa-funnel">
               {funnelRows.map((r, i) => (
                 <div className={`wa-funnel-row ${r.worst ? 'worst' : ''}`} key={r.key}>
@@ -767,7 +879,8 @@ export default function WebsiteAnalytics() {
                   <div className="wa-funnel-track"><div className="wa-funnel-fill" style={{ width: `${funnelRows[0].count ? Math.max((r.count / funnelRows[0].count) * 100, r.count ? 1 : 0) : 0}%` }} /></div>
                   <span className="wa-funnel-count">{num(r.count)}</span>
                   <span className="wa-funnel-rate">
-                    {i === 0 ? '' : r.stepRate == null ? '' : `${Math.round(r.stepRate * 100)}% continue`}
+                    {/* Over 100% happens at the last step: a lead can be scored from partial prep answers. */}
+                    {i === 0 || r.stepRate == null || r.stepRate > 1 ? '' : `${Math.round(r.stepRate * 100)}% continue`}
                     {r.worst && <strong className="wa-funnel-flag"> · biggest drop</strong>}
                   </span>
                 </div>
@@ -776,7 +889,7 @@ export default function WebsiteAnalytics() {
           </Section>
 
           <div className="dash-grid-2">
-            <Section title="Booking page steps" hint="Where visitors spend time and who goes back.">
+            <Section title="Booking page steps" hint="Where visitors spend time. Counts every visit to the page, so someone returning from a reminder email shows again at “Pick a time”.">
               <DataTable
                 rows={conv?.steps?.map(s => ({ ...s, name: STEP_LABELS[s.step] || `Step ${s.step}` }))}
                 empty="No booking page activity in this period."
@@ -787,9 +900,20 @@ export default function WebsiteAnalytics() {
                   { key: 'avg_seconds', label: 'Avg. time', num: true, render: r => (r.avg_seconds != null ? fmtDuration(r.avg_seconds) : '—') },
                 ]}
               />
-              {conv && (conv.back_clicks > 0 || conv.errors > 0) && (
+              {errorRows.length > 0 ? (
+                <>
+                  <p className="wa-hint" style={{ margin: 'var(--space-md) 0 var(--space-sm)' }}>When something went wrong or was blocked</p>
+                  <DataTable
+                    rows={errorRows}
+                    columns={[
+                      { key: 'name', label: 'What happened' },
+                      { key: 'sessions', label: 'Visits', num: true, render: r => num(r.sessions) },
+                    ]}
+                  />
+                </>
+              ) : conv?.errors > 0 && (
                 <p className="wa-hint" style={{ marginTop: 'var(--space-sm)' }}>
-                  {num(conv.back_clicks)} “Back” click{conv.back_clicks === 1 ? '' : 's'}{conv.errors > 0 ? ` · ${num(conv.errors)} submission error${conv.errors === 1 ? '' : 's'}` : ''}
+                  {num(conv.errors)} submission error{conv.errors === 1 ? '' : 's'}
                 </p>
               )}
             </Section>
@@ -800,13 +924,74 @@ export default function WebsiteAnalytics() {
                   { key: 'channel', label: 'Channel' },
                   { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
                   { key: 'form_views', label: 'Opened form', num: true, render: r => num(r.form_views) },
-                  { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
+                  { key: 'leads', label: 'Details saved', num: true, render: r => num(r.leads) },
+                  ...(journeyReady ? [{ key: 'booked', label: 'Booked', num: true, render: r => num(r.booked) }] : []),
                   { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
                   { key: 'rate', label: 'Visit → qualified', num: true, render: r => rate(r.qualified, r.sessions) },
                 ]}
               />
             </Section>
           </div>
+
+          {journeyReady && (
+            <>
+              <div className="dash-grid-2">
+                <Section title="Reminder follow-up" hint="People who saved their details but have not picked a time get one reminder email about 30 minutes later. “Booked after reminder” counts leads whose booking came after that email went out.">
+                  <div className="sa-attribution-grid">
+                    <div><span className="sa-attr-value">{num(followUp?.waiting)}</span><span className="sa-attr-label">Waiting for a time</span></div>
+                    <div><span className="sa-attr-value">{num(followUp?.reminded)}</span><span className="sa-attr-label">Reminded</span></div>
+                    <div>
+                      <span className="sa-attr-value">{num(followUp?.recovered)}</span>
+                      <span className="sa-attr-label">Booked after reminder{followUp?.reminded > 0 ? ` · ${pct(followUp.recovered, followUp.reminded, 0)}` : ''}</span>
+                    </div>
+                    <div><span className="sa-attr-value">{num(followUp?.returns)}</span><span className="sa-attr-label">Returning visits</span></div>
+                  </div>
+                </Section>
+                <Section title="After booking" hint="What people do on the confirmation screen. Prep answers also arrive later through the emailed link, so “answered” can be higher than “shown”.">
+                  <div className="sa-attribution-grid">
+                    <div><span className="sa-attr-value">{pct(afterBooking?.calendar_added, afterBooking?.booked, 0)}</span><span className="sa-attr-label">Added to calendar</span></div>
+                    <div><span className="sa-attr-value">{num(afterBooking?.prep_shown)}</span><span className="sa-attr-label">Shown prep questions</span></div>
+                    <div><span className="sa-attr-value">{num(afterBooking?.prep_skipped)}</span><span className="sa-attr-label">Skipped them</span></div>
+                    <div>
+                      <span className="sa-attr-value">{pct(afterBooking?.prep_answered, afterBooking?.booked, 0)}</span>
+                      <span className="sa-attr-label">Answered{afterBooking?.avg_questions > 0 ? ` · ${afterBooking.avg_questions} of 5 on average` : ''}</span>
+                    </div>
+                  </div>
+                </Section>
+              </div>
+
+              <div className="dash-grid-2">
+                <Section title="How visitors choose to get in touch" hint="Which route each visit took from the call-to-action buttons. WhatsApp, phone and email happen outside the site, so those never appear in the funnel above.">
+                  <DataTable
+                    rows={methodRows}
+                    columns={[
+                      { key: 'name', label: 'Route' },
+                      { key: 'sessions', label: 'Visits', num: true, render: r => num(r.sessions) },
+                      { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
+                      { key: 'booked', label: 'Booked a call', num: true, render: r => num(r.booked) },
+                    ]}
+                  />
+                  {reach?.offsite_not_booked > 0 && (
+                    <div className="wa-note" style={{ marginTop: 'var(--space-md)' }}>
+                      {num(reach.offsite_not_booked)} visit{reach.offsite_not_booked === 1 ? '' : 's'} went to WhatsApp, phone or email and did not book on the site. Those conversations are not in the CRM: check the WhatsApp inbox and call log.
+                    </div>
+                  )}
+                </Section>
+                <Section title="Call-to-action placements" hint="Every button that leads to the booking page, WhatsApp, phone or email, by where it sits. “Booked” counts visits that clicked it and later booked a call.">
+                  <DataTable
+                    rows={conv?.cta_placements}
+                    empty="No call-to-action clicks in this period."
+                    columns={[
+                      { key: 'label', label: 'Placement', title: r => r.label, render: r => placementLabel(r.label) },
+                      { key: 'method', label: 'Route', render: r => <span className="wa-chip">{methodLabel(r.method)}</span> },
+                      { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
+                      { key: 'booked', label: 'Booked', num: true, render: r => num(r.booked) },
+                    ]}
+                  />
+                </Section>
+              </div>
+            </>
+          )}
 
           <div className="dash-grid-2">
             <Section title="Pages that start conversions" hint="Landing pages ranked by the leads they produced.">
@@ -864,8 +1049,9 @@ export default function WebsiteAnalytics() {
                 { key: 'landing_path', label: 'Landed on' },
                 { key: 'campaign', label: 'Campaign', render: r => r.campaign || '—' },
                 { key: 'pageviews', label: 'Pages', num: true, render: r => num(r.pageviews) },
-                { key: 'minutes_to_convert', label: 'To book', num: true, render: r => `${r.minutes_to_convert} min` },
-                { key: 'classification', label: 'Result', render: r => <span className={`wa-chip ${r.qualified ? 'wa-chip-ok' : 'wa-chip-warn'}`}>{r.is_disqualified ? 'disqualified' : r.classification}</span> },
+                { key: 'minutes_to_convert', label: 'To details', num: true, render: r => fmtMinutes(r.minutes_to_convert) },
+                { key: 'minutes_to_book', label: 'To book', num: true, render: r => (r.minutes_to_book != null ? fmtMinutes(r.minutes_to_book) : '—') },
+                { key: 'classification', label: 'Status', render: r => <JourneyStatus r={r} /> },
               ]}
             />
           </Section>

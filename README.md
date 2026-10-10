@@ -56,10 +56,13 @@ Answers three questions in one place: **How are people finding us? What are they
 
 **How it fits together**
 
-- `public/sdfm-tracker.js` is a small first-party script. It runs on the Lead Intake Form automatically and on `sdfmgroup.com` once the snippet is installed. It records pageviews, time on page, scroll depth, link/button clicks (labels only), outbound links, downloads and site form submissions, and sends them in batches to the `track_web_batch` database function.
-- When a visitor clicks from the marketing site to the intake form, the tracker carries the session across (`sdfm_sid`), so the lead is credited to how the visit **first** arrived (channel, source, campaign, landing page) rather than to "Website".
-- The intake form reports its funnel (opened → started → contact done → qualification done → picked a time → submitted) plus the qualification option each visitor chose. No name, email or phone is ever sent; the lead id is sent only to link the visit to the lead it produced.
-- Reports are computed in Postgres (`web_analytics_*`, `seo_overview`), not in the browser. The funnel's final step and "qualified" are read from the real `leads` rows (same definition as Lead Analytics: not cold and not disqualified), never from client events.
+- `public/sdfm-tracker.js` is a small first-party script, installed on every page of `sdfmgroup.com` (including `/book`). It records pageviews, time on page, scroll depth, link/button clicks (labels only), outbound links, downloads and site form submissions, and sends them in batches to the `track_web_batch` database function.
+- The whole visitor journey is on one domain, so no session hand-off is needed: a lead is credited to how the visit **first** arrived (channel, source, campaign, landing page).
+- The booking page (`/book`, `cac-website/js/book.js`) reports `form_view`, `form_start`, `form_step_view` / `form_step_complete` (step 1 details, 2 time, 3 booked), `form_lead_captured`, `form_slot_selected`, `form_submit`, `form_error` (with a `stage`), `form_resume`, `form_answer`, `prep_view`, `prep_complete`, `prep_skip` and a `download_ics` click. No name, email or phone is ever sent; the lead id is sent only to link the visit to the lead it produced.
+- Call-to-action buttons on the site carry `data-sdfm-cta` and a `data-sdfm-label` naming their placement (`hero_book`, `contact_whatsapp`, ...). `CTA_PLACEMENTS` in `WebsiteAnalytics.jsx` maps those labels to readable names; add an entry when you add a CTA. The route (book / WhatsApp / phone / email) is derived from the link target.
+- Reports are computed in Postgres (`web_analytics_*`, `seo_overview`), not in the browser. Details saved, booked, prep answered and "qualified" are read from the real `leads` rows (qualified = hot or warm and not disqualified), never from client events.
+- Each lead is credited to the **first** tracker session that carried it. The reminder email reopens `/book` in a new tab (a new session), so without this the same lead would be counted twice. Those return visits are reported under "Reminder follow-up" and are left out of the funnel.
+- WhatsApp, phone and email contacts happen outside the site, so they appear only as clicks ("How visitors choose to get in touch"), never as leads. The page flags visits that went that way and did not book: their conversations live in the WhatsApp inbox and call log.
 - `sm-gsc-sync` pulls Search Console queries, pages, countries and devices into `seo_*` tables daily. Search pages are joined to the tracker, showing for each page how many organic visits landed there and how many became leads.
 
 **Privacy (hybrid consent)**
@@ -71,8 +74,8 @@ Answers three questions in one place: **How are people finding us? What are they
 
 **Setup (in this order)**
 
-1. **Database first.** Run `supabase/migration-website-analytics.sql` in the Supabase SQL Editor (safe to re-run) *before* deploying the frontend that loads the tracker.
-2. **Deploy the app.** Netlify serves `/sdfm-tracker.js` with the rest of the app. The Lead Intake Form is tracked from this point.
+1. **Database first.** In the Supabase SQL Editor run, in order and each safe to re-run: `supabase/migration-website-analytics.sql`, then (after the booking flow migrations below) `migration-booking-flow-analytics.sql`, then `migration-website-analytics-booking-journey.sql`. The app tolerates the last one not having run yet: the booking-journey sections stay hidden and a note says so.
+2. **Deploy the app.** Netlify serves `/sdfm-tracker.js` with the rest of the app, and `sdfmgroup.com` loads it from there.
 3. **Install on the marketing site.** Open Website Analytics → **Install tracker** and paste the snippet before `</head>` on every page of sdfmgroup.com.
 4. **Exclude your own traffic.** On each browser used by staff, open any tracked page once with `?sdfm_ignore=1` (for example `https://sdfmgroup.com/?sdfm_ignore=1`). `?sdfm_ignore=0` turns tracking back on.
 5. **Search Console (SEO tab).**
@@ -127,3 +130,5 @@ Deploy order:
 5. `migration-booking-nudges-cron.sql` (fill in project URL and anon key)
 6. **Last:** `migration-booking-lockdown.sql` — removes anonymous access to leads,
    booked slots, availability and settings
+7. `migration-leads-update-restrict.sql` — only admin and sales may update leads
+   (replaces a hand-made `auth_update_leads` policy that allowed any signed-in user)
