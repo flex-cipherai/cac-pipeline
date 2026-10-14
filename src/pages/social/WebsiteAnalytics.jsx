@@ -30,6 +30,7 @@ const PRESETS = [
   { key: '30d', label: '30 days', days: 30 },
   { key: '90d', label: '90 days', days: 90 },
   { key: 'month', label: 'Month' },
+  { key: 'custom', label: 'Custom' },
   { key: 'all', label: 'All time' },
 ]
 
@@ -123,10 +124,30 @@ function toDateStr(d) {
 // Turns the range picker state into query bounds. `to` is exclusive for the
 // timestamp RPCs; `toDate` is inclusive for the SEO (date) RPC. `prev` is the
 // equal-length window just before, for period-over-period deltas.
-function resolveRange(range) {
+function resolveRange(range, tz = DEFAULT_TZ) {
   const now = new Date()
   if (range.preset === 'all') {
     return { from: null, to: null, fromDate: null, toDate: null, prev: null, label: 'All Time' }
+  }
+  if (range.preset === 'custom') {
+    // Whole days in the team time zone, the same zone the RPCs bucket days in.
+    // Both ends are inclusive; an empty `to` means a single day.
+    const start = DateTime.fromISO(range.custom.from, { zone: tz }).startOf('day')
+    const last = DateTime.fromISO(range.custom.to || range.custom.from, { zone: tz }).startOf('day')
+    if (start.isValid && last.isValid && last >= start) {
+      const end = last.plus({ days: 1 })
+      const days = Math.round(end.diff(start, 'days').days)
+      return {
+        from: start.toJSDate(), to: end.toJSDate(),
+        fromDate: start.toISODate(), toDate: last.toISODate(),
+        prev: { from: start.minus({ days }).toJSDate(), to: start.toJSDate() },
+        label: days === 1
+          ? start.toFormat('ccc d LLL yyyy')
+          : `${start.toFormat(start.year === last.year ? 'd LLL' : 'd LLL yyyy')} – ${last.toFormat('d LLL yyyy')}`,
+      }
+    }
+    // An unusable custom range (cleared input) falls back to the default window below.
+    range = { ...range, preset: '30d' }
   }
   if (range.preset === 'month') {
     const from = new Date(range.month.year, range.month.month, 1)
@@ -314,7 +335,7 @@ function JourneyStatus({ r }) {
 // ────────────────────────────────────────────────────────────────────────────
 export default function WebsiteAnalytics() {
   const nowD = new Date()
-  const [range, setRange] = useState({ preset: '30d', month: { month: nowD.getMonth(), year: nowD.getFullYear() } })
+  const [range, setRange] = useState({ preset: '30d', month: { month: nowD.getMonth(), year: nowD.getFullYear() }, custom: { from: '', to: '' } })
   const [tab, setTab] = useState('acquisition')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -325,7 +346,30 @@ export default function WebsiteAnalytics() {
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
   const requestRef = useRef(0)
 
-  const resolved = useMemo(() => resolveRange(range), [range])
+  const resolved = useMemo(() => resolveRange(range, tz), [range, tz])
+  const todayStr = DateTime.now().setZone(tz).toISODate()
+
+  function selectPreset(key) {
+    setRange(r => {
+      // First time on Custom: start from the last 7 days rather than an empty picker.
+      if (key === 'custom' && !r.custom.from) {
+        const today = DateTime.now().setZone(tz).startOf('day')
+        return { ...r, preset: key, custom: { from: today.minus({ days: 6 }).toISODate(), to: today.toISODate() } }
+      }
+      return { ...r, preset: key }
+    })
+  }
+
+  // The two ends never cross: moving one past the other drags it along.
+  function setCustomDate(edge, value) {
+    if (!value) return // the browser reports '' while a date is half typed
+    setRange(r => {
+      const custom = { ...r.custom, [edge]: value }
+      if (edge === 'from' && custom.to && custom.to < value) custom.to = value
+      if (edge === 'to' && custom.from && custom.from > value) custom.from = value
+      return { ...r, custom }
+    })
+  }
 
   useEffect(() => {
     supabase.from('system_settings').select('key, value').eq('key', 'team_timezone').maybeSingle()
@@ -536,9 +580,27 @@ export default function WebsiteAnalytics() {
       <div className="dash-header-actions">
         <div className="wa-presets" role="group" aria-label="Date range">
           {PRESETS.map(p => (
-            <button key={p.key} type="button" className={`wa-preset ${range.preset === p.key ? 'active' : ''}`} onClick={() => setRange(r => ({ ...r, preset: p.key }))}>{p.label}</button>
+            <button key={p.key} type="button" className={`wa-preset ${range.preset === p.key ? 'active' : ''}`} onClick={() => selectPreset(p.key)}>{p.label}</button>
           ))}
         </div>
+        {range.preset === 'custom' && (
+          <div className="wa-daterange" role="group" aria-label="Custom date range">
+            <label>
+              <span>From</span>
+              <input type="date" value={range.custom.from} max={todayStr} onChange={e => setCustomDate('from', e.target.value)} />
+            </label>
+            <label>
+              <span>To</span>
+              <input type="date" value={range.custom.to} min={range.custom.from || undefined} max={todayStr} onChange={e => setCustomDate('to', e.target.value)} />
+            </label>
+            <button
+              type="button"
+              className="wa-preset"
+              title="Show just the From date"
+              onClick={() => setRange(r => ({ ...r, custom: { ...r.custom, to: r.custom.from } }))}
+            >Single day</button>
+          </div>
+        )}
         {range.preset === 'month' && (
           <PeriodSelector
             value={{ mode: 'month', ...range.month }}
