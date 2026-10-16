@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { DAYS_OF_WEEK, CLASSIFICATION_THRESHOLDS, HARD_DISQUALIFIERS } from '../lib/scoring'
 import { COMMON_TIMEZONES, detectTimezone, formatOffsetLabel } from '../lib/timezone'
+import PermissionsManager from '../components/PermissionsManager/PermissionsManager'
 import './Settings.css'
 
 const ALL_TIME_SLOTS = [
@@ -700,6 +701,17 @@ export default function Settings() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Permissions (Admin only) ── */}
+      {isAdmin && (
+        <div className="settings-section">
+          <div className="settings-section-header">
+            <h2 className="settings-section-title">Permissions</h2>
+            <p className="settings-section-hint">Which modules each role can open</p>
+          </div>
+          <PermissionsManager showToast={showToast} />
         </div>
       )}
 

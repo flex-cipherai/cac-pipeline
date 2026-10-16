@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
+import Inquiries from './pages/Inquiries'
 import QuotationGenerator from './pages/QuotationGenerator'
 import Settings from './pages/Settings'
 import Notifications from './pages/Notifications'
@@ -20,9 +21,25 @@ import SocialAnalytics from './pages/social/SocialAnalytics'
 import WebsiteAnalytics from './pages/social/WebsiteAnalytics'
 import ActivityInbox from './pages/social/ActivityInbox'
 
-// Protected route wrapper
-function ProtectedRoute({ children, allowedRoles }) {
-  const { user, profile, loading } = useAuth()
+// Shown to someone whose role has no module switched on in Settings → Permissions.
+function NoAccess() {
+  const { profile, signOut } = useAuth()
+  return (
+    <Layout>
+      <div className="section-card" style={{ maxWidth: 520, margin: '10vh auto 0', padding: 'var(--space-xl)', textAlign: 'center' }}>
+        <h1 className="page-title" style={{ fontSize: 'var(--text-xl)' }}>No modules available</h1>
+        <p className="page-subtitle" style={{ lineHeight: 1.6 }}>
+          Your {profile?.role} role has not been given access to any part of the system yet. Ask an admin to switch modules on in Settings → Permissions.
+        </p>
+        <button className="btn btn-secondary" style={{ marginTop: 'var(--space-lg)' }} onClick={signOut}>Sign out</button>
+      </div>
+    </Layout>
+  )
+}
+
+// Protected route wrapper. `module` is a key from lib/permissions.js; admins always pass.
+function ProtectedRoute({ children, module }) {
+  const { user, profile, loading, can, homePath } = useAuth()
 
   if (loading) {
     return (
@@ -43,12 +60,9 @@ function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />
   }
 
-  if (allowedRoles && !allowedRoles.includes(profile.role)) {
-    // Redirect to the appropriate default page based on role
-    if (profile.role === 'marketing') {
-      return <Navigate to="/analytics" replace />
-    }
-    return <Navigate to="/dashboard" replace />
+  if (module && !can(module)) {
+    // Send them to the first page they can open instead of a dead end.
+    return homePath ? <Navigate to={homePath} replace /> : <NoAccess />
   }
 
   return <Layout>{children}</Layout>
@@ -56,15 +70,12 @@ function ProtectedRoute({ children, allowedRoles }) {
 
 // Redirect authenticated users away from login
 function PublicRoute({ children }) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading, homePath } = useAuth()
 
   if (loading) return null
 
   if (user && profile) {
-    if (profile.role === 'marketing') {
-      return <Navigate to="/analytics" replace />
-    }
-    return <Navigate to="/dashboard" replace />
+    return homePath ? <Navigate to={homePath} replace /> : <NoAccess />
   }
 
   return children
@@ -77,6 +88,29 @@ function ExternalRedirect({ to }) {
   useEffect(() => { window.location.replace(to + window.location.search) }, [to])
   return null
 }
+
+// Every signed-in page and the module (lib/permissions.js) that unlocks it.
+const PROTECTED_ROUTES = [
+  { path: '/dashboard', module: 'dashboard', element: <Dashboard /> },
+  { path: '/inquiries', module: 'inquiries', element: <Inquiries /> },
+  { path: '/pipeline', module: 'pipeline', element: <Pipeline /> },
+  { path: '/leads', module: 'leads', element: <AllLeads /> },
+  { path: '/quotations', module: 'quotations', element: <QuotationGenerator /> },
+  { path: '/notifications', module: 'notifications', element: <Notifications /> },
+  { path: '/settings', module: 'settings', element: <Settings /> },
+  { path: '/analytics', module: 'lead_analytics', element: <MarketingAnalytics /> },
+
+  // Social Media Management
+  { path: '/social/composer', module: 'social_composer', element: <ContentComposer /> },
+  { path: '/social/composer/:id', module: 'social_composer', element: <ContentComposer /> },
+  { path: '/social/library', module: 'social_library', element: <ContentLibrary /> },
+  { path: '/social/calendar', module: 'social_calendar', element: <ContentCalendar /> },
+  { path: '/social/bulk-schedule', module: 'social_bulk', element: <BulkScheduler /> },
+  { path: '/social/approvals', module: 'social_approvals', element: <ApprovalQueue /> },
+  { path: '/social/analytics', module: 'social_analytics', element: <SocialAnalytics /> },
+  { path: '/social/website-analytics', module: 'website_analytics', element: <WebsiteAnalytics /> },
+  { path: '/social/activity', module: 'social_activity', element: <ActivityInbox /> },
+]
 
 function AppRoutes() {
   return (
@@ -96,136 +130,13 @@ function AppRoutes() {
       />
 
       {/* Protected routes */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'sales']}>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/pipeline"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'sales']}>
-            <Pipeline />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/leads"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'sales']}>
-            <AllLeads />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/quotations"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'sales']}>
-            <QuotationGenerator />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/notifications"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'sales']}>
-            <Notifications />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'sales']}>
-            <Settings />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/analytics"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <MarketingAnalytics />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Social Media Management */}
-      <Route
-        path="/social/composer"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <ContentComposer />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/composer/:id"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <ContentComposer />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/library"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <ContentLibrary />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/calendar"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <ContentCalendar />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/bulk-schedule"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <BulkScheduler />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/approvals"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <ApprovalQueue />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/analytics"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <SocialAnalytics />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/website-analytics"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <WebsiteAnalytics />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/social/activity"
-        element={
-          <ProtectedRoute allowedRoles={['admin', 'marketing']}>
-            <ActivityInbox />
-          </ProtectedRoute>
-        }
-      />
+      {PROTECTED_ROUTES.map(({ path, module, element }) => (
+        <Route
+          key={path}
+          path={path}
+          element={<ProtectedRoute module={module}>{element}</ProtectedRoute>}
+        />
+      ))}
 
       {/* Default redirect */}
       <Route path="*" element={<Navigate to="/login" replace />} />

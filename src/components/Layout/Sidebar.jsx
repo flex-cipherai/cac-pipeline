@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
+import { MODULE_BY_KEY } from '../../lib/permissions'
 import './Sidebar.css'
 
 const icons = {
@@ -25,6 +26,12 @@ const icons = {
       <rect x="11" y="2" width="7" height="7" rx="1.5" />
       <rect x="2" y="11" width="7" height="7" rx="1.5" />
       <rect x="11" y="11" width="7" height="7" rx="1.5" />
+    </svg>
+  ),
+  inquiries: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 11.5h4l1 2h5l1-2h4" />
+      <path d="M4.5 3.5h11l2 8v4a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-4l2-8z" />
     </svg>
   ),
   pipeline: (
@@ -119,21 +126,23 @@ const icons = {
 }
 
 // The system has two modules — Sales Pipeline Management and Social Media
-// Management — each rendered as a collapsible group in the sidebar. Items
-// are filtered per role below; a group with no items for the current role
-// is omitted entirely rather than shown empty.
+// Management — each rendered as a collapsible group in the sidebar. Each item
+// is a permission module (lib/permissions.js, edited in Settings → Permissions)
+// and only shows when the signed-in user can open it; a group with nothing to
+// show is omitted entirely rather than shown empty.
 const MODULES = [
   {
     key: 'pipeline',
     label: 'Sales Pipeline',
     icon: icons.salesModule,
     items: [
-      { to: '/dashboard', icon: icons.dashboard, label: 'Dashboard', roles: ['admin', 'sales'] },
-      { to: '/pipeline', icon: icons.pipeline, label: 'Pipeline', roles: ['admin', 'sales'] },
-      { to: '/leads', icon: icons.leads, label: 'All Leads', roles: ['admin', 'sales'] },
-      { to: '/quotations', icon: icons.quotation, label: 'Quotations', roles: ['admin', 'sales'] },
-      { to: '/analytics', icon: icons.analytics, label: 'Lead Analytics', roles: ['admin', 'marketing'] },
-      { to: '/notifications', icon: icons.notifications, label: 'Notifications', roles: ['admin', 'sales'] },
+      { module: 'dashboard', icon: icons.dashboard },
+      { module: 'inquiries', icon: icons.inquiries },
+      { module: 'pipeline', icon: icons.pipeline },
+      { module: 'leads', icon: icons.leads },
+      { module: 'quotations', icon: icons.quotation },
+      { module: 'lead_analytics', icon: icons.analytics },
+      { module: 'notifications', icon: icons.notifications },
     ],
   },
   {
@@ -141,20 +150,23 @@ const MODULES = [
     label: 'Social Media',
     icon: icons.socialModule,
     items: [
-      { to: '/social/calendar', icon: icons.calendarIcon, label: 'Content Calendar', roles: ['admin', 'marketing'] },
-      { to: '/social/composer', icon: icons.compose, label: 'New Post', roles: ['admin', 'marketing'] },
-      { to: '/social/library', icon: icons.library, label: 'Content Library', roles: ['admin', 'marketing'] },
-      { to: '/social/approvals', icon: icons.approvals, label: 'Approvals', roles: ['admin', 'marketing'] },
-      { to: '/social/analytics', icon: icons.analytics, label: 'Social Analytics', roles: ['admin', 'marketing'] },
-      { to: '/social/website-analytics', icon: icons.website, label: 'Website Analytics', roles: ['admin', 'marketing'] },
-      { to: '/social/activity', icon: icons.activity, label: 'Activity Inbox', roles: ['admin', 'marketing'] },
+      { module: 'social_calendar', icon: icons.calendarIcon },
+      { module: 'social_composer', icon: icons.compose },
+      { module: 'social_library', icon: icons.library },
+      { module: 'social_approvals', icon: icons.approvals },
+      { module: 'social_analytics', icon: icons.analytics },
+      { module: 'website_analytics', icon: icons.website },
+      { module: 'social_activity', icon: icons.activity },
     ],
   },
-]
+].map(group => ({
+  ...group,
+  items: group.items.map(item => ({ ...item, to: MODULE_BY_KEY[item.module].path, label: MODULE_BY_KEY[item.module].label })),
+}))
 
 // Items that don't belong to either module.
 const STANDALONE_ITEMS = [
-  { to: '/settings', icon: icons.settings, label: 'Settings', roles: ['admin', 'sales'] },
+  { module: 'settings', icon: icons.settings, to: MODULE_BY_KEY.settings.path, label: MODULE_BY_KEY.settings.label },
 ]
 
 const roleLabels = {
@@ -164,14 +176,14 @@ const roleLabels = {
 }
 
 export default function Sidebar({ isOpen, onClose }) {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, can } = useAuth()
   const location = useLocation()
   const role = profile?.role || 'admin'
 
   const modules = MODULES
-    .map(m => ({ ...m, items: m.items.filter(i => i.roles.includes(role)) }))
+    .map(m => ({ ...m, items: m.items.filter(i => can(i.module)) }))
     .filter(m => m.items.length > 0)
-  const standaloneItems = STANDALONE_ITEMS.filter(i => i.roles.includes(role))
+  const standaloneItems = STANDALONE_ITEMS.filter(i => can(i.module))
 
   const [openModule, setOpenModule] = useState(null)
 

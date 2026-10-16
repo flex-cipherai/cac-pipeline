@@ -289,6 +289,14 @@ const VARIABLE_LABELS = {
   previous_stage: 'Previous Stage',
   lost_reason: 'Lost Reason',
   source: 'Lead Source',
+  recipient_name: 'Recipient first name',
+  total_count: 'Number of inquiries',
+  follow_up_due_count: 'Follow-ups due',
+  follow_up_tomorrow_count: 'Follow-ups tomorrow',
+  gone_quiet_count: 'Gone quiet',
+  reply_target_hours: 'Reply target (hours)',
+  items_html: 'Inquiry list',
+  app_link: 'Link to Inquiries',
 }
 
 export default function Notifications() {
@@ -410,6 +418,14 @@ export default function Notifications() {
       previous_stage: 'Responses In',
       lost_reason: 'Budget constraints — cannot commit financially',
       source: 'LinkedIn',
+      recipient_name: 'Sam',
+      total_count: '3',
+      follow_up_due_count: '1',
+      follow_up_tomorrow_count: '1',
+      gone_quiet_count: '1',
+      reply_target_hours: '24',
+      app_link: '#',
+      items_html: '<h3 style="font-size:14px;margin:20px 0 8px;">Follow up now (1)</h3><ul style="margin:0;padding-left:18px;font-size:14px;"><li style="margin:0 0 10px;"><strong>Amina Wekesa</strong>, Kijani Foods<br><span style="color:#666;font-size:13px;">via WhatsApp · follow-up due today · 0712 345 678</span></li></ul><h3 style="font-size:14px;margin:20px 0 8px;">Gone quiet (1)</h3><ul style="margin:0;padding-left:18px;font-size:14px;"><li style="margin:0 0 10px;"><strong>Peter Otieno</strong>, Otieno Logistics<br><span style="color:#666;font-size:13px;">via Phone call · no contact for 9 days</span></li></ul>',
     }
     let html = editBody
     Object.entries(sampleData).forEach(([key, val]) => {

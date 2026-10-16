@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from './supabase'
+import { buildAccessMap, canAccess, firstAllowedPath } from './permissions'
 
 const AuthContext = createContext({})
 
@@ -24,6 +25,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  // { moduleKey: boolean } for the signed-in user's role; see lib/permissions.js
+  const [access, setAccess] = useState(null)
 
   useEffect(() => {
     const idleSince = Date.now() - readLastActivity()
@@ -90,6 +93,25 @@ export function AuthProvider({ children }) {
     }
   }, [user])
 
+  // The permission rows for one role. If the table is missing (migration not run) or unreadable, every
+  // module falls back to who could open it before permissions existed, so the app keeps working.
+  async function loadAccess(role) {
+    if (role === 'admin') return null
+    const { data, error } = await supabase.from('role_permissions').select('module, allowed').eq('role', role)
+    return buildAccessMap(role, error ? [] : data)
+  }
+
+  // A permission change made by an admin should reach people who are already signed in without a
+  // fresh login, so re-read whenever the tab comes back into view.
+  useEffect(() => {
+    if (!profile || profile.role === 'admin') return
+    const refresh = () => {
+      if (document.visibilityState === 'visible') loadAccess(profile.role).then(setAccess)
+    }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [profile?.id, profile?.role])
+
   async function fetchProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
@@ -107,6 +129,8 @@ export function AuthProvider({ children }) {
         return 'deactivated'
       }
 
+      // Permissions first, so the first render after login already knows which pages are open.
+      setAccess(await loadAccess(data.role))
       setProfile(data)
 
       // Update last sign-in timestamp (fire and forget)
@@ -142,14 +166,20 @@ export function AuthProvider({ children }) {
     if (error) throw error
     setUser(null)
     setProfile(null)
+    setAccess(null)
   }
 
+  const role = profile?.role
   const value = {
     user,
     profile,
     loading,
     signIn,
     signOut,
+    // Can the signed-in user open this module? (keys: lib/permissions.js)
+    can: moduleKey => !!role && canAccess(role, access, moduleKey),
+    // First page they are allowed to open, or null when they have none.
+    homePath: role ? firstAllowedPath(role, access) : null,
   }
 
   return (

@@ -30,6 +30,10 @@ cac-pipeline/
 │   ├── migration-social-linkedin-oauth.sql # Phase 2: LinkedIn OAuth token storage
 │   ├── migration-website-analytics.sql     # Website analytics: sessions/events, funnel + SEO reports
 │   ├── migration-website-analytics-cron.sql # pg_cron: daily Search Console sync, data retention
+│   ├── migration-role-permissions.sql      # Settings → Permissions: which modules each role can open
+│   ├── migration-inquiries.sql             # Inquiries: tables, RLS, convert_inquiry_to_lead()
+│   ├── migration-inquiry-reminders.sql     # Inquiry reminder columns + email templates
+│   ├── migration-inquiry-reminders-cron.sql # pg_cron: daily digest + hourly reply alerts
 │   └── functions/sm-*/          # Social media Edge Functions (incl. sm-gsc-sync)
 ├── .env                 # Environment variables (not committed)
 ├── netlify.toml         # Netlify SPA routing config
@@ -37,6 +41,48 @@ cac-pipeline/
 ```
 
 Run the `migration-social-*.sql` files (in that order) in the Supabase SQL Editor after `schema.sql`, deploy the `sm-*` Edge Functions, and set `app_base_url` in Settings → Content Defaults once the site is live, to enable the Social Media Management module.
+
+### Inquiries (`/inquiries`)
+
+Tracks people who have reached out but are not leads yet, from first contact to a decision. Today most of that happens outside the system (WhatsApp, phone, email, LinkedIn messages, referrals, events), so nothing recorded it until someone booked a call. Sales Pipeline module; admin and sales by default (Settings → Permissions).
+
+**How an inquiry moves**
+
+- Staff **log** it (channel, who, what they asked, owner, optional follow-up date). The page warns if the same phone number or email already belongs to an inquiry or a lead.
+- Status runs `new` → `contacted` → `engaged`, then ends as `converted` (it became a lead) or `closed` (with a reason: stopped responding, not a fit, not interested, duplicate, spam, other). Closed inquiries can be reopened.
+- Logging a call, WhatsApp, email or meeting in the **Activity** tab stamps the first reply and last contact and moves a `new` inquiry to `contacted`. This is done by a database trigger, so the rule holds wherever activities are added. Notes do not count as a reply.
+- **Turn into a lead** creates the lead through `convert_inquiry_to_lead()`, one transaction that also writes the lead's stage history, copies what they asked into the lead's notes and marks the inquiry converted. It cannot leave a lead behind with the inquiry still open, and it refuses a second conversion. If a lead with the same email or phone already exists, the dialog defaults to **Link to an existing lead** instead, so no duplicate is created.
+- The new lead starts as "Not scored yet". Its stage defaults to `Incomplete` (a lead to follow up with no call booked); pick a pipeline stage if a call is already arranged. `nudge_sent_at` is stamped so the automatic "finish booking your call" email does not go to someone the team is already talking to.
+
+**What needs attention** (rules in `src/lib/inquiries.js`)
+
+- *Reply overdue*: still `new` after 24 hours (`REPLY_TARGET_HOURS`).
+- *Follow-up due*: the follow-up date is today or earlier.
+- *Gone quiet*: open, past `new`, no follow-up date and no contact for 7 days (`QUIET_AFTER_DAYS`).
+
+The page opens on **Needs attention** when anything is flagged. There are no reminder emails for these yet; they show on the page.
+
+**Reports.** The period selector filters by the date the inquiry was received. "Open now" and "Need attention" are always about right now. The channel table shows received, still open, became leads, conversion rate and median first reply per channel. "Became leads" is converted ÷ received in the period, so a recent period will read low until its inquiries have had time to convert. First-reply time is measured from the *received* time to when the reply was logged, so log inquiries promptly (or set the received time) for it to mean anything.
+
+**Setup.** In the Supabase SQL Editor run, in order and each safe to re-run: `schema.sql`, `migration-booking-flow.sql`, `migration-role-permissions.sql`, then `migration-inquiries.sql`. Until it has run, the page shows a one-line setup notice instead of failing. Access follows Settings → Permissions (module "Inquiries") at the database level too, not just in the menu; only admin can delete an inquiry.
+
+**Reminders.** Two scheduled jobs call the `send-inquiry-reminders` Edge Function. Each person gets one email per run listing their inquiries (their own, or everyone's who can use inquiries when an inquiry has no owner), plus an entry in the notification bell.
+
+- *Daily digest*, 06:00 UTC (09:00 Nairobi): follow-ups due today or tomorrow, and inquiries that have gone quiet. Not sent when there is nothing to say.
+- *Reply alerts*, hourly: new inquiries with no reply for 24 hours. Only sent 08:00–18:00 team time (the `team_timezone` setting); an overdue inquiry found at night goes out the next morning.
+- Each reminder goes out once. Moving a follow-up date, or contacting someone again, re-arms the matching reminder. A missed day is caught up, not lost. If neither the email nor the bell could be delivered, nothing is marked sent and the next run tries again.
+- The wording is two ordinary templates on the Notifications page ("Inquiry Follow-ups (daily digest)" and "Inquiry Waiting for a Reply"). Switching one off stops the email but keeps the bell. The 24 hours, 7 days and working hours are constants in `supabase/functions/_shared/inquiryReminders.ts` and must match `src/lib/inquiries.js`.
+
+Setup: run `migration-inquiry-reminders.sql`; `supabase functions deploy send-inquiry-reminders --no-verify-jwt` (same `RESEND_API_KEY` / `SENDER_EMAIL` secrets as the other reminder functions); fill in `YOUR_PROJECT_URL` / `YOUR_ANON_KEY` in `migration-inquiry-reminders-cron.sql` and run it. To check it, invoke the function with `{"mode":"daily"}` and read the JSON it returns.
+
+### Permissions (Settings → Permissions)
+
+Admins choose which modules the **sales** and **marketing** roles can open. Admin always has everything and cannot be edited; it has no rows (a database check prevents one), so a bad edit cannot lock the admin out. The modules are listed in `src/lib/permissions.js`; the table is `role_permissions`.
+
+- **What it controls:** the sidebar and the pages themselves. A page the user cannot open redirects to the first one they can; a role with nothing enabled sees a "No modules available" page. Permissions are read at login and again whenever a tab comes back into view, so a change reaches people already signed in. The Users, Scoring and Permissions sections of Settings stay admin-only whatever is set.
+- **What it does not (yet) control:** database access for most modules. Their row level security policies list roles directly (the Social Media tables allow admin and marketing only, for example), so giving sales a social page opens the page but its data will not load or save. The matrix marks those cells with an amber "!" and a warning. **Inquiries** is the exception: its policies and `convert_inquiry_to_lead()` call `has_module_access('inquiries')`, so the database obeys the matrix. To bring another module over, replace its role lists with `public.has_module_access('<module key>')` and set `dbFollowsPermissions: true` for it in `permissions.js`.
+- **Adding a module:** an entry in `permissions.js`, a route in `App.jsx`, a sidebar item, and a seed row in `migration-role-permissions.sql`. In the app, a module with no stored row falls back to who could open it before permissions existed; the database treats a missing row as no access. That is why saving writes every row.
+- **Setup:** run `migration-role-permissions.sql` (before `migration-inquiries.sql`). It seeds exactly the access each role had before, so nothing changes until an admin edits it. Until it has run, everyone keeps the original access and the Settings section shows a setup notice.
 
 ### Phase 2 — LinkedIn API (Community Management API)
 
