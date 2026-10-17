@@ -180,6 +180,8 @@ export function AuthProvider({ children }) {
     can: moduleKey => !!role && canAccess(role, access, moduleKey),
     // First page they are allowed to open, or null when they have none.
     homePath: role ? firstAllowedPath(role, access) : null,
+    // Re-read the signed-in user's profile (and permissions) after it was edited.
+    refreshProfile: () => (user ? fetchProfile(user.id) : null),
   }
 
   return (

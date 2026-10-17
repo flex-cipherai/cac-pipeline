@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/AuthContext'
-import { MODULE_BY_KEY } from '../../lib/permissions'
+import { MODULE_BY_KEY, SETTINGS_MODULES } from '../../lib/permissions'
 import './Sidebar.css'
 
 const icons = {
@@ -166,7 +166,8 @@ const MODULES = [
 
 // Items that don't belong to either module.
 const STANDALONE_ITEMS = [
-  { module: 'settings', icon: icons.settings, to: MODULE_BY_KEY.settings.path, label: MODULE_BY_KEY.settings.label },
+  // One entry for all the Settings pages; shown to anyone who may open at least one of them.
+  { modules: SETTINGS_MODULES.map(m => m.key), icon: icons.settings, to: '/settings', label: 'Settings' },
 ]
 
 const roleLabels = {
@@ -183,7 +184,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const modules = MODULES
     .map(m => ({ ...m, items: m.items.filter(i => can(i.module)) }))
     .filter(m => m.items.length > 0)
-  const standaloneItems = STANDALONE_ITEMS.filter(i => can(i.module))
+  const standaloneItems = STANDALONE_ITEMS.filter(i => i.modules.some(can))
 
   const [openModule, setOpenModule] = useState(null)
 

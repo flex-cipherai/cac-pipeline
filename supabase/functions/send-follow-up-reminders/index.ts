@@ -12,6 +12,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { DateTime } from 'https://esm.sh/luxon@3.5.0'
 import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
 import { DEFAULT_TIMEZONE } from '../_shared/datetime.ts'
+import { staffWithModule } from '../_shared/access.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,8 +70,8 @@ Deno.serve(async (req) => {
     const beforeTemplate = templates?.find(t => t.template_key === 'follow_up_reminder_before')
     const dueTemplate = templates?.find(t => t.template_key === 'follow_up_reminder_due')
 
-    const { data: staff } = await adminClient.from('profiles').select('id, email').in('role', ['admin', 'sales'])
-    const recipients = (staff || []).filter(p => p.email)
+    const staff = await staffWithModule(adminClient, 'pipeline', ['admin', 'sales'], 'id, email')
+    const recipients = staff.filter(p => p.email)
 
     function formatFollowUp(dateStr: string) {
       return DateTime.fromISO(dateStr, { zone: teamTimezone }).toFormat('cccc, d LLLL yyyy')

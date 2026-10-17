@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
-import { EDITABLE_ROLES, MODULES, MODULE_GROUPS, buildAccessMap, defaultAllowed, needsDatabaseGrant } from '../../lib/permissions'
+import { EDITABLE_ROLES, DELEGABLE_MODULES, MODULE_GROUPS, buildAccessMap, defaultAllowed } from '../../lib/permissions'
 import './PermissionsManager.css'
 
 function isMissingTable(error) {
@@ -25,6 +25,7 @@ export default function PermissionsManager({ showToast }) {
   const { profile } = useAuth()
   const [saved, setSaved] = useState(null)   // what the database holds
   const [draft, setDraft] = useState(null)   // what the admin is editing
+  const [enforced, setEnforced] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [setupNeeded, setSetupNeeded] = useState(false)
@@ -33,32 +34,28 @@ export default function PermissionsManager({ showToast }) {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data, error: err } = await supabase.from('role_permissions').select('role, module, allowed')
-    if (err) {
-      if (isMissingTable(err)) setSetupNeeded(true)
-      else setError(err.message || 'Could not load permissions.')
+    const [permRes, flagRes] = await Promise.all([
+      supabase.from('role_permissions').select('role, module, allowed'),
+      supabase.from('system_settings').select('value').eq('key', 'permissions_enforced').maybeSingle(),
+    ])
+    if (permRes.error) {
+      if (isMissingTable(permRes.error)) setSetupNeeded(true)
+      else setError(permRes.error.message || 'Could not load permissions.')
     } else {
-      const maps = mapsFromRows(data)
+      const maps = mapsFromRows(permRes.data)
       setSaved(maps)
       setDraft(maps)
+      setEnforced(flagRes.data?.value === 'true')
     }
     setLoading(false)
   }
 
   const changes = useMemo(() => {
     if (!saved || !draft) return []
-    return EDITABLE_ROLES.flatMap(r => MODULES
+    return EDITABLE_ROLES.flatMap(r => DELEGABLE_MODULES
       .filter(m => saved[r.key][m.key] !== draft[r.key][m.key])
       .map(m => ({ role: r, module: m, allowed: draft[r.key][m.key] })))
   }, [saved, draft])
-
-  // Cells that are switched on but whose pages will not fully work for that role.
-  const unsupported = useMemo(() => {
-    if (!draft) return []
-    return EDITABLE_ROLES.flatMap(r => MODULES
-      .filter(m => draft[r.key][m.key] && needsDatabaseGrant(r.key, m.key))
-      .map(m => ({ role: r, module: m })))
-  }, [draft])
 
   function setCell(roleKey, moduleKey, value) {
     setDraft(d => ({ ...d, [roleKey]: { ...d[roleKey], [moduleKey]: value } }))
@@ -67,12 +64,12 @@ export default function PermissionsManager({ showToast }) {
   function setGroup(roleKey, group, value) {
     setDraft(d => ({
       ...d,
-      [roleKey]: { ...d[roleKey], ...Object.fromEntries(group.modules.map(m => [m.key, value])) },
+      [roleKey]: { ...d[roleKey], ...Object.fromEntries(group.modules.filter(m => !m.adminOnly).map(m => [m.key, value])) },
     }))
   }
 
   function resetToDefaults() {
-    setDraft(Object.fromEntries(EDITABLE_ROLES.map(r => [r.key, Object.fromEntries(MODULES.map(m => [m.key, defaultAllowed(r.key, m.key)]))])))
+    setDraft(Object.fromEntries(EDITABLE_ROLES.map(r => [r.key, Object.fromEntries(DELEGABLE_MODULES.map(m => [m.key, defaultAllowed(r.key, m.key)]))])))
   }
 
   async function handleSave() {
@@ -80,8 +77,8 @@ export default function PermissionsManager({ showToast }) {
     setError('')
     // Write every cell, not just the changed ones, so the table is always complete: the database policy
     // helper treats a missing row as "no access".
-    const rows = EDITABLE_ROLES.flatMap(r => MODULES.map(m => ({
-      role: r.key, module: m.key, allowed: draft[r.key][m.key], updated_by: profile?.id || null,
+    const rows = EDITABLE_ROLES.flatMap(r => DELEGABLE_MODULES.map(m => ({
+      role: r.key, module: m.key, allowed: !!draft[r.key][m.key], updated_by: profile?.id || null,
     })))
     const { error: err } = await supabase.from('role_permissions').upsert(rows, { onConflict: 'role,module' })
     setSaving(false)
@@ -115,9 +112,17 @@ export default function PermissionsManager({ showToast }) {
 
   return (
     <div className="section-card perm-card">
+      {!enforced && (
+        <div className="perm-callout" role="status">
+          <strong>The database is not following this table yet.</strong>{' '}
+          Right now these switches only change menus and pages: someone who is given a module can open it, but its data is still limited by the old database rules.
+          Run <code>supabase/migration-permissions-enforcement.sql</code> in the Supabase SQL Editor, then reload this page.
+        </div>
+      )}
+
       <p className="perm-note">
-        Choose which modules each role can open. Switched-off modules disappear from that role's menu and their pages redirect away.
-        Admins always have every module, and the Users, Scoring and Permissions sections of Settings are admin-only whatever is set here.
+        Choose which modules each role can open. A switched-off module disappears from that role's menu, its pages redirect away, and its data is no longer readable or changeable by them.
+        Admins always have every module. The modules marked <em>Admin only</em> cannot be given to anyone else.
         People already signed in pick up a change when they next return to the app.
       </p>
 
@@ -130,60 +135,55 @@ export default function PermissionsManager({ showToast }) {
               {EDITABLE_ROLES.map(r => <th key={r.key} scope="col" className="perm-role-col">{r.label}</th>)}
             </tr>
           </thead>
-          {MODULE_GROUPS.map(group => (
-            <tbody key={group.key}>
-              <tr className="perm-group-row">
-                <th scope="row">{group.label}</th>
-                <td className="perm-role-col"><span className="perm-locked" title="Admins always have every module">Always</span></td>
-                {EDITABLE_ROLES.map(r => {
-                  const on = group.modules.filter(m => draft[r.key][m.key]).length
-                  return (
-                    <td key={r.key} className="perm-role-col">
-                      <GroupCheckbox
-                        checked={on === group.modules.length}
-                        indeterminate={on > 0 && on < group.modules.length}
-                        onChange={e => setGroup(r.key, group, e.target.checked)}
-                        label={`${r.label}: all ${group.label} modules`}
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-              {group.modules.map(m => (
-                <tr key={m.key}>
-                  <th scope="row" className="perm-module">
-                    <span>{m.label}</span>
-                    {m.hint && <small>{m.hint}</small>}
-                  </th>
-                  <td className="perm-role-col"><input type="checkbox" checked disabled aria-label={`Admin: ${m.label} (always on)`} /></td>
+          {MODULE_GROUPS.map(group => {
+            const delegable = group.modules.filter(m => !m.adminOnly)
+            return (
+              <tbody key={group.key}>
+                <tr className="perm-group-row">
+                  <th scope="row">{group.label}</th>
+                  <td className="perm-role-col"><span className="perm-locked" title="Admins always have every module">Always</span></td>
                   {EDITABLE_ROLES.map(r => {
-                    const allowed = draft[r.key][m.key]
-                    const warn = allowed && needsDatabaseGrant(r.key, m.key)
-                    const changed = saved[r.key][m.key] !== allowed
+                    const on = delegable.filter(m => draft[r.key][m.key]).length
                     return (
-                      <td key={r.key} className={`perm-role-col ${changed ? 'perm-changed' : ''}`}>
-                        <label className="perm-cell">
-                          <input type="checkbox" checked={allowed} onChange={e => setCell(r.key, m.key, e.target.checked)} aria-label={`${r.label}: ${m.label}`} />
-                          {warn && <span className="perm-warn" title={`${r.label} has no database rights for ${m.label}, so this page will open but its data will not load or save.`} aria-hidden="true">!</span>}
-                        </label>
+                      <td key={r.key} className="perm-role-col">
+                        <GroupCheckbox
+                          checked={on === delegable.length}
+                          indeterminate={on > 0 && on < delegable.length}
+                          onChange={e => setGroup(r.key, group, e.target.checked)}
+                          label={`${r.label}: all ${group.label} modules`}
+                        />
                       </td>
                     )
                   })}
                 </tr>
-              ))}
-            </tbody>
-          ))}
+                {group.modules.map(m => (
+                  <tr key={m.key}>
+                    <th scope="row" className="perm-module">
+                      <span>{m.label}</span>
+                      {m.hint && <small>{m.hint}</small>}
+                    </th>
+                    <td className="perm-role-col"><input type="checkbox" checked disabled aria-label={`Admin: ${m.label} (always on)`} /></td>
+                    {EDITABLE_ROLES.map(r => {
+                      if (m.adminOnly) {
+                        return <td key={r.key} className="perm-role-col"><span className="perm-locked">Admin only</span></td>
+                      }
+                      const allowed = draft[r.key][m.key]
+                      const changed = saved[r.key][m.key] !== allowed
+                      return (
+                        <td key={r.key} className={`perm-role-col ${changed ? 'perm-changed' : ''}`}>
+                          <label className="perm-cell">
+                            <input type="checkbox" checked={allowed} onChange={e => setCell(r.key, m.key, e.target.checked)} aria-label={`${r.label}: ${m.label}`} />
+                          </label>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            )
+          })}
         </table>
       </div>
-
-      {unsupported.length > 0 && (
-        <div className="perm-callout" role="status">
-          <strong>{unsupported.length} switch{unsupported.length === 1 ? ' is' : 'es are'} on without database rights.</strong>{' '}
-          Pages marked <span className="perm-warn perm-warn-inline">!</span> will open, but the database still only lets the roles it was set up for read or change that data
-          ({unsupported.slice(0, 4).map(u => `${u.role.label}: ${u.module.label}`).join(', ')}{unsupported.length > 4 ? ` and ${unsupported.length - 4} more` : ''}).
-          Inquiries is the exception: its database access follows this table. The others need their row level security policies updated before the role can use them.
-        </div>
-      )}
 
       {error && <p className="perm-error">{error}</p>}
 

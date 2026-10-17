@@ -1,4 +1,4 @@
-.perm-card {
+﻿.perm-card {
   padding: var(--space-lg);
 }
 
@@ -100,25 +100,6 @@
   box-shadow: inset 3px 0 0 var(--sdfm-red);
 }
 
-.perm-warn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--warm-color);
-  color: var(--white);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: help;
-}
-
-.perm-warn-inline {
-  vertical-align: middle;
-}
-
 .perm-callout {
   margin-top: var(--space-md);
   background: var(--warm-bg);
@@ -149,4 +130,14 @@
   margin-right: auto;
   font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+
+.perm-callout {
+  margin-bottom: var(--space-md);
+}
+
+.perm-callout code {
+  background: rgba(255, 255, 255, 0.6);
+  padding: 1px 5px;
+  border-radius: 4px;
 }

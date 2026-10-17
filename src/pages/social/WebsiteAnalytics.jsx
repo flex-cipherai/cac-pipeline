@@ -772,7 +772,7 @@ export default function WebsiteAnalytics() {
                 <li>In Google Cloud, enable the <strong>Search Console API</strong> and create a <strong>service account</strong> with a JSON key.</li>
                 <li>In Search Console → Settings → Users and permissions, add the service account's email as a user (Restricted is enough).</li>
                 <li>Set the key as the Supabase secret <code>GSC_SERVICE_ACCOUNT_JSON</code> and deploy <code>sm-gsc-sync</code>.</li>
-                <li>An admin enters the property in <strong>Settings → Search Console</strong>, then press <em>Sync now</em>.</li>
+                <li>An admin enters the property in <strong>Settings → Integrations</strong>, then press <em>Sync now</em>.</li>
               </ol>
               <p className="wa-hint">Full instructions are in the README under “Website Analytics”. The first sync backfills 90 days.</p>
             </div>

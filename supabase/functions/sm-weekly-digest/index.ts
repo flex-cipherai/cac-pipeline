@@ -8,6 +8,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
+import { staffWithModule } from '../_shared/access.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -86,8 +87,7 @@ Deno.serve(async (req) => {
       dashboard_link: `${appUrl}/social/analytics`,
     }
 
-    const { data: recipients } = await adminClient
-      .from('profiles').select('email').in('role', ['admin', 'marketing']).neq('is_active', false)
+    const recipients = await staffWithModule(adminClient, 'social_analytics', ['admin', 'marketing'], 'email')
 
     const validRecipients = (recipients || []).filter(r => r.email)
     if (validRecipients.length === 0) {

@@ -1,5 +1,5 @@
 // Supabase Edge Function: sm-linkedin-oauth-start
-// Called by an authenticated admin from Settings → Connected Accounts
+// Called by an authenticated admin from Settings → Integrations
 // ("Connect LinkedIn"). Verifies the caller, stores a short-lived CSRF
 // state row, and returns the LinkedIn authorization URL for the browser to
 // navigate to. The redirect_uri here MUST exactly match one of the

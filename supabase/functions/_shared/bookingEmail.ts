@@ -5,6 +5,7 @@
 
 import { renderTemplate, requireResendKey, sendViaResend } from './resend.ts'
 import { leadVars } from './datetime.ts'
+import { staffWithModule } from './access.ts'
 import type { BookingSettings } from './booking.ts'
 import { googleCalendarLink, prepLink, resumeLink, whatsappLink } from './booking.ts'
 
@@ -55,9 +56,9 @@ export async function sendBookingEmails(admin: any, lead: any, cfg: BookingSetti
 
   const teamTemplate = templates.new_lead_alert
   if (teamTemplate?.is_active) {
-    const { data: staff, error } = await admin.from('profiles').select('email, timezone').in('role', ['admin', 'sales'])
-    const recipients = (staff || []).filter((p: any) => p.email)
-    if (!error && recipients.length > 0) {
+    const staff = await staffWithModule(admin, 'pipeline', ['admin', 'sales'], 'email, timezone')
+    const recipients = staff.filter((p: any) => p.email)
+    if (recipients.length > 0) {
       const sends = await Promise.allSettled(recipients.map((p: any) => {
         const vars = leadVars(lead, cfg.team_timezone, p.timezone || cfg.team_timezone)
         return sendViaResend([p.email], renderTemplate(teamTemplate.subject, vars), renderTemplate(teamTemplate.body_html, vars))

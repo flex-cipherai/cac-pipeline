@@ -10,6 +10,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
 import { DEFAULT_TIMEZONE, leadVars } from '../_shared/datetime.ts'
+import { staffWithModule } from '../_shared/access.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -82,14 +83,12 @@ Deno.serve(async (req) => {
     }
 
     if (teamTemplate?.is_active) {
-      const { data: staff, error: staffError } = await adminClient
-        .from('profiles')
-        .select('email, timezone')
-        .in('role', ['admin', 'sales'])
+      // Everyone who can open the pipeline (Settings → Permissions), not a fixed role list.
+      const staff = await staffWithModule(adminClient, 'pipeline', ['admin', 'sales'], 'email, timezone')
 
-      const recipients = (staff || []).filter(p => p.email)
+      const recipients = staff.filter(p => p.email)
 
-      if (!staffError && recipients.length > 0) {
+      if (recipients.length > 0) {
         const sends = await Promise.allSettled(recipients.map(p => {
           const vars = leadVars(lead, teamTimezone, p.timezone || teamTimezone)
           return sendViaResend([p.email], renderTemplate(teamTemplate.subject, vars), renderTemplate(teamTemplate.body_html, vars))
@@ -97,7 +96,7 @@ Deno.serve(async (req) => {
         const failed = sends.filter(s => s.status === 'rejected').length
         results.team = { success: failed === 0, recipients: recipients.length, failed }
       } else {
-        results.team = { success: false, error: staffError?.message || 'No admin/sales recipients found' }
+        results.team = { success: false, error: 'No team recipients found' }
       }
     }
 

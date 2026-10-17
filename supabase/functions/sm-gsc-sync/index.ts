@@ -21,12 +21,13 @@
 //   2. Search Console → Settings → Users and permissions → add the service
 //      account's email (client_email in the key) with "Restricted" access.
 //   3. supabase secrets set GSC_SERVICE_ACCOUNT_JSON="<key file JSON or base64>"
-//   4. Settings → Search Console in the app: enter the property
+//   4. Settings → Integrations in the app: enter the property
 //      (e.g. sc-domain:sdfmgroup.com or https://sdfmgroup.com/).
 //
 // Deploy: supabase functions deploy sm-gsc-sync
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { userHasModule } from '../_shared/access.ts'
 import { getAccessToken, listSites, parseServiceAccount, queryAnalytics, syncRange } from '../_shared/searchConsole.ts'
 
 const corsHeaders = {
@@ -71,16 +72,19 @@ Deno.serve(async (req) => {
 
     // Who is calling? A signed-in team member, or the cron job (anon key).
     let callerRole: string | null = null
+    let callerId: string | null = null
     const authHeader = req.headers.get('Authorization')
     if (authHeader) {
       const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
       const { data: { user } } = await userClient.auth.getUser()
       if (user) {
+        callerId = user.id
         const { data: profile } = await userClient.from('profiles').select('role').eq('id', user.id).single()
         callerRole = profile?.role ?? null
       }
     }
-    const isTeamMember = callerRole === 'admin' || callerRole === 'marketing'
+    // A team member = anyone who can open Website Analytics (Settings → Permissions); admin always can.
+    const isTeamMember = callerId ? await userHasModule(adminClient, callerId, 'website_analytics', ['admin', 'marketing']) : false
 
     // Service account first: every action needs it.
     let serviceAccount
@@ -107,7 +111,7 @@ Deno.serve(async (req) => {
       return jsonResponse({
         success: false,
         code: 'no_site',
-        error: 'No Search Console property set — enter it in Settings → Search Console',
+        error: 'No Search Console property set — enter it in Settings → Integrations',
         service_account_email: serviceAccount.client_email,
       })
     }

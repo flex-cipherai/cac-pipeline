@@ -12,6 +12,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
+import { staffWithModule } from '../_shared/access.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey)
 
     if (event === 'follower_milestone') {
-      const { data: recipients } = await adminClient.from('profiles').select('id, email').in('role', ['admin', 'marketing']).neq('is_active', false)
+      const recipients = await staffWithModule(adminClient, 'social_activity', ['admin', 'marketing'], 'id, email')
       const valid = (recipients || []).filter(r => r.email)
 
       await adminClient.from('in_app_notifications').insert(

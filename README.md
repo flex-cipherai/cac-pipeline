@@ -31,6 +31,7 @@ cac-pipeline/
 │   ├── migration-website-analytics.sql     # Website analytics: sessions/events, funnel + SEO reports
 │   ├── migration-website-analytics-cron.sql # pg_cron: daily Search Console sync, data retention
 │   ├── migration-role-permissions.sql      # Settings → Permissions: which modules each role can open
+│   ├── migration-permissions-enforcement.sql # Makes every module's database policies follow that table
 │   ├── migration-inquiries.sql             # Inquiries: tables, RLS, convert_inquiry_to_lead()
 │   ├── migration-inquiry-reminders.sql     # Inquiry reminder columns + email templates
 │   ├── migration-inquiry-reminders-cron.sql # pg_cron: daily digest + hourly reply alerts
@@ -40,7 +41,7 @@ cac-pipeline/
 └── vite.config.js       # Vite configuration
 ```
 
-Run the `migration-social-*.sql` files (in that order) in the Supabase SQL Editor after `schema.sql`, deploy the `sm-*` Edge Functions, and set `app_base_url` in Settings → Content Defaults once the site is live, to enable the Social Media Management module.
+Run the `migration-social-*.sql` files (in that order) in the Supabase SQL Editor after `schema.sql`, deploy the `sm-*` Edge Functions, and set `app_base_url` in Settings → Content defaults once the site is live, to enable the Social Media Management module.
 
 ### Inquiries (`/inquiries`)
 
@@ -75,14 +76,37 @@ The page opens on **Needs attention** when anything is flagged. There are no rem
 
 Setup: run `migration-inquiry-reminders.sql`; `supabase functions deploy send-inquiry-reminders --no-verify-jwt` (same `RESEND_API_KEY` / `SENDER_EMAIL` secrets as the other reminder functions); fill in `YOUR_PROJECT_URL` / `YOUR_ANON_KEY` in `migration-inquiry-reminders-cron.sql` and run it. To check it, invoke the function with `{"mode":"daily"}` and read the JSON it returns.
 
+### Settings
+
+Settings is split into sub-modules, one page each under `/settings/*` with a grouped side navigation (a swipeable tab strip on phones). `/settings` forwards to the first page the person may open.
+
+| Group | Page | Who |
+|---|---|---|
+| Account | My profile (`/settings/profile`) | switchable per role (default admin, sales) |
+| Workspace | Booking & availability (`/settings/booking`) | switchable per role (default admin, sales) |
+| Workspace | Scoring (`/settings/scoring`) | admin only |
+| Social media | Integrations: LinkedIn, Google Search Console (`/settings/integrations`) | admin only |
+| Social media | Content defaults and hashtag sets (`/settings/content`) | admin only |
+| Access | Users (`/settings/users`) | admin only |
+| Access | Permissions (`/settings/permissions`) | admin only |
+
+Each page is a permission module (`settings_*` in `src/lib/permissions.js`) and lives in `src/pages/settings/`. The LinkedIn connect flow still returns to `/settings?linkedin=...`; that is forwarded to Integrations. Saves report real failures: the database refuses a change the person has no right to make, and the page now says so instead of showing "saved".
+
 ### Permissions (Settings → Permissions)
 
-Admins choose which modules the **sales** and **marketing** roles can open. Admin always has everything and cannot be edited; it has no rows (a database check prevents one), so a bad edit cannot lock the admin out. The modules are listed in `src/lib/permissions.js`; the table is `role_permissions`.
+Admins choose which modules the **sales** and **marketing** roles can open. Admin always has everything and cannot be edited; it has no rows (a database check prevents one), so a bad edit cannot lock the admin out. Modules marked admin-only (user management, scoring, integrations, content defaults, the permissions screen itself) are shown in the matrix but cannot be given to another role. The modules are listed in `src/lib/permissions.js`; the table is `role_permissions`.
 
-- **What it controls:** the sidebar and the pages themselves. A page the user cannot open redirects to the first one they can; a role with nothing enabled sees a "No modules available" page. Permissions are read at login and again whenever a tab comes back into view, so a change reaches people already signed in. The Users, Scoring and Permissions sections of Settings stay admin-only whatever is set.
-- **What it does not (yet) control:** database access for most modules. Their row level security policies list roles directly (the Social Media tables allow admin and marketing only, for example), so giving sales a social page opens the page but its data will not load or save. The matrix marks those cells with an amber "!" and a warning. **Inquiries** is the exception: its policies and `convert_inquiry_to_lead()` call `has_module_access('inquiries')`, so the database obeys the matrix. To bring another module over, replace its role lists with `public.has_module_access('<module key>')` and set `dbFollowsPermissions: true` for it in `permissions.js`.
-- **Adding a module:** an entry in `permissions.js`, a route in `App.jsx`, a sidebar item, and a seed row in `migration-role-permissions.sql`. In the app, a module with no stored row falls back to who could open it before permissions existed; the database treats a missing row as no access. That is why saving writes every row.
-- **Setup:** run `migration-role-permissions.sql` (before `migration-inquiries.sql`). It seeds exactly the access each role had before, so nothing changes until an admin edits it. Until it has run, everyone keeps the original access and the Settings section shows a setup notice.
+The one table is enforced in three places, so the menu, the pages and the data cannot disagree:
+
+1. **The app:** the sidebar and routes. A page the user cannot open redirects to the first one they can; a role with nothing enabled sees a "No modules available" page. Permissions are read at login and again whenever a tab comes back into view, so a change reaches people already signed in.
+2. **The database:** `migration-permissions-enforcement.sql` replaces every module table's row level security policies with rules that call `has_module_access()` / `has_any_module_access()`. Switch a module off for a role and its data stops being readable or writable by that role, whatever the app does. The rules are listed in section 3 of that file, one line per table, with the modules whose pages use it. A table shared by several modules (leads, for example) is open to any of them. Not delegable on purpose: deciding on a post for approval, connected accounts, and user management stay admin-only.
+3. **The Edge Functions:** who receives lead alerts, call and follow-up reminders, social alerts and the weekly digest, and who may trigger a Search Console sync, now come from the same table (`supabase/functions/_shared/access.ts`) instead of fixed role lists. Deactivated users are never emailed.
+
+Settings → Permissions shows an amber banner until the enforcement migration has been applied, because until then the switches only change menus and pages.
+
+- **Adding a module:** an entry in `permissions.js`, a route in `App.jsx`, a sidebar item (or a Settings sub-page), a seed row in `migration-role-permissions.sql`, and the table rules in section 3 of `migration-permissions-enforcement.sql`. In the app, a module with no stored row falls back to who could open it before permissions existed; the database treats a missing row as no access. That is why saving writes every row.
+- **Setup (in order, each safe to re-run):** `migration-role-permissions.sql`; `migration-booking-lockdown.sql` if not already run; `migration-permissions-enforcement.sql`. The seed gives each role exactly the access it had before, so nothing changes until an admin edits the table. The enforcement migration refuses to run while any managed table still allows anonymous access (it names the policies), and it deletes every other existing policy on the tables it manages, including ones made by hand in the dashboard. Before the permissions migration has run, everyone keeps the original access and the Settings page shows a setup notice.
+- **Deliberate tightenings:** with the default seed each role keeps its current working access. What changes is that a role with no lead-related module can no longer read the leads tables, sales can no longer write settings other than the booking ones, and the leads, quotation and template tables are no longer open to every signed-in user.
 
 ### Phase 2 — LinkedIn API (Community Management API)
 
@@ -90,7 +114,7 @@ Assisted Mode (manual copy/paste publishing, manual analytics entry) works with 
 
 - `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` — set as Supabase Edge Function secrets (`supabase secrets set`), never in `.env` or frontend code.
 - `supabase/migration-social-linkedin-oauth.sql` — adds `connected_account_tokens` (access/refresh tokens, service-role only, no RLS policies granted to any client role) and `oauth_states` (CSRF protection for the OAuth handshake).
-- `sm-linkedin-oauth-start` — admin-only, called from Settings → Connected Accounts ("Connect LinkedIn"); returns the LinkedIn authorization URL.
+- `sm-linkedin-oauth-start` — admin-only, called from Settings → Integrations ("Connect LinkedIn"); returns the LinkedIn authorization URL.
 - `sm-linkedin-oauth-callback` — deployed with `--no-verify-jwt` since LinkedIn's browser redirect hits it directly (no Supabase session). Exchanges the code for tokens, resolves the administered LinkedIn Organization (requires `rw_organization_admin`, only grantable post-approval), and redirects back to `/settings`.
 - The LinkedIn app's **Authorized redirect URL** must be set to `https://<project-ref>.supabase.co/functions/v1/sm-linkedin-oauth-callback` — not the app's own domain, since only the Edge Function can hold the Client Secret for the token exchange.
 - `connected_accounts.mode` flips to `automated` automatically once an Organization is resolved; until LinkedIn approves the API product, the account can be OAuth-connected but stays in Assisted Mode (`oauth_connected = true`, `mode = 'assisted'`) — no manual toggle needed.
@@ -129,7 +153,7 @@ Answers three questions in one place: **How are people finding us? What are they
    2. In Search Console → Settings → Users and permissions, add the service account's email (`client_email` in the key) as a user. **Restricted** is enough.
    3. Set the secret. The key may be pasted as JSON or base64 (base64 avoids newline problems in shells). In PowerShell: `supabase secrets set GSC_SERVICE_ACCOUNT_JSON=([Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json")))`
    4. `supabase functions deploy sm-gsc-sync`
-   5. In **Settings → Connected Accounts → Google Search Console**, enter the property exactly as Search Console lists it (`sc-domain:sdfmgroup.com` or `https://sdfmgroup.com/`) and press **Verify access**.
+   5. In **Settings → Integrations → Google Search Console**, enter the property exactly as Search Console lists it (`sc-domain:sdfmgroup.com` or `https://sdfmgroup.com/`) and press **Verify access**.
    6. In Website Analytics → Search (SEO), press **Sync now**. The first sync backfills 90 days; later syncs refresh the last 7.
    7. Replace `YOUR_PROJECT_URL` / `YOUR_ANON_KEY` in `supabase/migration-website-analytics-cron.sql` and run it to schedule the daily sync and a weekly purge of raw tracking data older than 760 days.
 
@@ -172,7 +196,7 @@ Deploy order:
 1. `migration-booking-flow.sql`, then `migration-booking-flow-analytics.sql`
 2. `supabase functions deploy booking-info booking-start booking-confirm booking-prep send-booking-nudges`
 3. Deploy sdfmgroup.com (cac-website) and this app (`/intake` now 301s to `/book`)
-4. Settings → set the Google Meet link; check the two new templates on Notifications
+4. Settings → Booking & availability: set the Google Meet link; check the two new templates on Notifications
 5. `migration-booking-nudges-cron.sql` (fill in project URL and anon key)
 6. **Last:** `migration-booking-lockdown.sql` — removes anonymous access to leads,
    booked slots, availability and settings

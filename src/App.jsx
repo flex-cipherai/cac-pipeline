@@ -8,7 +8,16 @@ import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
 import Inquiries from './pages/Inquiries'
 import QuotationGenerator from './pages/QuotationGenerator'
-import Settings from './pages/Settings'
+import SettingsLayout from './pages/settings/SettingsLayout'
+import SettingsIndex from './pages/settings/SettingsIndex'
+import ProfileSettings from './pages/settings/ProfileSettings'
+import BookingSettings from './pages/settings/BookingSettings'
+import UsersSettings from './pages/settings/UsersSettings'
+import PermissionsSettings from './pages/settings/PermissionsSettings'
+import IntegrationsSettings from './pages/settings/IntegrationsSettings'
+import ContentSettings from './pages/settings/ContentSettings'
+import ScoringSettings from './pages/settings/ScoringSettings'
+import { SETTINGS_MODULES } from './lib/permissions'
 import Notifications from './pages/Notifications'
 import MarketingAnalytics from './pages/MarketingAnalytics'
 import ResetPassword from './pages/ResetPassword'
@@ -37,7 +46,8 @@ function NoAccess() {
   )
 }
 
-// Protected route wrapper. `module` is a key from lib/permissions.js; admins always pass.
+// Protected route wrapper. `module` is a key from lib/permissions.js, or a list of keys (any one is enough);
+// admins always pass.
 function ProtectedRoute({ children, module }) {
   const { user, profile, loading, can, homePath } = useAuth()
 
@@ -60,7 +70,8 @@ function ProtectedRoute({ children, module }) {
     return <Navigate to="/login" replace />
   }
 
-  if (module && !can(module)) {
+  const allowed = !module || (Array.isArray(module) ? module.some(can) : can(module))
+  if (!allowed) {
     // Send them to the first page they can open instead of a dead end.
     return homePath ? <Navigate to={homePath} replace /> : <NoAccess />
   }
@@ -97,7 +108,18 @@ const PROTECTED_ROUTES = [
   { path: '/leads', module: 'leads', element: <AllLeads /> },
   { path: '/quotations', module: 'quotations', element: <QuotationGenerator /> },
   { path: '/notifications', module: 'notifications', element: <Notifications /> },
-  { path: '/settings', module: 'settings', element: <Settings /> },
+
+  // Settings: one page per sub-module, each behind its own permission. /settings itself forwards to the
+  // first one the person may open.
+  { path: '/settings', module: SETTINGS_MODULES.map(m => m.key), element: <SettingsIndex /> },
+  { path: '/settings/profile', module: 'settings_profile', element: <SettingsLayout><ProfileSettings /></SettingsLayout> },
+  { path: '/settings/booking', module: 'settings_booking', element: <SettingsLayout><BookingSettings /></SettingsLayout> },
+  { path: '/settings/users', module: 'settings_users', element: <SettingsLayout><UsersSettings /></SettingsLayout> },
+  { path: '/settings/permissions', module: 'settings_permissions', element: <SettingsLayout><PermissionsSettings /></SettingsLayout> },
+  { path: '/settings/integrations', module: 'settings_integrations', element: <SettingsLayout><IntegrationsSettings /></SettingsLayout> },
+  { path: '/settings/content', module: 'settings_content', element: <SettingsLayout><ContentSettings /></SettingsLayout> },
+  { path: '/settings/scoring', module: 'settings_scoring', element: <SettingsLayout><ScoringSettings /></SettingsLayout> },
+
   { path: '/analytics', module: 'lead_analytics', element: <MarketingAnalytics /> },
 
   // Social Media Management

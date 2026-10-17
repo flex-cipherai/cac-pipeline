@@ -16,6 +16,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
 import { DEFAULT_TIMEZONE } from '../_shared/datetime.ts'
+import { staffWithModule } from '../_shared/access.ts'
 import {
   OPEN_STATUSES, REPLY_TARGET_HOURS, countByKind, itemsHtml, planDaily, planReplyAlerts, stampFor, summaryText,
   type Digest, type Inquiry, type Recipient,
@@ -50,15 +51,9 @@ Deno.serve(async (req) => {
     const timeZone = setting('team_timezone') || DEFAULT_TIMEZONE
     const appLink = `${(setting('app_base_url') || 'https://spm.sdfmgroup.com').replace(/\/+$/, '')}/inquiries`
 
-    // Who can use inquiries: admin always, plus any role switched on in Settings → Permissions.
-    // If the permissions table is not there yet, fall back to the original rule (admin and sales).
-    const { data: permRows, error: permError } = await admin
-      .from('role_permissions').select('role').eq('module', 'inquiries').eq('allowed', true)
-    const roles = ['admin', ...(permError ? ['sales'] : (permRows || []).map(r => r.role))]
-
-    const { data: staff } = await admin
-      .from('profiles').select('id, name, email, role, is_active').in('role', roles)
-    const recipients: Recipient[] = (staff || []).filter(p => p.is_active !== false)
+    // Who can use inquiries: admin always, plus any role switched on in Settings → Permissions
+    // (original rule, admin and sales, if the permissions table is not there yet).
+    const recipients: Recipient[] = await staffWithModule(admin, 'inquiries', ['admin', 'sales'])
     if (recipients.length === 0) return jsonResponse({ success: true, mode, digests: 0, note: 'no eligible recipients' })
 
     const { data: inquiries, error: inquiriesError } = await admin

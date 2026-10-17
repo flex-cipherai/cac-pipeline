@@ -12,6 +12,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { DateTime } from 'https://esm.sh/luxon@3.5.0'
 import { renderTemplate, requireResendKey, sendViaResend } from '../_shared/resend.ts'
 import { DEFAULT_TIMEZONE, leadVars } from '../_shared/datetime.ts'
+import { staffWithModule } from '../_shared/access.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -90,8 +91,8 @@ Deno.serve(async (req) => {
 
     let recipients: { email: string; timezone: string | null }[] = []
     if (teamTemplate?.is_active) {
-      const { data: staff } = await adminClient.from('profiles').select('email, timezone').in('role', ['admin', 'sales'])
-      recipients = (staff || []).filter(p => p.email)
+      const staff = await staffWithModule(adminClient, 'pipeline', ['admin', 'sales'], 'email, timezone')
+      recipients = staff.filter(p => p.email)
     }
 
     const results = []

@@ -11,6 +11,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { renderTemplate, sendViaResend } from '../_shared/resend.ts'
+import { staffWithModule } from '../_shared/access.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,11 +65,7 @@ Deno.serve(async (req) => {
     }
 
     // Notify the content team — in-app always, email if the template is active.
-    const { data: recipients } = await adminClient
-      .from('profiles')
-      .select('id, email')
-      .in('role', ['admin', 'marketing'])
-      .neq('is_active', false)
+    const recipients = await staffWithModule(adminClient, 'social_calendar', ['admin', 'marketing'], 'id, email')
 
     const { data: baseUrlRow } = await adminClient
       .from('system_settings').select('value').eq('key', 'app_base_url').maybeSingle()
