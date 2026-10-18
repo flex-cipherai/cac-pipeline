@@ -7,7 +7,7 @@ import { renderTemplate, requireResendKey, sendViaResend } from './resend.ts'
 import { leadVars } from './datetime.ts'
 import { staffWithModule } from './access.ts'
 import type { BookingSettings } from './booking.ts'
-import { googleCalendarLink, prepLink, resumeLink, whatsappLink } from './booking.ts'
+import { googleCalendarLink, whatsappLink } from './booking.ts'
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -17,8 +17,6 @@ function escapeHtml(s: string) {
 export function bookingVars(lead: any, cfg: BookingSettings) {
   const vars = leadVars(lead, cfg.team_timezone, lead.timezone || cfg.team_timezone) as Record<string, unknown>
   vars.duration_minutes = cfg.booking_duration_minutes
-  vars.prep_link = prepLink(lead)
-  vars.resume_link = resumeLink(lead)
   vars.whatsapp_link = whatsappLink(cfg)
   vars.calendar_link = lead.scheduled_date ? googleCalendarLink(cfg, lead) : ''
   vars.meeting_details = cfg.meeting_link

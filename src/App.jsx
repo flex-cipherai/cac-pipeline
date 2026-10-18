@@ -92,7 +92,7 @@ function PublicRoute({ children }) {
   return children
 }
 
-const BOOKING_URL = 'https://sdfmgroup.com/book'
+const BOOKING_URL = 'https://sdfmgroup.com/ai-gap-assessment'
 
 // Sends the visitor to another site, keeping any ?source= / utm_ params they arrived with.
 function ExternalRedirect({ to }) {
@@ -138,7 +138,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
-      {/* The public booking form now lives on the marketing site (sdfmgroup.com/book).
+      {/* The old intake form is retired; its address now sends people to the assessment page on the marketing site.
           netlify.toml 301s this path; the route is the fallback for local/dev use. */}
       <Route path="/intake" element={<ExternalRedirect to={BOOKING_URL} />} />
       <Route path="/reset-password" element={<ResetPassword />} />

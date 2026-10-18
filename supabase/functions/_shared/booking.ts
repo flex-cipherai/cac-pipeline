@@ -236,14 +236,6 @@ export async function getLeadByToken(admin: any, leadId: unknown, token: unknown
 
 // ── Links ────────────────────────────────────────────────────────────────
 
-export function resumeLink(lead: any) {
-  return `${SITE_URL}/book?lead=${lead.id}&t=${lead.booking_token}`
-}
-
-export function prepLink(lead: any) {
-  return `${SITE_URL}/book?lead=${lead.id}&t=${lead.booking_token}&prep=1`
-}
-
 export function whatsappLink(cfg: BookingSettings, text = 'Hi SDFM, I would like to talk about a free AI Gap Assessment.') {
   return `https://wa.me/${cfg.whatsapp_number}?text=${encodeURIComponent(text)}`
 }

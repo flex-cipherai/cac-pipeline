@@ -170,11 +170,6 @@ export default function Login() {
                 </button>
               </form>
 
-              <div className="login-footer">
-                <a href="https://sdfmgroup.com/book" className="login-intake-link">
-                  View the public booking page →
-                </a>
-              </div>
             </>
           )}
 

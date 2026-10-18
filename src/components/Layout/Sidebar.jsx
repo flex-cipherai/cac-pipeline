@@ -278,17 +278,6 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
 
         <div className="sidebar-bottom">
-          {/* Public booking page (lives on the marketing site) */}
-          <a
-            href="https://sdfmgroup.com/book"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="sidebar-intake-link"
-          >
-            {icons.external}
-            <span>Public Booking Page</span>
-          </a>
-
           {/* User info */}
           <div className="sidebar-user">
             <div className="sidebar-user-avatar">

@@ -12,7 +12,7 @@
 import { DateTime } from 'https://esm.sh/luxon@3.5.0'
 import {
   adminClient, allowRequest, getLeadByToken, googleCalendarLink, ipHash, isDateStr, isTimeStr,
-  isValidZone, json, loadSettings, openSlots, preflight, prepLink, slotInstant, whatsappLink,
+  isValidZone, json, loadSettings, openSlots, preflight, slotInstant, whatsappLink,
 } from '../_shared/booking.ts'
 import { sendBookingEmails } from '../_shared/bookingEmail.ts'
 
@@ -52,7 +52,6 @@ Deno.serve(async (req) => {
         duration_minutes: cfg.booking_duration_minutes,
         meeting_link: cfg.meeting_link || null,
         calendar_link: googleCalendarLink(cfg, l),
-        prep_link: prepLink(l),
         whatsapp_link: whatsappLink(cfg),
       }
     }
