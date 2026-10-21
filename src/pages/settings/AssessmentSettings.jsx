@@ -136,11 +136,6 @@ export default function AssessmentSettings() {
             <span className="form-hint">Used when the first is rate limited. Its own free quota, so it doubles the headroom.</span>
           </div>
           <div className="form-group">
-            <label className="form-label">Assessments per day, all visitors</label>
-            <input className="form-input" type="number" min="1" value={settings.daily_session_cap} onChange={e => setS('daily_session_cap', num(e.target.value))} />
-            <span className="form-hint">Stops a rush from using up the free quota. Past this, visitors are asked to come back tomorrow.</span>
-          </div>
-          <div className="form-group">
             <label className="form-label">Replies before the report is offered</label>
             <input className="form-input" type="number" min="3" max="40" value={settings.min_user_turns} onChange={e => setS('min_user_turns', num(e.target.value))} />
           </div>

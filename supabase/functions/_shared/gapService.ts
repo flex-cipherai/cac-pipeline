@@ -45,7 +45,6 @@ export interface SessionRow {
 export interface Store {
   config(): Promise<{ key: string; value: string | null }[]>
   rateLimit(action: string, max: number, windowMinutes: number): Promise<boolean>
-  countSessionsSince(iso: string): Promise<number>
   countSessionsForEmailSince(email: string, iso: string): Promise<number>
   createSession(row: Record<string, unknown>): Promise<SessionRow>
   findByTokenHash(hash: string): Promise<SessionRow | null>
@@ -134,7 +133,6 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
   if (!(await store.rateLimit('ga_start', 5, 60))) return fail(429, 'rate_limited')
   const dayAgo = new Date(now.getTime() - 86_400_000).toISOString()
   if ((await store.countSessionsForEmailSince(value.email, dayAgo)) >= 3) return fail(429, 'email_limit')
-  if ((await store.countSessionsSince(dayAgo)) >= cfg.settings.daily_session_cap) return fail(503, 'capacity')
 
   // Slow lookups in parallel: can the email domain receive mail, and what does the website say.
   const [mail, siteSummary] = await Promise.all([

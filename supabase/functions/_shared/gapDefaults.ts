@@ -9,7 +9,6 @@ const DEFAULTS = {
     model: 'gemini-3.6-flash',
     fallback_model: 'gemini-3.5-flash-lite',
     block_free_email: true,
-    daily_session_cap: 50,
     min_user_turns: 8,
     max_user_turns: 28,
     min_areas_covered: 6

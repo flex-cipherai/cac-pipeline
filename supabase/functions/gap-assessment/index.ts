@@ -26,10 +26,6 @@ function supabaseStore(admin: any, ip: string): Store {
       return data || []
     },
     rateLimit: (action, max, windowMinutes) => allowRequest(admin, ip, action, max, windowMinutes),
-    async countSessionsSince(iso) {
-      const { count } = await admin.from('gap_assessments').select('id', { count: 'exact', head: true }).gte('created_at', iso)
-      return count ?? 0
-    },
     async countSessionsForEmailSince(email, iso) {
       const { count } = await admin.from('gap_assessments').select('id', { count: 'exact', head: true }).eq('email', email).gte('created_at', iso)
       return count ?? 0

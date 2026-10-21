@@ -38,7 +38,6 @@ export interface GapSettings {
   model: string
   fallback_model: string
   block_free_email: boolean
-  daily_session_cap: number
   min_user_turns: number
   max_user_turns: number
   min_areas_covered: number
@@ -94,7 +93,6 @@ export function mergeSettings(over: unknown): GapSettings {
     model: str(o.model, d.model),
     fallback_model: typeof o.fallback_model === 'string' && o.fallback_model.trim() === '' ? '' : str(o.fallback_model, d.fallback_model),
     block_free_email: typeof o.block_free_email === 'boolean' ? o.block_free_email : d.block_free_email,
-    daily_session_cap: Math.round(num(o.daily_session_cap, d.daily_session_cap, 1, 5000)),
     min_user_turns: min,
     max_user_turns: Math.max(min + 2, Math.round(num(o.max_user_turns, d.max_user_turns, 5, 60))),
     min_areas_covered: Math.round(num(o.min_areas_covered, d.min_areas_covered, 1, 12)),
