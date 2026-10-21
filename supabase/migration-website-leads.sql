@@ -27,7 +27,7 @@ alter table public.inquiries add column if not exists utm_term text;
 alter table public.inquiries drop constraint if exists inquiries_offer_check;
 alter table public.inquiries
   add constraint inquiries_offer_check
-  check (offer is null or offer in ('assessment', 'guide', 'industry', 'custom', 'contact'));
+  check (offer is null or offer in ('assessment', 'guide', 'industry', 'custom', 'contact', 'gap_check'));
 
 alter table public.inquiries drop constraint if exists inquiries_staff_band_check;
 alter table public.inquiries

@@ -34,6 +34,13 @@ const icons = {
       <path d="M4.5 3.5h11l2 8v4a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-4l2-8z" />
     </svg>
   ),
+  assessments: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 3h8l4 4v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+      <path d="M12 3v4h4" />
+      <path d="M6.500 14l2-2.500 2 1.500 2.500-3.500" />
+    </svg>
+  ),
   pipeline: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <path d="M3 4v12M10 6v10M17 8v8" />
@@ -138,6 +145,7 @@ const MODULES = [
     items: [
       { module: 'dashboard', icon: icons.dashboard },
       { module: 'inquiries', icon: icons.inquiries },
+      { module: 'assessments', icon: icons.assessments },
       { module: 'pipeline', icon: icons.pipeline },
       { module: 'leads', icon: icons.leads },
       { module: 'quotations', icon: icons.quotation },

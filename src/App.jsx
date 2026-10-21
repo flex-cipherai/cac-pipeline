@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
 import Inquiries from './pages/Inquiries'
+import Assessments from './pages/Assessments'
 import QuotationGenerator from './pages/QuotationGenerator'
 import SettingsLayout from './pages/settings/SettingsLayout'
 import SettingsIndex from './pages/settings/SettingsIndex'
@@ -17,6 +18,7 @@ import PermissionsSettings from './pages/settings/PermissionsSettings'
 import IntegrationsSettings from './pages/settings/IntegrationsSettings'
 import ContentSettings from './pages/settings/ContentSettings'
 import ScoringSettings from './pages/settings/ScoringSettings'
+import AssessmentSettings from './pages/settings/AssessmentSettings'
 import { SETTINGS_MODULES } from './lib/permissions'
 import Notifications from './pages/Notifications'
 import MarketingAnalytics from './pages/MarketingAnalytics'
@@ -104,6 +106,7 @@ function ExternalRedirect({ to }) {
 const PROTECTED_ROUTES = [
   { path: '/dashboard', module: 'dashboard', element: <Dashboard /> },
   { path: '/inquiries', module: 'inquiries', element: <Inquiries /> },
+  { path: '/assessments', module: 'assessments', element: <Assessments /> },
   { path: '/pipeline', module: 'pipeline', element: <Pipeline /> },
   { path: '/leads', module: 'leads', element: <AllLeads /> },
   { path: '/quotations', module: 'quotations', element: <QuotationGenerator /> },
@@ -118,6 +121,7 @@ const PROTECTED_ROUTES = [
   { path: '/settings/permissions', module: 'settings_permissions', element: <SettingsLayout><PermissionsSettings /></SettingsLayout> },
   { path: '/settings/integrations', module: 'settings_integrations', element: <SettingsLayout><IntegrationsSettings /></SettingsLayout> },
   { path: '/settings/content', module: 'settings_content', element: <SettingsLayout><ContentSettings /></SettingsLayout> },
+  { path: '/settings/assessment', module: 'settings_assessment', element: <SettingsLayout><AssessmentSettings /></SettingsLayout> },
   { path: '/settings/scoring', module: 'settings_scoring', element: <SettingsLayout><ScoringSettings /></SettingsLayout> },
 
   { path: '/analytics', module: 'lead_analytics', element: <MarketingAnalytics /> },
