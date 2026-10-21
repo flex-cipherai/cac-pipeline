@@ -99,7 +99,7 @@ export default function AssessmentSettings() {
   if (loading) {
     return (
       <div>
-        <SettingsHeading title="Assessment tool" />
+        <SettingsHeading title="Automation scoper" />
         <div className="skeleton skeleton-card" style={{ height: 240 }} />
       </div>
     )
@@ -110,8 +110,8 @@ export default function AssessmentSettings() {
   return (
     <div>
       <SettingsHeading
-        title="Assessment tool"
-        hint="Controls the free AI Gap Check on sdfmgroup.com/ai-gap-check: what the AI asks, how the return is worked out, and the limits that protect the free AI quota. Changes apply to the next conversation."
+        title="Automation scoper"
+        hint="Controls the free Automation scoper on sdfmgroup.com/ai-gap-check (the automation scoper): what the AI asks, how the return is worked out, and the limits that protect the free AI quota. Changes apply to the next conversation."
       />
 
       <Section title="Tool and limits" hint="The Gemini API key is not stored here. It is a Supabase secret named GEMINI_API_KEY, so the browser can never see it." saving={saving === 'settings'}

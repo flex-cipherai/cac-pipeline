@@ -32,7 +32,7 @@ export const MODULE_GROUPS = [
     modules: [
       { key: 'dashboard', label: 'Dashboard', path: '/dashboard', defaults: ['admin', 'sales'] },
       { key: 'inquiries', label: 'Inquiries', path: '/inquiries', defaults: ['admin', 'sales'] },
-      { key: 'assessments', label: 'AI Gap Checks', hint: 'Reports from the free assessment tool on the website', path: '/assessments', defaults: ['admin', 'sales'] },
+      { key: 'assessments', label: 'Automation Scoper', hint: 'Reports from the free assessment tool on the website', path: '/assessments', defaults: ['admin', 'sales'] },
       { key: 'pipeline', label: 'Pipeline', path: '/pipeline', defaults: ['admin', 'sales'] },
       { key: 'leads', label: 'All Leads', path: '/leads', defaults: ['admin', 'sales'] },
       { key: 'quotations', label: 'Quotations', path: '/quotations', defaults: ['admin', 'sales'] },
@@ -64,7 +64,7 @@ export const MODULE_GROUPS = [
       { key: 'settings_permissions', label: 'Permissions', path: '/settings/permissions', defaults: ['admin'], adminOnly: true, hiddenInMenu: true },
       { key: 'settings_integrations', label: 'Integrations', hint: 'LinkedIn and Google Search Console', path: '/settings/integrations', defaults: ['admin'], adminOnly: true, hiddenInMenu: true },
       { key: 'settings_content', label: 'Content defaults', hint: 'Posting defaults, app URL and hashtag sets', path: '/settings/content', defaults: ['admin'], adminOnly: true, hiddenInMenu: true },
-      { key: 'settings_assessment', label: 'Assessment tool', hint: 'Questions, ROI assumptions, AI model and limits for the free AI Gap Check', path: '/settings/assessment', defaults: ['admin'], adminOnly: true, hiddenInMenu: true },
+      { key: 'settings_assessment', label: 'Automation scoper', hint: 'Questions, ROI assumptions, AI model and limits for the free automation scoper', path: '/settings/assessment', defaults: ['admin'], adminOnly: true, hiddenInMenu: true },
       { key: 'settings_scoring', label: 'Scoring', path: '/settings/scoring', defaults: ['admin'], adminOnly: true, hiddenInMenu: true },
     ],
   },

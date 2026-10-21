@@ -2,7 +2,7 @@
 # bookmarks land on the assessment page (query strings such as ?source= and utm_* carry over).
 [[redirects]]
   from = "/intake"
-  to = "https://sdfmgroup.com/ai-gap-assessment"
+  to = "https://sdfmgroup.com/ai-gap-check"
   status = 301
   force = true
 

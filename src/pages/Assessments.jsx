@@ -99,13 +99,13 @@ export default function Assessments() {
       r.roi?.annual_low ?? '', r.roi?.annual_expected ?? '', r.roi?.annual_high ?? '',
       r.pdf_downloaded_at ? 'Yes' : '', r.cta_clicked_at ? 'Yes' : '',
     ])
-    exportCSV(headers, data, `SDFM_AI_Gap_Checks_${new Date().toISOString().slice(0, 10)}`)
+    exportCSV(headers, data, `SDFM_Automation_Scoper_${new Date().toISOString().slice(0, 10)}`)
   }
 
   if (loading) {
     return (
       <div>
-        <div className="page-header"><h1 className="page-title">AI Gap Checks</h1></div>
+        <div className="page-header"><h1 className="page-title">Automation Scoper</h1></div>
         <div className="section-card">{[1, 2, 3].map(i => <div key={i} className="skeleton skeleton-bar" style={{ width: `${100 - i * 15}%` }} />)}</div>
       </div>
     )
@@ -114,11 +114,11 @@ export default function Assessments() {
   if (setupNeeded) {
     return (
       <div>
-        <div className="page-header"><h1 className="page-title">AI Gap Checks</h1></div>
+        <div className="page-header"><h1 className="page-title">Automation Scoper</h1></div>
         <div className="section-card inq-setup">
           <h2 className="section-card-title">One-time database setup needed</h2>
           <p>
-            The AI Gap Check needs two new tables. In the Supabase SQL Editor, run <code>supabase/migration-gap-assessments.sql</code>
+            The Automation scoper needs two new tables. In the Supabase SQL Editor, run <code>supabase/migration-gap-assessments.sql</code>
             {' '}(it is safe to run again), then reload this page. The tool itself is the <code>gap-assessment</code> Edge Function; see the README for deploying it.
           </p>
         </div>
@@ -130,7 +130,7 @@ export default function Assessments() {
     <div className="inq-page ga-page">
       <div className="page-header leads-header">
         <div>
-          <h1 className="page-title">AI Gap Checks</h1>
+          <h1 className="page-title">Automation Scoper</h1>
           <p className="page-subtitle">Visitors who used the free assessment tool on the website · {getPeriodLabel(period)}</p>
         </div>
         <div className="leads-header-actions">
@@ -190,7 +190,7 @@ export default function Assessments() {
         <div className="section-card">
           <div className="empty-state">
             <div className="empty-state-title">No assessments yet</div>
-            <p className="empty-state-desc">When a visitor completes the AI Gap Check at sdfmgroup.com/ai-gap-check, their report, conversation and projected ROI appear here, and an inquiry is created for follow-up.</p>
+            <p className="empty-state-desc">When a visitor completes the Automation scoper at sdfmgroup.com/ai-gap-check, their report, conversation and projected ROI appear here, and an inquiry is created for follow-up.</p>
           </div>
         </div>
       ) : filtered.length === 0 ? (

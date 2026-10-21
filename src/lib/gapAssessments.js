@@ -1,4 +1,4 @@
-// Helpers for the AI Gap Checks module: formatting and the numbers on the list page.
+// Helpers for the Automation Scoper module: formatting and the numbers on the list page.
 // The assessment rules themselves (areas, ROI maths, defaults) are shared with the Edge Function from
 // supabase/functions/_shared/gapAssessment.ts, so the CRM and the tool can never disagree about them.
 

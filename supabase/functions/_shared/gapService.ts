@@ -87,7 +87,7 @@ const firstName = (full: string) => full.trim().split(/\s+/)[0] || 'there'
 
 function openingFallback(name: string, company: string): Turn {
   return {
-    reply: `Hi ${firstName(name)}, thanks for starting the AI Gap Check for ${company}. I'll ask about how the business runs, one question at a time, and you'll get a written report at the end. To begin: what does ${company} do, and roughly how many people work there?`,
+    reply: `Hi ${firstName(name)}, thanks for starting the Automation scoper for ${company}. I'll ask about how the business runs, one question at a time, and you'll get a written report at the end. To begin: what does ${company} do, and roughly how many people work there?`,
     areas_covered: [], suggested_replies: ['1 to 5', '6 to 15', '16 to 50', 'More than 50'], ready_for_report: false,
   }
 }
@@ -293,7 +293,7 @@ async function handOff(session: SessionRow, rep: Report, appUrl: string, deps: D
       const followUp = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10)
       const inquiryId = await store.createInquiry({
         full_name: session.full_name, company_name: session.company_name, email: session.email, phone: null,
-        has_whatsapp: false, channel: 'website', source_detail: 'AI Gap Check (free tool)',
+        has_whatsapp: false, channel: 'website', source_detail: 'Automation scoper (free tool)',
         message: inquiryMessage(rep, appUrl, session.id), status: 'new', next_follow_up: followUp,
         offer: 'gap_check', staff_band: staffBand(rep.company.staff_estimate),
       })

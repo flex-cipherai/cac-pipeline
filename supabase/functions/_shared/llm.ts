@@ -1,4 +1,4 @@
-// Thin Gemini client for the AI Gap Check. Kept to one function so the provider can be swapped without
+// Thin Gemini client for the automation scoper. Kept to one function so the provider can be swapped without
 // touching the assessment logic: callJson() takes the prompt and a parser and returns whatever the parser
 // accepts. Models are tried in order (the configured model first, then the fallback), so a free-tier rate
 // limit on one model does not stop the conversation.

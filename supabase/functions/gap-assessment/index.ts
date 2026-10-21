@@ -1,5 +1,5 @@
 // Supabase Edge Function: gap-assessment
-// Public. Runs the free AI Gap Check on sdfmgroup.com/ai-gap-check: validates the visitor, interviews them
+// Public. Runs the free Automation scoper on sdfmgroup.com/ai-gap-check: validates the visitor, interviews them
 // with Gemini, builds the gap report and ROI, and hands the finished assessment to the team (an inquiry in
 // the CRM plus an email). The browser never sees the API key, the prompts or the working behind the ROI.
 //

@@ -153,7 +153,7 @@ export default function AssessmentDetail({ id, isAdmin, onClose, onDeleted }) {
   return (
     <>
       <div className="lead-detail-overlay" onClick={onClose} />
-      <div className="lead-detail-drawer ga-drawer" role="dialog" aria-modal="true" aria-label="AI Gap Check">
+      <div className="lead-detail-drawer ga-drawer" role="dialog" aria-modal="true" aria-label="Automation scoper">
         <div className="lead-detail-header">
           <div className="lead-detail-header-top">
             <button className="lead-detail-close" onClick={onClose} aria-label="Close">

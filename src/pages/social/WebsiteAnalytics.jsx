@@ -88,11 +88,11 @@ const CTA_PLACEMENTS = {
   book_done_whatsapp: 'Booking page · after booking',
   book_message_whatsapp: 'Booking page · error screen',
   download_ics: 'Booking page · add to calendar',
-  // Free AI Gap Check (2026-10-21)
-  hero_gapcheck: 'Home hero · Free AI gap check', assessment_gapcheck: 'Assessment page · Free AI gap check link',
-  gapcheck_start: 'AI Gap Check · Start button', gapcheck_report_pdf: 'AI Gap Check report · Download PDF',
-  gapcheck_report_assessment: 'AI Gap Check report · Full assessment', gapcheck_report_contact: 'AI Gap Check report · Contact page',
-  gapcheck_report_whatsapp: 'AI Gap Check report',
+  // Free automation scoper (2026-10-21)
+  hero_gapcheck: 'Home hero · Automation scoper', paths_gapcheck: 'Home path tabs · Automation scoper', assessment_gapcheck: 'Assessment page · Automation scoper link',
+  gapcheck_start: 'Automation scoper · Start button', gapcheck_report_pdf: 'Automation scoper report · Download PDF',
+  gapcheck_report_assessment: 'Automation scoper report · Full assessment', gapcheck_report_contact: 'Automation scoper report · Contact page',
+  gapcheck_report_whatsapp: 'Automation scoper report',
 }
 
 // What the booking page reports as form_error.stage.

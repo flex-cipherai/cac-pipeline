@@ -1,16 +1,16 @@
 -- ============================================================
--- AI Gap Check — the free assessment tool on sdfmgroup.com/ai-gap-check (safe to re-run)
+-- Automation scoper — the free assessment tool on sdfmgroup.com/ai-gap-check (safe to re-run)
 --
 -- A visitor gives their details, talks to an AI interviewer, and gets a gap report with projected ROI.
 -- The public website never touches these tables: everything goes through the gap-assessment Edge Function
--- (service role). Staff read them in the CRM under AI Gap Checks.
+-- (service role). Staff read them in the CRM under Automation Scoper.
 --
 --   gap_assessments           one row per session: contact details, progress, the finished report
 --   gap_assessment_messages   the conversation, in order
 --
 -- Access follows Settings → Permissions (module 'assessments') through has_module_access(); admin always
 -- has it, only admin can delete. The tool's questions, ROI assumptions, model and limits live in
--- system_settings under the ga_* keys, edited in Settings → Assessment tool (admin only).
+-- system_settings under the ga_* keys, edited in Settings → Automation scoper (admin only).
 --
 -- report            what the visitor saw and can download. It has NO priorities and NO costs.
 -- report_internal   the working behind the ROI figures (people, hours, hourly cost, estimated investment).

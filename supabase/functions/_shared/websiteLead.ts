@@ -1,14 +1,12 @@
 // Pure logic for the website-lead Edge Function: validation, the readable message that lands on the
 // inquiry, follow-up dates and the emails. No Deno or network APIs here, so it can be tested under Node.
 //
-// The five forms on sdfmgroup.com (assessment, guide, industry, custom, contact) post here.
+// The three forms on sdfmgroup.com (industry, custom, contact) post here.
 // Keep the option values in step with the <select>s in cac-website/build output (js/forms.js, the HTML forms).
 
-export type Offer = 'assessment' | 'guide' | 'industry' | 'custom' | 'contact'
+export type Offer = 'industry' | 'custom' | 'contact'
 
 export const OFFER_LABELS: Record<Offer, string> = {
-  assessment: 'AI gap assessment',
-  guide: 'Free guide',
   industry: 'Industry software',
   custom: 'Custom build',
   contact: 'Contact form',
@@ -22,25 +20,23 @@ export const SECTOR_LABELS: Record<string, string> = {
   security: 'Security services', manufacturing: 'Manufacturing', retail: 'Retail and wholesale',
   construction: 'Construction and real estate', education: 'Education', finance: 'Finance and professional services',
   logistics: 'Logistics and transport', hospitality: 'Hospitality', agriculture: 'Agriculture',
-  healthcare: 'Healthcare', other: 'Other',
+  other: 'Other',
 }
 
 const INTEREST_LABELS: Record<string, Record<string, string>> = {
   industry: { demo: 'Request a demo', suggest: 'Suggest an industry' },
   contact: {
-    assessment: 'AI gap assessment', guide: 'Free guide', industry: 'Industry software',
+    assessment: 'Priorities and cost estimates after the scoper', industry: 'Industry software',
     custom: 'Custom build', other: 'Something else',
   },
 }
 
 const PAST_WORK_LABELS: Record<string, string> = {
-  assessment: 'Completed an assessment with SDFM', guide: 'Downloaded the guide', neither: 'Neither',
+  assessment: 'Completed an assessment with SDFM', guide: 'Downloaded the guide', neither: 'Neither', // older submissions
 }
 
 // What the free-text box asked on each form (shown above the visitor's words in the inquiry).
 const MESSAGE_PROMPTS: Record<Offer, string> = {
-  assessment: 'Which part of your business would you most like us to look at?',
-  guide: '',
   industry: 'Which industry, and what must a system handle?',
   custom: 'Which process or workflow do you want built around?',
   contact: 'Message',
@@ -48,16 +44,10 @@ const MESSAGE_PROMPTS: Record<Offer, string> = {
 
 // Which fields each form requires (the rest are optional or absent).
 const REQUIRED: Record<Offer, string[]> = {
-  assessment: ['phone', 'business_name', 'staff_band', 'sector'],
-  guide: ['phone', 'business_name', 'staff_band'],
   industry: ['phone', 'business_name', 'staff_band', 'sector', 'interest'],
   custom: ['phone', 'business_name', 'staff_band', 'sector', 'message'],
   contact: ['interest', 'message'],
 }
-
-// Healthcare cannot be sold on these (those systems need DHA certification); the guide and contact form still go through.
-const HEALTHCARE_BLOCKED: Offer[] = ['assessment', 'industry', 'custom']
-export const HEALTHCARE_MESSAGE = "We don't currently build for healthcare, because those systems need DHA certification"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -117,7 +107,6 @@ export function validateLead(body: Record<string, unknown>) {
 
   if (staff_band ? !(staff_band in STAFF_LABELS) : need('staff_band')) errors.staff_band = 'Choose how many staff you have.'
   if (sector ? !(sector in SECTOR_LABELS) : need('sector')) errors.sector = 'Choose your sector.'
-  if (sector === 'healthcare' && HEALTHCARE_BLOCKED.includes(offer)) errors.sector = HEALTHCARE_MESSAGE
 
   const interests = INTEREST_LABELS[offer]
   if (interests ? (interest ? !(interest in interests) : need('interest')) : false) errors.interest = 'Choose what you are interested in.'
@@ -178,35 +167,15 @@ export function buildMessage(v: LeadValue): string {
   return out
 }
 
-// Guide downloads are followed up a week later with the next offer; everything else needs a reply now.
-export function followUpDate(offer: Offer, today: Date): string {
-  const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
-  if (offer === 'guide') d.setUTCDate(d.getUTCDate() + 7)
-  return d.toISOString().slice(0, 10)
+// Every enquiry needs a reply now, so the follow-up date is today.
+export function followUpDate(_offer: Offer, today: Date): string {
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString().slice(0, 10)
 }
 
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-const GUIDE_PATH = '/downloads/ai-gap-assessment-guide.pdf'
-
-// Flip to true once the PDF is uploaded to /downloads/. Until then the guide email says it is not ready
-// instead of linking to a file that does not exist (the website's thank-you page does the same).
-export const GUIDE_READY = false
-
 const VISITOR_COPY: Record<Offer, { subject: string; lead: string; next: string }> = {
-  assessment: {
-    subject: 'We have your AI gap assessment request',
-    lead: 'Thanks for requesting an AI gap assessment.',
-    next: "We'll reply by email and WhatsApp to confirm the scope and the fee for your business size. No payment has been taken.",
-  },
-  guide: {
-    subject: 'Your free AI gap assessment guide',
-    lead: 'Thanks for asking for the free AI gap assessment guide.',
-    next: GUIDE_READY
-      ? 'Download it with the button below. When you have worked through it, an assessment does the same job for you, with a roadmap and costs.'
-      : 'The guide is not ready yet. Please check back in a few days and download it from sdfmgroup.com/diy-guide.',
-  },
   industry: {
     subject: 'We have your industry software request',
     lead: 'Thanks for your interest in our industry software.',
@@ -227,14 +196,11 @@ const VISITOR_COPY: Record<Offer, { subject: string; lead: string; next: string 
 export function visitorEmail(v: LeadValue, siteUrl: string) {
   const c = VISITOR_COPY[v.offer]
   const first = escapeHtml(v.full_name.split(/\s+/)[0])
-  const button = v.offer === 'guide' && GUIDE_READY
-    ? `<p style="margin:24px 0"><a href="${siteUrl}${GUIDE_PATH}" style="display:inline-block;background:#D82A10;color:#ffffff;font-weight:700;text-decoration:none;padding:14px 24px;border-radius:12px">Download the guide (PDF)</a></p>`
-    : ''
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#141211;line-height:1.6">
 <p>Hi ${first},</p>
 <p>${c.lead}</p>
 <p>${c.next}</p>
-${button}<p>If you need us sooner, WhatsApp or call <a href="https://wa.me/254757230579" style="color:#C9260C;font-weight:700">+254 757 230 579</a>.</p>
+<p>If you need us sooner, WhatsApp or call <a href="https://wa.me/254757230579" style="color:#C9260C;font-weight:700">+254 757 230 579</a>.</p>
 <p style="margin-top:28px">SDFM Group Limited<br>Nairobi, Kenya</p>
 </div>`
   return { subject: c.subject, html }

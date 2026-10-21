@@ -1,5 +1,5 @@
-// Shipped defaults for the AI Gap Check: the interview areas, ROI assumptions, limits and model names.
-// Settings -> Assessment tool in the CRM overrides any of this (system_settings keys ga_*), and anything
+// Shipped defaults for the Automation scoper: the interview areas, ROI assumptions, limits and model names.
+// Settings -> Automation scoper in the CRM overrides any of this (system_settings keys ga_*), and anything
 // missing or malformed there falls back to these values. A TypeScript module (not JSON) so it imports the
 // same way under Deno, Vite and Node.
 

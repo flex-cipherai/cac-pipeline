@@ -1,4 +1,4 @@
-// Network checks for the AI Gap Check: does the visitor's email domain receive mail, and what does their
+// Network checks for the automation scoper: does the visitor's email domain receive mail, and what does their
 // website say. Both use DNS over HTTPS (Cloudflare, then Google) instead of Deno.resolveDns, so they behave
 // the same on Supabase's hosted runtime and under Node tests with a stubbed fetch.
 //

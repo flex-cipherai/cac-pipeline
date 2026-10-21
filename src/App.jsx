@@ -94,7 +94,7 @@ function PublicRoute({ children }) {
   return children
 }
 
-const BOOKING_URL = 'https://sdfmgroup.com/ai-gap-assessment'
+const BOOKING_URL = 'https://sdfmgroup.com/ai-gap-check'
 
 // Sends the visitor to another site, keeping any ?source= / utm_ params they arrived with.
 function ExternalRedirect({ to }) {
