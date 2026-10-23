@@ -13,7 +13,7 @@
 
 import {
   buildConfig, buildContents, buildInterviewerSystem, buildReportContents, buildReportSystem, clean, CONFIG_KEYS,
-  computeProgress, inquiryMessage, isToken, newToken, parseJsonLoose, parseTurn, plain, sanitiseReport, sha256Hex,
+  computeProgress, inquiryMessage, isToken, newToken, parseCurrency, parseJsonLoose, parseTurn, plain, sanitiseReport, sha256Hex,
   staffBand, teamEmail, validateStart,
 } from './gapAssessment.ts'
 import type { GapConfig, Message, Report, Turn } from './gapAssessment.ts'
@@ -40,6 +40,8 @@ export interface SessionRow {
   output_tokens: number
   pdf_downloaded_at: string | null
   cta_clicked_at: string | null
+  // Working behind the report. Before the report exists it only holds the visitor's chosen currency.
+  report_internal?: { currency?: string } | null
 }
 
 export interface Store {
@@ -109,6 +111,10 @@ function llmFailure(err: unknown): Reply {
   throw err
 }
 
+function sessionCurrency(session: SessionRow, cfg: GapConfig): string {
+  return parseCurrency(session.report_internal?.currency, cfg) || 'KES'
+}
+
 function progressOf(cfg: GapConfig, covered: string[], turns: number) {
   return computeProgress(cfg, covered, turns)
 }
@@ -145,7 +151,7 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
   let turn: Turn = openingFallback(value.full_name, value.company_name)
   let usage = { model: null as string | null, calls: 0, input: 0, output: 0 }
   try {
-    const system = buildInterviewerSystem(cfg, { name: value.full_name, company: value.company_name, website: value.website_url, siteSummary, covered: [], userTurns: 0 })
+    const system = buildInterviewerSystem(cfg, { name: value.full_name, company: value.company_name, website: value.website_url, siteSummary, covered: [], userTurns: 0, currency: value.currency })
     const res = await (deps.call || callJson)(modelOptions(cfg, deps, system, buildContents([]), 2048, 0.7, 25000), t => lenientTurn(t, cfg, []))
     turn = { ...res.value, areas_covered: [], ready_for_report: false }
     usage = { model: res.model, calls: 1, input: res.inputTokens, output: res.outputTokens }
@@ -159,6 +165,7 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
     token_hash: await sha256Hex(token),
     full_name: value.full_name, email: value.email, email_domain: value.email_domain,
     company_name: value.company_name, website_url: value.website_url, website_summary: siteSummary || null,
+    report_internal: { currency: value.currency },
     model: usage.model, llm_calls: usage.calls, input_tokens: usage.input, output_tokens: usage.output,
     page_url: clean(body.page_url, 300) || null, referrer: clean(body.referrer, 300) || null,
     utm_source: clean(body.utm_source, 100) || null, utm_medium: clean(body.utm_medium, 100) || null,
@@ -210,6 +217,7 @@ async function chat(body: Record<string, unknown>, deps: Deps): Promise<Reply> {
     const system = buildInterviewerSystem(cfg, {
       name: session.full_name, company: session.company_name, website: session.website_url,
       siteSummary: session.website_summary || '', covered: session.areas_covered, userTurns: turns,
+      currency: sessionCurrency(session, cfg),
     })
     const contents = buildContents([...history, { role: 'user', content: text }])
     let res
@@ -255,14 +263,15 @@ async function report(body: Record<string, unknown>, deps: Deps): Promise<Reply>
     if (fresh?.status === 'report_ready' && fresh.report) return ok({ report: fresh.report })
 
     const messages = await store.messages(session.id)
-    const ctx = { name: session.full_name, company: session.company_name, website: session.website_url, siteSummary: session.website_summary || '' }
+    const currency = sessionCurrency(session, cfg)
+    const ctx = { name: session.full_name, company: session.company_name, website: session.website_url, siteSummary: session.website_summary || '', currency }
     let res
     try {
       res = await (deps.call || callJson)(
         modelOptions(cfg, deps, buildReportSystem(cfg), buildReportContents(cfg, ctx, messages), 8192, 0.3, 55000),
         t => {
           const j = parseJsonLoose(t) as { gaps?: unknown } | null
-          return j && Array.isArray(j.gaps) ? sanitiseReport(j, cfg, { company: session.company_name, website: session.website_url, now }) : null
+          return j && Array.isArray(j.gaps) ? sanitiseReport(j, cfg, { company: session.company_name, website: session.website_url, now, currency }) : null
         },
       )
     } catch (err) {

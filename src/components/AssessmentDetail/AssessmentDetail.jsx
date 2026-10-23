@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { shortDateTime } from '../../lib/inquiries'
-import { ctaLabel, kes, progressNote, scoreTone, statusLabel } from '../../lib/gapAssessments'
+import { ctaLabel, kes, money, progressNote, scoreTone, statusLabel } from '../../lib/gapAssessments'
 import '../LeadDetail/LeadDetail.css'
 import '../InquiryDetail/InquiryDetail.css'
 import './AssessmentDetail.css'
@@ -13,8 +13,9 @@ const TABS = [
   { key: 'details', label: 'Details' },
 ]
 
-function Money({ value }) {
-  return <>{kes(value)}</>
+// currency is the visitor's report currency; the internal working is always KES.
+function Money({ value, currency }) {
+  return <>{money(value, currency)}</>
 }
 
 function ReportView({ report, internal }) {
@@ -38,7 +39,7 @@ function ReportView({ report, internal }) {
       <h3 className="ga-h">Projected return</h3>
       {r.quantified_gaps ? (
         <div className="ga-roi-grid">
-          <div><span>Value per year</span><strong><Money value={r.annual_low} /> to <Money value={r.annual_high} /></strong><small>Most likely <Money value={r.annual_expected} /></small></div>
+          <div><span>Value per year</span><strong><Money value={r.annual_low} currency={r.currency} /> to <Money value={r.annual_high} currency={r.currency} /></strong><small>Most likely <Money value={r.annual_expected} currency={r.currency} /></small></div>
           <div><span>Time recovered</span><strong>{r.hours_per_week_recovered} h / week</strong><small>{r.quantified_gaps} gap{r.quantified_gaps === 1 ? '' : 's'} counted</small></div>
           <div><span>First-year ROI</span><strong>{r.roi_pct_low}% to {r.roi_pct_high}%</strong><small>Payback {r.payback_months_best} to {r.payback_months_worst} months</small></div>
         </div>
@@ -49,7 +50,7 @@ function ReportView({ report, internal }) {
       <div className="ga-internal">
         <span className="ga-internal-tag">Sales view, not shown to the visitor</span>
         {invest > 0
-          ? <p>Our estimate to deliver everything counted above: <strong><Money value={invest} /></strong>. The ROI figures above are measured against this. The visitor was never shown it, nor any priority or per-opportunity cost.</p>
+          ? <p>Our estimate to deliver everything counted above: <strong><Money value={invest} /></strong>. The ROI figures above are measured against this. The visitor was never shown it, nor any priority or per-opportunity cost.{r.currency && r.currency !== 'KES' ? ` The visitor chose ${r.currency}; the working and this estimate are in KES.` : ''}</p>
           : <p>Nothing was quantified, so there is no investment estimate.</p>}
       </div>
 
@@ -70,7 +71,7 @@ function ReportView({ report, internal }) {
             {g.opportunity && <p><strong>Opportunity.</strong> {g.opportunity}</p>}
             <div className="ga-gap-roi">
               {g.roi.quantified
-                ? <span><strong><Money value={g.roi.annual_low} /> to <Money value={g.roi.annual_high} /></strong> a year · {g.roi.hours_per_week_recovered} h/week back · {g.confidence} confidence</span>
+                ? <span><strong><Money value={g.roi.annual_low} currency={r.currency} /> to <Money value={g.roi.annual_high} currency={r.currency} /></strong> a year · {g.roi.hours_per_week_recovered} h/week back · {g.confidence} confidence</span>
                 : <span>Not enough figures to put a value on this.</span>}
             </div>
             {w && (

@@ -55,11 +55,12 @@ export function cleanText(v: unknown, max: number): string {
   return typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max) : ''
 }
 
-// Kenyan numbers: +254 7xx / 254 7xx / 07xx / 01xx, saved as +254...
+// Local formats (07xx, 01xx, 254 7xx) are saved as +254...; any other number needs its country code, like +1 555 123 4567.
 export function normalisePhone(raw: unknown): string | null {
   const s = String(raw ?? '').replace(/[\s\-().]/g, '')
   const m = /^(?:\+254|254|0)([17]\d{8})$/.exec(s)
-  return m ? '+254' + m[1] : null
+  if (m) return '+254' + m[1]
+  return /^\+[1-9]\d{6,14}$/.test(s) ? s : null
 }
 
 export interface LeadValue {
@@ -102,7 +103,7 @@ export function validateLead(body: Record<string, unknown>) {
   if (!EMAIL_RE.test(email)) errors.email = 'Enter an email like name@company.co.ke'
 
   const phone = normalisePhone(rawPhone)
-  if (rawPhone ? !phone : need('phone')) errors.phone = 'Enter a Kenyan number like 0712 345 678 or +254 712 345 678'
+  if (rawPhone ? !phone : need('phone')) errors.phone = 'Enter your number with its country code, like +1 555 123 4567'
   if (need('business_name') && !business_name) errors.business_name = 'Enter your business name.'
 
   if (staff_band ? !(staff_band in STAFF_LABELS) : need('staff_band')) errors.staff_band = 'Choose how many staff you have.'

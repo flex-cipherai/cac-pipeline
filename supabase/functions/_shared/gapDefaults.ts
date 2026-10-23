@@ -36,7 +36,7 @@ const DEFAULTS = {
     {
       key: 'finance',
       label: 'Finance, invoicing and collections',
-      focus: 'Quoting and invoicing, M-Pesa and bank reconciliation, KRA eTIMS and tax filing effort, payroll, expense tracking, chasing late payers, how long month-end takes.',
+      focus: 'Quoting and invoicing, mobile-money and bank reconciliation, tax filing and compliance effort, payroll, expense tracking, chasing late payers, how long month-end takes.',
       optional: false
     },
     {
@@ -103,6 +103,22 @@ const DEFAULTS = {
     min_investment_per_gap_kes: 80000,
     max_benefit_per_staff_kes: 700000,
     rounding_kes: 1000
+  },
+  // Currencies a visitor can pick for the report. The ROI engine works in KES; figures are converted at
+  // the end. kes_per_unit is approximate (refresh it now and then), labour scales the KES labour-cost
+  // assumptions above for markets where staff time costs more or less than the Kenyan default (1 = as KES),
+  // step is the rounding of the figures shown in that currency.
+  currencies: {
+    KES: { name: 'Kenyan shilling', kes_per_unit: 1, labour: 1, step: 1000 },
+    USD: { name: 'US dollar', kes_per_unit: 129.4, labour: 5, step: 10 },
+    EUR: { name: 'Euro', kes_per_unit: 149, labour: 5, step: 10 },
+    GBP: { name: 'British pound', kes_per_unit: 174, labour: 5, step: 10 },
+    AED: { name: 'UAE dirham', kes_per_unit: 35.2, labour: 2.5, step: 50 },
+    CAD: { name: 'Canadian dollar', kes_per_unit: 94, labour: 5, step: 10 },
+    AUD: { name: 'Australian dollar', kes_per_unit: 85, labour: 6, step: 10 },
+    ZAR: { name: 'South African rand', kes_per_unit: 7.4, labour: 1.5, step: 100 },
+    INR: { name: 'Indian rupee', kes_per_unit: 1.47, labour: 0.8, step: 1000 },
+    NGN: { name: 'Nigerian naira', kes_per_unit: 0.086, labour: 0.6, step: 10000 }
   }
 }
 

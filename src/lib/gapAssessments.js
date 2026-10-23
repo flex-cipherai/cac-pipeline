@@ -8,17 +8,23 @@ export function kes(n) {
   return 'KES ' + Math.round(Number(n) || 0).toLocaleString('en-US')
 }
 
+// The report's money is in the currency the visitor chose (roi.currency); older reports are KES.
+export function money(n, currency = 'KES') {
+  return `${currency || 'KES'} ` + Math.round(Number(n) || 0).toLocaleString('en-US')
+}
+
 // KES 1.2M / KES 340K, for table cells.
-export function kesShort(n) {
+export function kesShort(n, currency = 'KES') {
   const v = Number(n) || 0
-  if (v >= 1e6) return `KES ${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1).replace(/\.0$/, '')}M`
-  if (v >= 1e3) return `KES ${Math.round(v / 1e3)}K`
-  return `KES ${Math.round(v)}`
+  const c = currency || 'KES'
+  if (v >= 1e6) return `${c} ${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1).replace(/\.0$/, '')}M`
+  if (v >= 1e3) return `${c} ${Math.round(v / 1e3)}K`
+  return `${c} ${Math.round(v)}`
 }
 
 export function valueRange(roi) {
   if (!roi || !roi.quantified_gaps) return null
-  return `${kesShort(roi.annual_low)} to ${kesShort(roi.annual_high)}`
+  return `${kesShort(roi.annual_low, roi.currency)} to ${kesShort(roi.annual_high, roi.currency)}`
 }
 
 export function statusLabel(status) {
@@ -39,7 +45,8 @@ export function scoreTone(score) {
 export function summarise(rows) {
   const done = rows.filter(r => r.status === 'report_ready')
   const scores = done.map(r => r.readiness?.score).filter(s => typeof s === 'number')
-  const value = done.reduce((sum, r) => sum + (Number(r.roi?.annual_expected) || 0), 0)
+  // Reports can be in different currencies, so add up the KES equivalent the function stores alongside.
+  const value = done.reduce((sum, r) => sum + (Number(r.roi?.annual_expected_kes ?? r.roi?.annual_expected) || 0), 0)
   return {
     started: rows.length,
     completed: done.length,

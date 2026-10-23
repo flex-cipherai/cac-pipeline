@@ -92,11 +92,11 @@ export default function Assessments() {
     }), [inPeriod, view, search])
 
   function handleExportCSV() {
-    const headers = ['Started', 'Name', 'Company', 'Email', 'Website', 'Status', 'Replies', 'Readiness', 'Value low (KES)', 'Value likely (KES)', 'Value high (KES)', 'PDF downloaded', 'Asked for more']
+    const headers = ['Started', 'Name', 'Company', 'Email', 'Website', 'Status', 'Replies', 'Readiness', 'Currency', 'Value low', 'Value likely', 'Value high', 'Value likely (KES)', 'PDF downloaded', 'Asked for more']
     const data = filtered.map(r => [
       r.created_at ? new Date(r.created_at).toLocaleString('en-GB') : '', r.full_name, r.company_name, r.email, r.website_url,
       statusLabel(r.status), r.user_turns, r.readiness?.score ?? '',
-      r.roi?.annual_low ?? '', r.roi?.annual_expected ?? '', r.roi?.annual_high ?? '',
+      r.roi ? (r.roi.currency || 'KES') : '', r.roi?.annual_low ?? '', r.roi?.annual_expected ?? '', r.roi?.annual_high ?? '', r.roi?.annual_expected_kes ?? r.roi?.annual_expected ?? '',
       r.pdf_downloaded_at ? 'Yes' : '', r.cta_clicked_at ? 'Yes' : '',
     ])
     exportCSV(headers, data, `SDFM_Automation_Scoper_${new Date().toISOString().slice(0, 10)}`)
