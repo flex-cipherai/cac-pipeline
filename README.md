@@ -194,20 +194,23 @@ Hosted on Netlify with auto-deploy from the `main` branch. Environment variables
 
 ## Booking flow (sdfmgroup.com/book)
 
-The public booking form lives on the marketing site, not in this app. Visitors go
-**details → pick a time → confirmed**, then optionally answer five prep questions.
-Everyone who picks a time is confirmed; the prep answers only score the lead
-(hot / warm / cold) for the team. A lead is saved as soon as the contact step is
-submitted (stage `Incomplete`) so abandoned bookings can be followed up.
+The public booking form lives on the marketing site, not in this app. Visitors enter
+their name, email, company and a short description of their problem, pick a time (shown in
+their own time zone) and are confirmed. The confirmation email carries an add-to-Google-Calendar
+link and an invite.ics attachment, and every admin/sales user with the Pipeline module gets a
+"New call booked" email. Both emails are built in `_shared/bookingEmail.ts` (they no longer use the
+editable templates). There are no prep questions or phone field any more, so new leads stay
+`unscored`; the `booking-prep` function has been removed. A lead is saved as soon as the
+contact step is submitted (stage `Incomplete`) so abandoned bookings can be followed up.
 
 The browser never reads or writes the database. It calls Edge Functions that run
 with the service role: `booking-info`, `booking-start`, `booking-confirm`,
-`booking-prep`, plus `send-booking-nudges` (cron). Shared logic is in
+plus `send-booking-nudges` (cron). Shared logic is in
 `supabase/functions/_shared/booking.ts` (its scoring mirrors `src/lib/scoring.js`).
 
 Deploy order:
 1. `migration-booking-flow.sql`, then `migration-booking-flow-analytics.sql`
-2. `supabase functions deploy booking-info booking-start booking-confirm booking-prep send-booking-nudges`
+2. `supabase functions deploy booking-info booking-start booking-confirm send-booking-nudges`
 3. Deploy sdfmgroup.com (cac-website) and this app (`/intake` now 301s to `/book`)
 4. Settings → Booking & availability: set the Google Meet link; check the two new templates on Notifications
 5. `migration-booking-nudges-cron.sql` (fill in project URL and anon key)

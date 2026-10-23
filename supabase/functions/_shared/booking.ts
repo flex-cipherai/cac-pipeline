@@ -158,29 +158,23 @@ export function cleanText(v: unknown, max: number): string {
   return typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max) : ''
 }
 
+// The booking form asks for four things: name, email, company and a short description of the problem.
+// leads.phone is NOT NULL in the schema, so it is stored as an empty string.
 export function validateContact(body: Record<string, unknown>) {
   const full_name = cleanText(body.full_name, 120)
   const company_name = cleanText(body.company_name, 160)
   const email = cleanText(body.email, 254).toLowerCase()
-  const phone = cleanText(body.phone, 30)
   const challenge_notes = cleanText(body.challenge_notes, 1000)
   const errors: Record<string, string> = {}
 
   if (full_name.length < 2) errors.full_name = 'Please enter your full name.'
   if (company_name.length < 1) errors.company_name = 'Please enter your company name.'
   if (!EMAIL_RE.test(email)) errors.email = 'Please enter a valid email address.'
-  const digits = phone.replace(/\D/g, '')
-  if (!/^[0-9+()\-.\s]+$/.test(phone) || digits.length < 7 || digits.length > 15) {
-    errors.phone = 'Please enter a valid phone number.'
-  }
+  if (challenge_notes.length < 10) errors.challenge_notes = 'Please tell us briefly what you would like help with.'
 
   return {
     errors,
-    value: {
-      full_name, company_name, email, phone,
-      has_whatsapp: body.has_whatsapp === true,
-      challenge_notes: challenge_notes || null,
-    },
+    value: { full_name, company_name, email, phone: '', has_whatsapp: false, challenge_notes },
   }
 }
 
@@ -236,7 +230,7 @@ export async function getLeadByToken(admin: any, leadId: unknown, token: unknown
 
 // ── Links ────────────────────────────────────────────────────────────────
 
-export function whatsappLink(cfg: BookingSettings, text = 'Hi SDFM, I would like to talk about a free AI Gap Assessment.') {
+export function whatsappLink(cfg: BookingSettings, text = 'Hi SDFM, I would like to talk about a call.') {
   return `https://wa.me/${cfg.whatsapp_number}?text=${encodeURIComponent(text)}`
 }
 
@@ -246,13 +240,13 @@ export function googleCalendarLink(cfg: BookingSettings, lead: any) {
   const end = start.plus({ minutes: cfg.booking_duration_minutes })
   const fmt = (d: any) => d.toUTC().toFormat("yyyyLLdd'T'HHmmss'Z'")
   const details = [
-    'Free AI Gap Assessment discovery call with SDFM Group.',
+    'Free call with SDFM Group.',
     cfg.meeting_link ? `Join: ${cfg.meeting_link}` : 'We will send the meeting link before the call.',
     `Questions? WhatsApp +${cfg.whatsapp_number}`,
   ].join('\n')
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: 'SDFM discovery call',
+    text: 'Call with SDFM Group',
     dates: `${fmt(start)}/${fmt(end)}`,
     details,
     location: cfg.meeting_link || 'Google Meet',

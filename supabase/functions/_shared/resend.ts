@@ -17,7 +17,12 @@ export function renderTemplate(str: string, vars: Record<string, unknown>) {
   })
 }
 
-export async function sendViaResend(to: string[], subject: string, html: string) {
+export interface SendOptions {
+  replyTo?: string
+  attachments?: { filename: string; content: string }[] // content is base64
+}
+
+export async function sendViaResend(to: string[], subject: string, html: string, options: SendOptions = {}) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -29,6 +34,8 @@ export async function sendViaResend(to: string[], subject: string, html: string)
       to,
       subject,
       html,
+      ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+      ...(options.attachments?.length ? { attachments: options.attachments } : {}),
     }),
   })
   const data = await res.json()
