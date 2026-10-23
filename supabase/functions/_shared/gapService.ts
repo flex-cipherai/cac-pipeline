@@ -13,7 +13,7 @@
 
 import {
   buildConfig, buildContents, buildInterviewerSystem, buildReportContents, buildReportSystem, clean, CONFIG_KEYS,
-  computeProgress, inquiryMessage, isToken, newToken, parseCurrency, parseJsonLoose, parseTurn, plain, sanitiseReport, sha256Hex,
+  computeProgress, heardFromLabel, inquiryMessage, isToken, newToken, parseCurrency, parseJsonLoose, parseTurn, plain, sanitiseReport, sha256Hex,
   staffBand, teamEmail, validateStart,
 } from './gapAssessment.ts'
 import type { GapConfig, Message, Report, Turn } from './gapAssessment.ts'
@@ -40,6 +40,8 @@ export interface SessionRow {
   output_tokens: number
   pdf_downloaded_at: string | null
   cta_clicked_at: string | null
+  heard_from?: string | null
+  heard_from_other?: string | null
   // Working behind the report. Before the report exists it only holds the visitor's chosen currency.
   report_internal?: { currency?: string } | null
 }
@@ -166,6 +168,7 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
     full_name: value.full_name, email: value.email, email_domain: value.email_domain,
     company_name: value.company_name, website_url: value.website_url, website_summary: siteSummary || null,
     report_internal: { currency: value.currency },
+    heard_from: value.heard_from, heard_from_other: value.heard_from_other,
     model: usage.model, llm_calls: usage.calls, input_tokens: usage.input, output_tokens: usage.output,
     page_url: clean(body.page_url, 300) || null, referrer: clean(body.referrer, 300) || null,
     utm_source: clean(body.utm_source, 100) || null, utm_medium: clean(body.utm_medium, 100) || null,
@@ -297,11 +300,12 @@ async function handOff(session: SessionRow, rep: Report, appUrl: string, deps: D
   const { store } = deps
   try {
     if (!session.inquiry_id) {
+      const heard = heardFromLabel(session.heard_from, session.heard_from_other)
       const followUp = new Date(now.getTime() + 86_400_000).toISOString().slice(0, 10)
       const inquiryId = await store.createInquiry({
         full_name: session.full_name, company_name: session.company_name, email: session.email, phone: null,
         has_whatsapp: false, channel: 'website', source_detail: 'Automation scoper (free tool)',
-        message: inquiryMessage(rep, appUrl, session.id), status: 'new', next_follow_up: followUp,
+        message: inquiryMessage(rep, appUrl, session.id, heard), status: 'new', next_follow_up: followUp,
         offer: 'gap_check', staff_band: staffBand(rep.company.staff_estimate),
       })
       if (inquiryId) await store.updateSession(session.id, { inquiry_id: inquiryId })
@@ -312,7 +316,7 @@ async function handOff(session: SessionRow, rep: Report, appUrl: string, deps: D
   try {
     const to = await store.staffEmails()
     if (to.length) {
-      const mail = teamEmail({ id: session.id, full_name: session.full_name, company_name: session.company_name, email: session.email, website_url: session.website_url }, rep, appUrl)
+      const mail = teamEmail({ id: session.id, full_name: session.full_name, company_name: session.company_name, email: session.email, website_url: session.website_url, heard: heardFromLabel(session.heard_from, session.heard_from_other) }, rep, appUrl)
       await Promise.race([deps.sendEmail(to, mail.subject, mail.html), new Promise(resolve => setTimeout(resolve, 8000))])
     }
   } catch (err) {

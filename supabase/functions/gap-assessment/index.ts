@@ -31,7 +31,12 @@ function supabaseStore(admin: any, ip: string): Store {
       return count ?? 0
     },
     async createSession(row) {
-      const { data, error } = await admin.from('gap_assessments').insert(row).select('*').single()
+      let { data, error } = await admin.from('gap_assessments').insert(row).select('*').single()
+      // migration-gap-heard-from.sql not run yet: keep the session, drop the optional answer.
+      if (error && /heard_from/i.test(error.message || '')) {
+        const { heard_from: _h, heard_from_other: _o, ...base } = row
+        ;({ data, error } = await admin.from('gap_assessments').insert(base).select('*').single())
+      }
       if (error) fail('create session', error)
       return data as SessionRow
     },

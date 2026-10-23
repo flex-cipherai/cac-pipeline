@@ -22,6 +22,13 @@ export function kesShort(n, currency = 'KES') {
   return `${c} ${Math.round(v)}`
 }
 
+// "How did you hear about us?", as the visitor answered it on the website form.
+export function heardLabel(row) {
+  if (!row || !row.heard_from) return ''
+  if (row.heard_from === 'other') return row.heard_from_other ? `Other: ${row.heard_from_other}` : 'Other'
+  return { linkedin: 'LinkedIn', instagram: 'Instagram' }[row.heard_from] || row.heard_from
+}
+
 export function valueRange(roi) {
   if (!roi || !roi.quantified_gaps) return null
   return `${kesShort(roi.annual_low, roi.currency)} to ${kesShort(roi.annual_high, roi.currency)}`

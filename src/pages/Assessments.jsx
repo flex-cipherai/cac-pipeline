@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { exportCSV } from '../lib/exportUtils'
 import { shortDate, timeAgo } from '../lib/inquiries'
-import { isMissingTable, kes, kesShort, progressNote, scoreTone, statusLabel, summarise, valueRange } from '../lib/gapAssessments'
+import { heardLabel, isMissingTable, kes, kesShort, progressNote, scoreTone, statusLabel, summarise, valueRange } from '../lib/gapAssessments'
 import AssessmentDetail from '../components/AssessmentDetail/AssessmentDetail'
 import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../components/PeriodSelector/PeriodSelector'
 import './AllLeads.css'
@@ -21,7 +21,7 @@ const StatIcons = {
 // Only the columns the list needs; the full report and the internal working load when a row is opened.
 const LIST_COLUMNS = [
   'id', 'status', 'full_name', 'email', 'company_name', 'website_url', 'user_turns', 'areas_covered',
-  'created_at', 'last_activity_at', 'report_generated_at', 'pdf_downloaded_at', 'cta_clicked_at', 'cta_kind', 'inquiry_id',
+  'created_at', 'last_activity_at', 'report_generated_at', 'pdf_downloaded_at', 'cta_clicked_at', 'cta_kind', 'inquiry_id', 'heard_from', 'heard_from_other',
   'readiness:report->readiness', 'roi:report->roi',
 ].join(',')
 
@@ -55,8 +55,13 @@ export default function Assessments() {
   }, [toast.show])
 
   async function fetchAll() {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('gap_assessments').select(LIST_COLUMNS).order('created_at', { ascending: false }).limit(1000)
+    // migration-gap-heard-from.sql not run yet: load the list without that column rather than fail.
+    if (error && /heard_from/i.test(error.message || '')) {
+      ;({ data, error } = await supabase
+        .from('gap_assessments').select(LIST_COLUMNS.replace(',heard_from,heard_from_other', '')).order('created_at', { ascending: false }).limit(1000))
+    }
     if (error) {
       if (isMissingTable(error)) setSetupNeeded(true)
       else setLoadError(error.message || 'Could not load the assessments.')
@@ -92,10 +97,10 @@ export default function Assessments() {
     }), [inPeriod, view, search])
 
   function handleExportCSV() {
-    const headers = ['Started', 'Name', 'Company', 'Email', 'Website', 'Status', 'Replies', 'Readiness', 'Currency', 'Value low', 'Value likely', 'Value high', 'Value likely (KES)', 'PDF downloaded', 'Asked for more']
+    const headers = ['Started', 'Name', 'Company', 'Email', 'Website', 'Status', 'Replies', 'Readiness', 'Heard about us via', 'Currency', 'Value low', 'Value likely', 'Value high', 'Value likely (KES)', 'PDF downloaded', 'Asked for more']
     const data = filtered.map(r => [
       r.created_at ? new Date(r.created_at).toLocaleString('en-GB') : '', r.full_name, r.company_name, r.email, r.website_url,
-      statusLabel(r.status), r.user_turns, r.readiness?.score ?? '',
+      statusLabel(r.status), r.user_turns, r.readiness?.score ?? '', heardLabel(r),
       r.roi ? (r.roi.currency || 'KES') : '', r.roi?.annual_low ?? '', r.roi?.annual_expected ?? '', r.roi?.annual_high ?? '', r.roi?.annual_expected_kes ?? r.roi?.annual_expected ?? '',
       r.pdf_downloaded_at ? 'Yes' : '', r.cta_clicked_at ? 'Yes' : '',
     ])
@@ -205,7 +210,7 @@ export default function Assessments() {
           <div className="leads-table-wrap section-card">
             <table className="data-table">
               <thead>
-                <tr><th>Who</th><th>Status</th><th>Readiness</th><th>Projected value / year</th><th>Follow-up</th><th>Started</th></tr>
+                <tr><th>Who</th><th>Status</th><th>Readiness</th><th>Projected value / year</th><th>Heard via</th><th>Follow-up</th><th>Started</th></tr>
               </thead>
               <tbody>
                 {filtered.map(r => (
@@ -223,6 +228,7 @@ export default function Assessments() {
                     </td>
                     <td>{r.readiness ? <span className={`ga-score ga-score-${scoreTone(r.readiness.score)}`}>{r.readiness.score}</span> : <span className="inq-sub">—</span>}</td>
                     <td className="inq-muted">{valueRange(r.roi) || <span className="inq-sub">—</span>}</td>
+                    <td className="inq-muted">{heardLabel(r) || <span className="inq-sub">—</span>}</td>
                     <td>
                       <div className="inq-next">
                         {r.pdf_downloaded_at && <span className="ga-chip">PDF</span>}
@@ -253,6 +259,7 @@ export default function Assessments() {
                 <div className="leads-mobile-card-bottom">
                   <span className="leads-mobile-meta"><span className="leads-mobile-label">Readiness</span>{r.readiness?.score ?? '—'}</span>
                   <span className="leads-mobile-meta"><span className="leads-mobile-label">Value</span>{valueRange(r.roi) || '—'}</span>
+                  {heardLabel(r) && <span className="leads-mobile-meta"><span className="leads-mobile-label">Heard via</span>{heardLabel(r)}</span>}
                   <span className="leads-mobile-meta"><span className="leads-mobile-label">Started</span>{timeAgo(r.created_at)}</span>
                 </div>
               </div>

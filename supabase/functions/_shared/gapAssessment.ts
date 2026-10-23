@@ -282,6 +282,25 @@ export interface StartValue {
   website_url: string
   website_host: string
   currency: string
+  heard_from: string | null
+  heard_from_other: string | null
+}
+
+export const HEARD_FROM = ['linkedin', 'instagram', 'other'] as const
+export const HEARD_FROM_LABELS: Record<string, string> = { linkedin: 'LinkedIn', instagram: 'Instagram', other: 'Other' }
+
+// "How did you hear about us?" is optional: anything unrecognised is treated as not answered.
+export function heardFrom(body: Record<string, unknown>): { heard_from: string | null; heard_from_other: string | null } {
+  const v = typeof body.heard_from === 'string' ? body.heard_from.trim().toLowerCase() : ''
+  const heard_from = (HEARD_FROM as readonly string[]).includes(v) ? v : null
+  const other = heard_from === 'other' ? clean(body.heard_from_other, 120) : ''
+  return { heard_from, heard_from_other: other || null }
+}
+
+export function heardFromLabel(heard_from: string | null | undefined, other: string | null | undefined): string {
+  if (!heard_from) return ''
+  if (heard_from === 'other') return other ? `Other: ${other}` : 'Other'
+  return HEARD_FROM_LABELS[heard_from] || ''
 }
 
 export function validateStart(body: Record<string, unknown>, cfg: GapConfig) {
@@ -304,7 +323,7 @@ export function validateStart(body: Record<string, unknown>, cfg: GapConfig) {
 
   const value: StartValue | null = Object.keys(errors).length
     ? null
-    : { full_name, email, email_domain: domain, company_name, website_url: site!.url, website_host: site!.host, currency: currency! }
+    : { full_name, email, email_domain: domain, company_name, website_url: site!.url, website_host: site!.host, currency: currency!, ...heardFrom(body) }
   return { errors, value }
 }
 
@@ -778,13 +797,14 @@ export function money(n: number, currency: string): string {
   return currency + ' ' + Math.round(n).toLocaleString('en-US')
 }
 
-export function inquiryMessage(report: Report, appUrl: string, id: string): string {
+export function inquiryMessage(report: Report, appUrl: string, id: string, heard = ''): string {
   const r = report.roi
   const lines = [
     `Completed the free Automation scoper on the website.`,
     `Readiness ${report.readiness.score}/100 (${report.readiness.label}). ${report.gaps.length} gap${report.gaps.length === 1 ? '' : 's'} found.`,
     r.quantified_gaps ? `Projected value ${money(r.annual_low, r.currency)} to ${money(r.annual_high, r.currency)} a year, most likely ${money(r.annual_expected, r.currency)}.` : 'Value could not be estimated from the answers given.',
     report.company.staff_estimate ? `About ${report.company.staff_estimate} staff.` : '',
+    heard ? `Heard about us via: ${heard}.` : '',
     '',
     ...report.gaps.map(g => `- ${g.area_label}: ${g.title}`),
     '',
@@ -794,7 +814,7 @@ export function inquiryMessage(report: Report, appUrl: string, id: string): stri
 }
 
 export function teamEmail(
-  row: { id: string; full_name: string; company_name: string; email: string; website_url: string },
+  row: { id: string; full_name: string; company_name: string; email: string; website_url: string; heard?: string },
   report: Report, appUrl: string,
 ): { subject: string; html: string } {
   const r = report.roi
@@ -806,6 +826,7 @@ export function teamEmail(
     ['Readiness', `${report.readiness.score}/100 (${escapeHtml(report.readiness.label)})`],
     ['Gaps found', String(report.gaps.length)],
     ['Projected value', escapeHtml(value)],
+    ...(row.heard ? [['Heard about us via', escapeHtml(row.heard)]] : []),
   ].map(([k, v]) => `<tr><td style="padding:6px 16px 6px 0;color:#666">${k}</td><td style="padding:6px 0"><strong>${v}</strong></td></tr>`).join('')
   const list = report.gaps.map(g => `<li style="margin:4px 0">${escapeHtml(g.area_label)}: ${escapeHtml(g.title)}</li>`).join('')
   return {

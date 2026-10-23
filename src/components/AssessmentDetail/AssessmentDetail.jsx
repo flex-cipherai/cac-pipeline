@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { shortDateTime } from '../../lib/inquiries'
-import { ctaLabel, kes, money, progressNote, scoreTone, statusLabel } from '../../lib/gapAssessments'
+import { ctaLabel, heardLabel, kes, money, progressNote, scoreTone, statusLabel } from '../../lib/gapAssessments'
 import '../LeadDetail/LeadDetail.css'
 import '../InquiryDetail/InquiryDetail.css'
 import './AssessmentDetail.css'
@@ -237,6 +237,7 @@ export default function AssessmentDetail({ id, isAdmin, onClose, onDeleted }) {
                       ['PDF downloaded', row.pdf_downloaded_at ? shortDateTime(row.pdf_downloaded_at) : 'No'],
                       ['Asked for more', row.cta_clicked_at ? `${ctaLabel(row.cta_kind)}, ${shortDateTime(row.cta_clicked_at)}` : 'No'],
                       ['Source', [row.utm_source, row.utm_medium, row.utm_campaign].filter(Boolean).join(' / ') || row.referrer || 'Direct'],
+                      ['Heard about us via', heardLabel(row) || '—'],
                       ['AI model', row.model || '—'],
                       ['AI usage', `${row.llm_calls} calls, ${(row.input_tokens + row.output_tokens).toLocaleString('en-US')} tokens`],
                     ].map(([label, value]) => (
