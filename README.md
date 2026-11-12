@@ -35,6 +35,7 @@ cac-pipeline/
 │   ├── migration-inquiries.sql             # Inquiries: tables, RLS, convert_inquiry_to_lead()
 │   ├── migration-inquiry-reminders.sql     # Inquiry reminder columns + email templates
 │   ├── migration-inquiry-reminders-cron.sql # pg_cron: daily digest + hourly reply alerts
+│   ├── migration-ospod-waitlist.sql        # Ospod waitlist signups: table, numbering function, RLS, permission seed
 │   └── functions/sm-*/          # Social media Edge Functions (incl. sm-gsc-sync)
 ├── .env                 # Environment variables (not committed)
 ├── netlify.toml         # Netlify SPA routing config
@@ -87,6 +88,18 @@ The free assessment tool on the marketing site (`cac-website/ai-gap-check.html`)
 - **Abuse limits.** Honeypot and minimum fill time, 5 starts per hour per network, 3 per email per day, no overall daily cap on sessions (one assessment makes about 14 model calls, so watch your Gemini plan's requests-per-day limit; when it runs out visitors see the "AI is busy" message), a turn cap per session, a processing lock so two taps cannot run two model calls, work email required (free and disposable domains rejected, MX checked), and website fetching only to public hosts (every redirect re-checked).
 - **Privacy.** On Gemini's free tier Google may use prompts to improve its products and have humans review them. The consent text and the privacy policy (`#ai-gap-check`) say answers go to Google Gemini; switching the API key's project to a paid plan removes that. Do that before promoting the tool widely.
 - **Setup (in order):** run `migration-gap-assessments.sql` (after `migration-inquiries.sql` and `migration-role-permissions.sql`; it also widens the `inquiries.offer` check, as `migration-website-leads.sql` now does); `supabase secrets set GEMINI_API_KEY=...` (Google AI Studio; `RESEND_API_KEY` and `SENDER_EMAIL` are the existing ones); `supabase functions deploy gap-assessment --no-verify-jwt`; then deploy the website. Open Settings → Automation scoper and check the two model names exist on your plan.
+
+### Ospod Waitlist (`/ospod-waitlist`)
+
+Ospod is a separate product SDFM is testing demand for with a waitlist (landing pages live in their own repo, `flex-cipherai/ospod`: React, on Netlify). This module is where the signups land. Sidebar group **Ospod**; admin only until you switch the module on for a role in Settings → Permissions.
+
+- **What is saved.** One row per email in `ospod_waitlist_signups`: email, which page (`indie` for the Instagram page, `studios` for the LinkedIn page), the four answers (who they are, shows, episodes a month, editing spend), where they came from (`utm_*` and referrer; `utm_content` carries the ad variant: `ig_30`, `ig_15`, `li_30`, `li_15`), a salted hash of their network address (never the address), a follow-up status and notes. A repeat signup keeps the first answers and the first source.
+- **Founding 500.** `member_no` is the join order. `ospod_waitlist_join()` numbers people under a lock (no gaps, no duplicates, the cap holds under simultaneous signups); #1 to #500 are founding members. The page's meter reads the real count through the Edge Function (`GET`).
+- **Every signup emails the team.** The `ospod-waitlist` Edge Function sends the alert to everyone with the `ospod_waitlist` module (inactive accounts left out), via the same Resend secrets as the other functions. The email is best effort: if it fails the signup is still saved, and the row's `notified_at` stays empty so you can see it. Reply-to is the person who signed up.
+- **The page** shows totals, a breakdown by ad tag, by who they are and by editing spend (so you can judge cost per qualified signup by segment), status tabs, search, CSV export and a drawer with the answers, status and notes. Staff can change status and notes only; an admin can delete a row (for "delete my data" requests).
+- **Abuse limits.** Hidden honeypot field, minimum fill time, 8 accepted requests per hour per network, answers checked against the lists on the page, free text stripped of control characters and escaped in the email. CORS allows `https://ospod.sdfmgroup.com` plus anything in the `OSPOD_ALLOWED_ORIGINS` secret; `*.netlify.app` is allowed until you set `OSPOD_ALLOW_NETLIFY=false`.
+- **Setup (in order):** run `migration-ospod-waitlist.sql` (after `migration-role-permissions.sql`; the rate limit reuses `booking_attempts` from `migration-booking-flow.sql`); `supabase functions deploy ospod-waitlist --no-verify-jwt`; optionally `supabase secrets set OSPOD_ALLOWED_ORIGINS=https://your-final-domain`; then deploy the CRM. The allowed answers live in `functions/_shared/ospodWaitlist.ts` and must match the chips in the landing page's `src/components/Shared.jsx`.
+- **To change an answer's wording:** change it in both places (page and `ospodWaitlist.ts`). Old rows keep the old wording; the database does not constrain the answers.
 
 ### Settings
 

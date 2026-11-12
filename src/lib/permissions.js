@@ -55,6 +55,13 @@ export const MODULE_GROUPS = [
     ],
   },
   {
+    key: 'ospod',
+    label: 'Ospod',
+    modules: [
+      { key: 'ospod_waitlist', label: 'Ospod Waitlist', hint: 'Signups from the Ospod landing pages, and the email alert for each one', path: '/ospod-waitlist', defaults: ['admin'] },
+    ],
+  },
+  {
     key: 'settings',
     label: 'Settings',
     modules: [

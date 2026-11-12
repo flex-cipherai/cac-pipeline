@@ -8,6 +8,7 @@ import Pipeline from './pages/Pipeline'
 import AllLeads from './pages/AllLeads'
 import Inquiries from './pages/Inquiries'
 import Assessments from './pages/Assessments'
+import OspodWaitlist from './pages/OspodWaitlist'
 import QuotationGenerator from './pages/QuotationGenerator'
 import SettingsLayout from './pages/settings/SettingsLayout'
 import SettingsIndex from './pages/settings/SettingsIndex'
@@ -125,6 +126,9 @@ const PROTECTED_ROUTES = [
   { path: '/settings/scoring', module: 'settings_scoring', element: <SettingsLayout><ScoringSettings /></SettingsLayout> },
 
   { path: '/analytics', module: 'lead_analytics', element: <MarketingAnalytics /> },
+
+  // Ospod (a separate product being validated): signups from its landing pages
+  { path: '/ospod-waitlist', module: 'ospod_waitlist', element: <OspodWaitlist /> },
 
   // Social Media Management
   { path: '/social/composer', module: 'social_composer', element: <ContentComposer /> },

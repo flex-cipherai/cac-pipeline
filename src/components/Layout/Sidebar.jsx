@@ -41,6 +41,19 @@ const icons = {
       <path d="M6.500 14l2-2.500 2 1.500 2.500-3.500" />
     </svg>
   ),
+  ospodModule: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="6.500" />
+      <path d="M10 2.500v15" />
+    </svg>
+  ),
+  ospodWaitlist: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.500" cy="7" r="3" />
+      <path d="M2 16c.5-3 2.500-4.500 5.500-4.500S12.500 13 13 16" />
+      <path d="M13.500 4.500a3 3 0 0 1 0 5M15.500 11.500c1.200.7 1.900 1.900 2.200 3.500" />
+    </svg>
+  ),
   pipeline: (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <path d="M3 4v12M10 6v10M17 8v8" />
@@ -165,6 +178,14 @@ const MODULES = [
       { module: 'social_analytics', icon: icons.analytics },
       { module: 'website_analytics', icon: icons.website },
       { module: 'social_activity', icon: icons.activity },
+    ],
+  },
+  {
+    key: 'ospod',
+    label: 'Ospod',
+    icon: icons.ospodModule,
+    items: [
+      { module: 'ospod_waitlist', icon: icons.ospodWaitlist },
     ],
   },
 ].map(group => ({
