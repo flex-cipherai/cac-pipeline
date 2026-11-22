@@ -34,6 +34,10 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     if (!Deno.env.get('INSTAGRAM_APP_ID')) return jsonResponse({ success: false, error: 'INSTAGRAM_APP_ID is not set yet — add the Instagram app ID and secret to Supabase secrets' })
+    // An app ID is digits only; a long value starting with letters is usually an access token pasted by mistake.
+    if (!/^d{6,20}$/.test((Deno.env.get('INSTAGRAM_APP_ID') || '').trim())) {
+      return jsonResponse({ success: false, error: 'The INSTAGRAM_APP_ID secret is not an app ID (it should be digits only). Copy the Instagram app ID from the Meta app → Instagram use case → API setup with Instagram login, and update the secret in Supabase.' })
+    }
 
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
