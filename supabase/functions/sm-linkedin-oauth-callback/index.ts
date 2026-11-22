@@ -1,19 +1,23 @@
 // Supabase Edge Function: sm-linkedin-oauth-callback
-// LinkedIn redirects the admin's browser here directly after they approve
-// (or deny) access — this is a public GET endpoint, not an authenticated
-// app call, so it must be deployed with --no-verify-jwt. Security comes
-// from the one-time `state` row created by sm-linkedin-oauth-start, not
-// from a Supabase session.
+// LinkedIn redirects the admin's browser here after they approve (or deny)
+// access. Public GET endpoint — deploy with --no-verify-jwt. Security comes
+// from the one-time `state` row created by sm-linkedin-oauth-start.
 //
-// Exchanges the code for tokens, stores them (service-role only table —
-// never exposed to the frontend), tries to resolve which LinkedIn
-// Organization the member administers, and 302-redirects back to the app's
-// Settings page with a status query param.
+// One connection sets up two publishing targets:
+//   - the connecting person's own LinkedIn profile (a connected_accounts row
+//     with account_type 'member', owned by that BMS user), and
+//   - the LinkedIn Company Page they administer (the 'organization' row).
+// Both switch to Automated Mode. Tokens go in connected_account_tokens
+// (service-role only — never readable from the browser).
+//
+// Redirects back to /settings?linkedin=<status>.
 //
 // Deploy: supabase functions deploy sm-linkedin-oauth-callback --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { exchangeCodeForToken, decodeMemberUrnFromIdToken, fetchAdministeredOrganizations } from '../_shared/linkedin.ts'
+import {
+  exchangeCodeForToken, fetchAdministeredOrganizations, fetchMe, fetchOrganizationName, tokenColumns,
+} from '../_shared/linkedin.ts'
 
 function redirectTo(url: string) {
   return new Response(null, { status: 302, headers: { Location: url } })
@@ -30,24 +34,21 @@ Deno.serve(async (req) => {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const adminClient = createClient(supabaseUrl, serviceRoleKey)
 
-  // We need the state row to know where to send the browser back to, even
-  // on failure — fall back to no redirect (plain error text) only if the
-  // state itself can't be resolved at all.
   let redirectOrigin = ''
   let stateRow: { user_id: string; redirect_origin: string } | null = null
 
   if (state) {
     const { data } = await adminClient
       .from('oauth_states')
-      .select('user_id, redirect_origin')
+      .select('user_id, redirect_origin, created_at')
       .eq('state', state)
       .eq('provider', 'linkedin')
       .maybeSingle()
     if (data) {
-      stateRow = data
       redirectOrigin = data.redirect_origin
-      // Single-use: remove immediately so it can't be replayed.
+      // Single-use, and only valid for an hour.
       await adminClient.from('oauth_states').delete().eq('state', state)
+      if (Date.now() - new Date(data.created_at).getTime() < 60 * 60 * 1000) stateRow = data
     }
   }
 
@@ -72,59 +73,85 @@ Deno.serve(async (req) => {
     const redirectUri = `${supabaseUrl}/functions/v1/sm-linkedin-oauth-callback`
 
     const token = await exchangeCodeForToken({ code, redirectUri, clientId, clientSecret })
-    const memberUrn = decodeMemberUrnFromIdToken(token.id_token)
+    const columns = tokenColumns(token)
+    const me = await fetchMe(token.access_token)
+    const memberUrn = `urn:li:person:${me.id}`
 
-    const { data: account, error: accountError } = await adminClient
+    // ── The person's own profile ──
+    const { data: existingMember } = await adminClient
       .from('connected_accounts')
       .select('id')
-      .eq('platform', 'linkedin')
+      .eq('account_type', 'member')
+      .eq('owner_profile_id', stateRow.user_id)
       .maybeSingle()
 
-    if (accountError || !account) {
-      return toSettings('error', 'No LinkedIn connected_accounts row found — run the Phase 1 social media migration first')
+    const memberFields = {
+      platform: 'linkedin',
+      account_type: 'member',
+      owner_profile_id: stateRow.user_id,
+      account_name: `${me.name} (profile)`,
+      external_page_id: memberUrn,
+      mode: 'automated',
+      status: 'active',
+      oauth_connected: true,
+      last_sync_error: null,
     }
-
-    const now = Date.now()
+    let memberAccountId = existingMember?.id
+    if (memberAccountId) {
+      await adminClient.from('connected_accounts').update(memberFields).eq('id', memberAccountId)
+    } else {
+      const { data: inserted, error } = await adminClient.from('connected_accounts').insert(memberFields).select('id').single()
+      if (error) throw new Error(`Could not save your LinkedIn profile: ${error.message}`)
+      memberAccountId = inserted.id
+    }
     await adminClient.from('connected_account_tokens').upsert({
-      account_id: account.id,
-      access_token: token.access_token,
-      refresh_token: token.refresh_token || null,
-      token_expires_at: new Date(now + token.expires_in * 1000).toISOString(),
-      refresh_token_expires_at: token.refresh_token_expires_in
-        ? new Date(now + token.refresh_token_expires_in * 1000).toISOString()
-        : null,
-      scope: token.scope || null,
+      account_id: memberAccountId,
+      ...columns,
       linkedin_member_urn: memberUrn,
     }, { onConflict: 'account_id' })
 
-    await adminClient.from('connected_accounts').update({ oauth_connected: true }).eq('id', account.id)
+    // ── The Company Page ──
+    const { data: orgAccount } = await adminClient
+      .from('connected_accounts')
+      .select('id, account_name')
+      .eq('platform', 'linkedin')
+      .eq('account_type', 'organization')
+      .order('created_at')
+      .limit(1)
+      .maybeSingle()
 
-    // Requires rw_organization_admin, which only becomes grantable once
-    // LinkedIn approves the Community Management API product — until then
-    // this will 403 and we leave the account in "connected, not yet linked
-    // to an Organization" state rather than failing the whole flow.
     let orgUrn: string | null = null
+    let orgProblem = ''
     try {
       const orgs = await fetchAdministeredOrganizations(token.access_token)
       orgUrn = orgs[0] || null
+      if (!orgUrn) orgProblem = 'you are not an admin of any LinkedIn Company Page'
     } catch (err) {
-      console.warn('[sm-linkedin-oauth-callback] organizationAcls not available yet:', err.message)
+      orgProblem = (err as Error).message
+      console.warn('[sm-linkedin-oauth-callback] organizationAcls failed:', orgProblem)
     }
 
-    if (orgUrn) {
-      await adminClient
-        .from('connected_accounts')
-        .update({ external_page_id: orgUrn, mode: 'automated' })
-        .eq('id', account.id)
+    if (orgUrn && orgAccount) {
+      const orgName = await fetchOrganizationName(token.access_token, orgUrn)
+      await adminClient.from('connected_accounts').update({
+        external_page_id: orgUrn,
+        mode: 'automated',
+        status: 'active',
+        oauth_connected: true,
+        last_sync_error: null,
+        ...(orgName ? { account_name: orgName } : {}),
+      }).eq('id', orgAccount.id)
+      await adminClient.from('connected_account_tokens').upsert({
+        account_id: orgAccount.id,
+        ...columns,
+        linkedin_member_urn: memberUrn,
+      }, { onConflict: 'account_id' })
       return toSettings('connected')
     }
 
-    // Tokens are stored either way — publish/analytics will start working
-    // automatically once the Community Management API product is approved
-    // and a re-connect (or the next scheduled refresh) resolves the org.
-    return toSettings('connected_pending_api_approval')
+    return toSettings('connected_profile_only', orgProblem || 'No Company Page account row found')
   } catch (err) {
-    console.error('[sm-linkedin-oauth-callback] failed:', err.message)
-    return toSettings('error', err.message)
+    console.error('[sm-linkedin-oauth-callback] failed:', (err as Error).message)
+    return toSettings('error', (err as Error).message)
   }
 })

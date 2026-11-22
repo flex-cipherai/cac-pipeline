@@ -25,7 +25,11 @@ export default function ContentComposer() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
 
-  const [account, setAccount] = useState(null)
+  const [accounts, setAccounts] = useState([])
+  const [accountId, setAccountId] = useState('')
+  const [pollQuestion, setPollQuestion] = useState('')
+  const [pollDuration, setPollDuration] = useState('THREE_DAYS')
+  const [publishInfo, setPublishInfo] = useState({ url: '', error: '' })
   const [pillars, setPillars] = useState([])
   const [campaigns, setCampaigns] = useState([])
   const [hashtagSets, setHashtagSets] = useState([])
@@ -74,14 +78,19 @@ export default function ContentComposer() {
 
   async function fetchLookups() {
     const [accountRes, pillarsRes, campaignsRes, hashtagSetsRes, templatesRes, approvalRes] = await Promise.all([
-      supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').maybeSingle(),
+      supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').order('account_type', { ascending: false }).order('created_at'),
       supabase.from('content_pillars').select('*').order('name'),
       supabase.from('content_campaigns').select('*').order('name'),
       supabase.from('hashtag_sets').select('*').order('name'),
       supabase.from('posts').select('id, template_name, post_type, caption, hashtags, pillar_id, campaign_id').eq('is_template', true).order('template_name'),
       supabase.from('system_settings').select('value').eq('key', 'sm_approval_workflow_enabled').maybeSingle(),
     ])
-    if (accountRes.data) setAccount(accountRes.data)
+    if (accountRes.data) {
+      setAccounts(accountRes.data)
+      // New posts default to the Company Page.
+      const org = accountRes.data.find(a => a.account_type === 'organization')
+      setAccountId(prev => prev || org?.id || accountRes.data[0]?.id || '')
+    }
     if (pillarsRes.data) setPillars(pillarsRes.data)
     if (campaignsRes.data) setCampaigns(campaignsRes.data)
     if (hashtagSetsRes.data) setHashtagSets(hashtagSetsRes.data)
@@ -102,6 +111,10 @@ export default function ContentComposer() {
       setStatus(post.status)
       setRawLink(post.utm_url || '')
       if (post.poll_options) setPollOptions(post.poll_options.map(o => o.text || o))
+      setPollQuestion(post.poll_question || '')
+      setPollDuration(post.poll_duration || 'THREE_DAYS')
+      if (post.account_id) setAccountId(post.account_id)
+      setPublishInfo({ url: post.external_post_url || '', error: post.status === 'failed' ? post.publish_error || '' : '' })
       if (post.scheduled_at) {
         const d = new Date(post.scheduled_at)
         setScheduledDate(d.toISOString().slice(0, 10))
@@ -147,7 +160,7 @@ export default function ContentComposer() {
     setSelectedAssets(prev => {
       const exists = prev.find(a => a.id === asset.id)
       if (exists) return prev.filter(a => a.id !== asset.id)
-      if (postType === 'image' && prev.length >= 9) return prev
+      if (postType === 'image' && prev.length >= 20) return prev
       if ((postType === 'video' || postType === 'carousel') && prev.length >= 1) return [{ id: asset.id, file_name: asset.file_name, file_type: asset.file_type, previewUrl: libSignedUrls[asset.file_path] }]
       return [...prev, { id: asset.id, file_name: asset.file_name, file_type: asset.file_type, previewUrl: libSignedUrls[asset.file_path] }]
     })
@@ -194,10 +207,43 @@ export default function ContentComposer() {
   const campaignName = campaigns.find(c => c.id === campaignId)?.name
   const utmUrl = rawLink ? buildUtmUrl(rawLink, { campaign: campaignName }) : ''
 
+  // Accounts this person may post as: the Company Page, plus their own
+  // profile (someone else's profile is only shown if a post already uses it).
+  const postableAccounts = accounts.filter(a =>
+    a.status === 'active' && (a.account_type === 'organization' || a.owner_profile_id === profile?.id)
+  )
+  const accountChoices = postableAccounts.some(a => a.id === accountId) || !accountId
+    ? postableAccounts
+    : [...postableAccounts, ...accounts.filter(a => a.id === accountId)]
+  const account = accounts.find(a => a.id === accountId) || null
+  const isAutomated = account?.mode === 'automated'
+  const isLocked = status === 'posted' || status === 'publishing'
+
+  // Checks LinkedIn will enforce when the post is published automatically.
+  function linkedInProblem() {
+    if (!isAutomated) return ''
+    if (postType === 'poll') {
+      if (!pollQuestion.trim()) return 'Add a poll question'
+      if (pollQuestion.trim().length > 140) return 'The poll question must be 140 characters or fewer'
+      const opts = pollOptions.map(o => o.trim()).filter(Boolean)
+      if (opts.length < 2) return 'A poll needs at least 2 options'
+      if (opts.some(o => o.length > 30)) return 'Poll options must be 30 characters or fewer'
+    }
+    if (['image', 'video', 'carousel'].includes(postType) && selectedAssets.length === 0) return 'Attach media from the Content Library'
+    if (postType === 'image' && selectedAssets.some(a => a.file_type !== 'image')) return 'Image posts can only contain images'
+    if (postType === 'video' && selectedAssets.some(a => a.file_type !== 'video')) return 'Attach a video file'
+    if (postType === 'carousel' && selectedAssets.some(a => a.file_type !== 'document')) return 'Attach a PDF, PPTX or DOCX document'
+    return ''
+  }
+
   function buildPostPayload(overrides = {}) {
     const scheduledAt = scheduledDate && scheduledTime ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString() : null
+    const rescheduling = overrides.status === 'scheduled' || overrides.status === 'pending_approval'
     return {
       account_id: account?.id || null,
+      poll_question: postType === 'poll' ? pollQuestion.trim() || null : null,
+      poll_duration: pollDuration,
+      ...(rescheduling ? { publish_error: null, publish_state: null } : {}),
       post_type: postType,
       caption,
       hashtags,
@@ -256,11 +302,15 @@ export default function ContentComposer() {
       showToast('error', 'Pick a date and time to schedule')
       return
     }
-    await savePost({ status: 'scheduled' }, 'Post scheduled')
-    navigate('/social/calendar')
+    const problem = linkedInProblem()
+    if (problem) { showToast('error', problem); return }
+    const saved = await savePost({ status: 'scheduled' }, isAutomated ? 'Post scheduled — it will publish to LinkedIn automatically' : 'Post scheduled')
+    if (saved) navigate('/social/calendar')
   }
 
   async function handleSubmitForApproval() {
+    const problem = linkedInProblem()
+    if (problem) { showToast('error', problem); return }
     const saved = await savePost({ status: 'pending_approval' })
     if (!saved) return
     await supabase.from('post_approval_history').insert({ post_id: saved.id, action: 'submitted', actor_id: profile?.id })
@@ -302,9 +352,44 @@ export default function ContentComposer() {
         </p>
       </div>
 
+      {status === 'posted' && (
+        <div className="composer-banner composer-banner-ok">
+          This post is live on LinkedIn.{' '}
+          {publishInfo.url && <a href={publishInfo.url} target="_blank" rel="noopener noreferrer">View it on LinkedIn</a>}
+          {' '}Changes here won't update the published post.
+        </div>
+      )}
+      {status === 'publishing' && (
+        <div className="composer-banner">Publishing to LinkedIn now — LinkedIn may still be processing the media.</div>
+      )}
+      {status === 'failed' && publishInfo.error && (
+        <div className="composer-banner composer-banner-error">
+          Publishing failed: {publishInfo.error}. Fix the post and schedule it again, or retry it from the Content Calendar.
+        </div>
+      )}
+
       <div className="composer-layout">
         {/* ── Form ── */}
         <div className="composer-form">
+          <div className="section-card">
+            <h2 className="section-card-title">Post As</h2>
+            <select className="form-input" value={accountId} onChange={e => setAccountId(e.target.value)} disabled={isLocked}>
+              {accountChoices.length === 0 && <option value="">No LinkedIn account set up</option>}
+              {accountChoices.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.account_type === 'member' ? `👤 ${a.account_name}` : `🏢 ${a.account_name}`}
+                </option>
+              ))}
+            </select>
+            <p className="composer-hint">
+              {isAutomated
+                ? 'Publishes to LinkedIn automatically at the scheduled time.'
+                : 'Assisted Mode: at the scheduled time the post moves to Ready to Post for you to publish by hand.'}
+              {!accounts.some(a => a.account_type === 'member' && a.owner_profile_id === profile?.id) &&
+                ' To post to your own profile, connect LinkedIn in Settings → Integrations.'}
+            </p>
+          </div>
+
           <div className="section-card">
             <div className="section-card-header">
               <h2 className="section-card-title">Post Type</h2>
@@ -336,11 +421,26 @@ export default function ContentComposer() {
 
           {postType === 'poll' && (
             <div className="section-card">
-              <h2 className="section-card-title">Poll Options</h2>
+              <h2 className="section-card-title">Poll</h2>
+              <div className="form-group">
+                <label className="form-label">Question ({pollQuestion.trim().length} / 140)</label>
+                <input className="form-input" value={pollQuestion} maxLength={140} onChange={e => setPollQuestion(e.target.value)} placeholder="What's your biggest challenge with…?" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Runs for</label>
+                <select className="form-input" value={pollDuration} onChange={e => setPollDuration(e.target.value)}>
+                  <option value="ONE_DAY">1 day</option>
+                  <option value="THREE_DAYS">3 days</option>
+                  <option value="SEVEN_DAYS">1 week</option>
+                  <option value="FOURTEEN_DAYS">2 weeks</option>
+                </select>
+              </div>
+              <label className="form-label">Options (up to 30 characters each)</label>
               {pollOptions.map((opt, i) => (
                 <div className="form-group" key={i}>
                   <input
                     className="form-input"
+                    maxLength={30}
                     value={opt}
                     placeholder={`Option ${i + 1}`}
                     onChange={e => setPollOptions(prev => prev.map((o, idx) => idx === i ? e.target.value : o))}
@@ -445,11 +545,11 @@ export default function ContentComposer() {
 
           <div className="composer-actions">
             <button className="btn btn-secondary" onClick={handleSaveAsTemplate} disabled={saving}>Save as Template</button>
-            <button className="btn btn-secondary" onClick={handleSaveDraft} disabled={saving}>Save Draft</button>
+            <button className="btn btn-secondary" onClick={handleSaveDraft} disabled={saving || isLocked}>Save Draft</button>
             {approvalEnabled ? (
-              <button className="btn btn-primary" onClick={handleSubmitForApproval} disabled={saving || overLimit}>Submit for Approval</button>
+              <button className="btn btn-primary" onClick={handleSubmitForApproval} disabled={saving || overLimit || isLocked}>Submit for Approval</button>
             ) : (
-              <button className="btn btn-primary" onClick={handleSchedule} disabled={saving || overLimit}>Schedule Post</button>
+              <button className="btn btn-primary" onClick={handleSchedule} disabled={saving || overLimit || isLocked}>Schedule Post</button>
             )}
           </div>
         </div>

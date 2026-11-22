@@ -79,7 +79,7 @@ export default function ActivityInbox() {
       return
     }
     setSaving(true)
-    const { data: account } = await supabase.from('connected_accounts').select('id, account_name').eq('platform', 'linkedin').maybeSingle()
+    const { data: account } = await supabase.from('connected_accounts').select('id, account_name').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
 
     const payload = {
       account_id: account?.id || null,

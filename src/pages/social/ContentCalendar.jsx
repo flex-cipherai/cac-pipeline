@@ -11,6 +11,7 @@ const STATUS_LABELS = {
   pending_approval: 'Pending Approval',
   changes_requested: 'Changes Requested',
   scheduled: 'Scheduled',
+  publishing: 'Publishing',
   ready_to_post: 'Ready to Post',
   posted: 'Posted',
   failed: 'Failed',
@@ -27,6 +28,8 @@ export default function ContentCalendar() {
   const [anchorDate, setAnchorDate] = useState(DateTime.now())
   const [posts, setPosts] = useState([])
   const [readyPosts, setReadyPosts] = useState([])
+  const [failedPosts, setFailedPosts] = useState([])
+  const [retryingId, setRetryingId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [colorBy, setColorBy] = useState('pillar')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -44,7 +47,7 @@ export default function ContentCalendar() {
 
   useEffect(() => { fetchLookups() }, [])
   useEffect(() => { fetchPosts() }, [viewMode, anchorDate])
-  useEffect(() => { fetchReadyPosts() }, [])
+  useEffect(() => { fetchReadyPosts(); fetchFailedPosts() }, [])
 
   useEffect(() => {
     if (toast.show) {
@@ -77,7 +80,7 @@ export default function ContentCalendar() {
   async function fetchPosts() {
     setLoading(true)
     let query = supabase.from('posts')
-      .select('*, content_pillars(id, name, color), content_campaigns(id, name), profiles(id, name)')
+      .select('*, content_pillars(id, name, color), content_campaigns(id, name), profiles(id, name), connected_accounts(account_name, account_type)')
       .eq('is_template', false)
 
     const range = visibleRange()
@@ -99,6 +102,41 @@ export default function ContentCalendar() {
     if (data) setReadyPosts(data)
   }
 
+  async function fetchFailedPosts() {
+    const { data } = await supabase.from('posts')
+      .select('*, connected_accounts(account_name, account_type, mode), post_assets(content_assets(id, file_name, file_path, file_type))')
+      .eq('status', 'failed')
+      .eq('is_template', false)
+      .order('scheduled_at', { ascending: false })
+    if (data) setFailedPosts(data)
+  }
+
+  // ── Failed posts (Automated Mode) ──
+  async function handleRetry(post) {
+    setRetryingId(post.id)
+    try {
+      const { data, error } = await supabase.functions.invoke('sm-publish', { body: { post_id: post.id } })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Publishing failed')
+      showToast('success', data.status === 'posted' ? 'Published to LinkedIn' : data.message)
+    } catch (err) {
+      showToast('error', err.message)
+    } finally {
+      setRetryingId(null)
+      fetchFailedPosts()
+      fetchPosts()
+    }
+  }
+
+  // Falls back to Assisted Mode for this one post: it joins Ready to Post.
+  async function handlePostManually(post) {
+    const { error } = await supabase.from('posts').update({ status: 'ready_to_post' }).eq('id', post.id)
+    if (error) { showToast('error', 'Failed to update'); return }
+    setFailedPosts(prev => prev.filter(p => p.id !== post.id))
+    fetchReadyPosts()
+    fetchPosts()
+  }
+
   const filteredPosts = useMemo(() => posts.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false
     if (pillarFilter !== 'all' && p.pillar_id !== pillarFilter) return false
@@ -109,7 +147,7 @@ export default function ContentCalendar() {
 
   function colorFor(post) {
     if (colorBy === 'status') {
-      const map = { draft: '#9ca3af', pending_approval: '#b45309', changes_requested: '#EC3013', scheduled: '#1d4ed8', ready_to_post: '#7c3aed', posted: '#15803d', failed: '#EC3013' }
+      const map = { draft: '#9ca3af', pending_approval: '#b45309', changes_requested: '#EC3013', scheduled: '#1d4ed8', publishing: '#0e7490', ready_to_post: '#7c3aed', posted: '#15803d', failed: '#EC3013' }
       return map[post.status] || '#9ca3af'
     }
     return post.content_pillars?.color || '#9ca3af'
@@ -241,6 +279,34 @@ export default function ContentCalendar() {
         </div>
       </div>
 
+      {/* ── Failed to publish ── */}
+      {failedPosts.length > 0 && (
+        <div className="section-card ready-section failed-section">
+          <div className="section-card-header"><h2 className="section-card-title">Failed to Publish ({failedPosts.length})</h2></div>
+          <div className="ready-list">
+            {failedPosts.map(post => (
+              <div key={post.id} className="ready-item">
+                <div>
+                  <div className="ready-item-caption">{captionPreview(post.caption, 90)}</div>
+                  <div className="failed-item-error">
+                    {post.connected_accounts?.account_name ? `${post.connected_accounts.account_name}: ` : ''}{post.publish_error || 'Unknown error'}
+                  </div>
+                </div>
+                <div className="ready-item-actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/social/composer/${post.id}`)}>Edit</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => handlePostManually(post)}>Post Manually</button>
+                  {post.connected_accounts?.mode === 'automated' && (
+                    <button className="btn btn-primary btn-sm" onClick={() => handleRetry(post)} disabled={retryingId === post.id}>
+                      {retryingId === post.id ? 'Publishing…' : 'Retry'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Ready to Post ── */}
       {readyPosts.length > 0 && (
         <div className="section-card ready-section">
@@ -320,7 +386,7 @@ export default function ContentCalendar() {
           <div className="table-scroll">
             <table className="data-table">
               <thead>
-                <tr><th></th><th>Scheduled</th><th>Caption</th><th>Type</th><th>Pillar</th><th>Status</th><th>Author</th><th></th></tr>
+                <tr><th></th><th>Scheduled</th><th>Caption</th><th>Account</th><th>Type</th><th>Pillar</th><th>Status</th><th>Author</th><th></th></tr>
               </thead>
               <tbody>
                 {filteredPosts.map(post => (
@@ -328,15 +394,20 @@ export default function ContentCalendar() {
                     <td><input type="checkbox" checked={selectedIds.includes(post.id)} onChange={() => toggleSelect(post.id)} /></td>
                     <td>{post.scheduled_at ? DateTime.fromISO(post.scheduled_at).toFormat('d LLL, HH:mm') : '—'}</td>
                     <td>{captionPreview(post.caption)}</td>
+                    <td>{post.connected_accounts ? (post.connected_accounts.account_type === 'member' ? '👤 ' : '🏢 ') + post.connected_accounts.account_name : '—'}</td>
                     <td>{post.post_type}</td>
                     <td>{post.content_pillars?.name || '—'}</td>
                     <td><span className={`status-badge status-${post.status}`}>{STATUS_LABELS[post.status]}</span></td>
                     <td>{post.profiles?.name || '—'}</td>
-                    <td><button className="btn btn-secondary btn-sm" onClick={() => navigate(`/social/composer/${post.id}`)}>Edit</button></td>
+                    <td>
+                      {post.external_post_url
+                        ? <a className="btn btn-secondary btn-sm" href={post.external_post_url} target="_blank" rel="noopener noreferrer">View</a>
+                        : <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/social/composer/${post.id}`)}>Edit</button>}
+                    </td>
                   </tr>
                 ))}
                 {filteredPosts.length === 0 && (
-                  <tr><td colSpan={8}><div className="empty-state"><p className="empty-state-desc">No posts match these filters.</p></div></td></tr>
+                  <tr><td colSpan={9}><div className="empty-state"><p className="empty-state-desc">No posts match these filters.</p></div></td></tr>
                 )}
               </tbody>
             </table>

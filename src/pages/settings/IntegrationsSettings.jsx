@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { SettingsHeading } from './SettingsLayout'
+import { useAuth } from '../../lib/AuthContext'
 import useToast from './useToast'
 
 const quietBadge = { marginLeft: 6, color: 'var(--text-secondary)', background: 'var(--bg-gray)' }
 
 export default function IntegrationsSettings() {
   const { showToast, toast } = useToast()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
 
   // LinkedIn
@@ -14,6 +16,8 @@ export default function IntegrationsSettings() {
   const [accountNameDraft, setAccountNameDraft] = useState('')
   const [savingAccount, setSavingAccount] = useState(false)
   const [connectingLinkedIn, setConnectingLinkedIn] = useState(false)
+  const [memberAccounts, setMemberAccounts] = useState([])
+  const [syncing, setSyncing] = useState(false)
 
   // Google Search Console (Website Analytics → Search tab). Access is by service account (Edge Function
   // secret); only the property is set here.
@@ -32,9 +36,9 @@ export default function IntegrationsSettings() {
     if (!linkedinStatus) return
 
     if (linkedinStatus === 'connected') {
-      showToast('success', 'LinkedIn connected — Automated Mode is now active')
-    } else if (linkedinStatus === 'connected_pending_api_approval') {
-      showToast('success', 'LinkedIn account linked. Publishing stays in Assisted Mode until LinkedIn approves API access.')
+      showToast('success', 'LinkedIn connected — the Company Page and your profile now publish automatically')
+    } else if (linkedinStatus === 'connected_profile_only') {
+      showToast('error', `Your profile is connected, but not the Company Page: ${params.get('detail') || 'no page found'}`)
     } else if (linkedinStatus === 'error') {
       showToast('error', params.get('detail') || 'Failed to connect LinkedIn')
     }
@@ -47,10 +51,14 @@ export default function IntegrationsSettings() {
 
   async function fetchData() {
     const [accountRes, gscRes] = await Promise.all([
-      supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').maybeSingle(),
+      supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').order('created_at'),
       supabase.from('system_settings').select('key, value').in('key', ['gsc_site_url', 'gsc_last_sync_at', 'gsc_last_sync_status']),
     ])
-    if (accountRes.data) { setConnectedAccount(accountRes.data); setAccountNameDraft(accountRes.data.account_name) }
+    if (accountRes.data) {
+      const org = accountRes.data.find(a => a.account_type === 'organization')
+      if (org) { setConnectedAccount(org); setAccountNameDraft(org.account_name) }
+      setMemberAccounts(accountRes.data.filter(a => a.account_type === 'member'))
+    }
     if (gscRes.data) {
       const get = k => gscRes.data.find(r => r.key === k)?.value || ''
       setGscSiteUrl(get('gsc_site_url'))
@@ -83,6 +91,29 @@ export default function IntegrationsSettings() {
       showToast('error', err.message || 'Failed to start LinkedIn connection')
       setConnectingLinkedIn(false)
     }
+  }
+
+  async function syncNow() {
+    setSyncing(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('sm-linkedin-sync', { body: { force: true } })
+      if (error) throw new Error('Could not reach sm-linkedin-sync. Has it been deployed?')
+      if (!data?.success) throw new Error(data?.error || 'Sync failed')
+      const problems = Object.entries(data.accounts || {}).filter(([, r]) => r.error)
+      if (problems.length) showToast('error', problems.map(([n, r]) => `${n}: ${r.error}`).join(' · '))
+      else showToast('success', 'LinkedIn analytics and comments synced')
+      fetchData()
+    } catch (err) {
+      showToast('error', err.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function setMemberStatus(member, newStatus) {
+    const { error } = await supabase.from('connected_accounts').update({ status: newStatus }).eq('id', member.id)
+    if (error) { showToast('error', 'Failed to update'); return }
+    setMemberAccounts(prev => prev.map(m => m.id === member.id ? { ...m, status: newStatus } : m))
   }
 
   async function toggleAccountStatus() {
@@ -143,11 +174,14 @@ export default function IntegrationsSettings() {
                 <span className="status-badge" style={quietBadge}>
                   {connectedAccount.mode === 'automated' ? 'Automated Mode' : 'Assisted Mode'}
                 </span>
-                {connectedAccount.oauth_connected && connectedAccount.mode !== 'automated' && (
-                  <span className="status-badge" style={quietBadge}>Linked — awaiting API approval</span>
+                {connectedAccount.last_sync_error && (
+                  <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={connectedAccount.last_sync_error}>Last sync failed</span>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
+                {connectedAccount.mode === 'automated' && (
+                  <button className="btn btn-secondary btn-sm" onClick={syncNow} disabled={syncing}>{syncing ? 'Syncing...' : 'Sync now'}</button>
+                )}
                 <button className="btn btn-primary btn-sm" onClick={connectLinkedIn} disabled={connectingLinkedIn}>
                   {connectingLinkedIn ? 'Redirecting...' : connectedAccount.oauth_connected ? 'Reconnect LinkedIn' : 'Connect LinkedIn'}
                 </button>
@@ -164,10 +198,8 @@ export default function IntegrationsSettings() {
             </div>
             <p className="form-hint">
               {connectedAccount.mode === 'automated'
-                ? 'LinkedIn is connected via API — publishing and analytics run automatically.'
-                : connectedAccount.oauth_connected
-                  ? "Your LinkedIn account is linked, but LinkedIn hasn't approved Community Management API access yet — publishing and analytics stay manual (Assisted Mode) until then. This switches automatically once approved."
-                  : "Connect LinkedIn to enable Automated Mode once LinkedIn approves API access. Until then, and even after connecting, publishing stays manual (Assisted Mode) as long as approval is pending."}
+                ? <>Connected through the LinkedIn API: scheduled posts publish automatically, and analytics and new comments sync every hour{connectedAccount.last_synced_at ? <> (last sync {new Date(connectedAccount.last_synced_at).toLocaleString()})</> : null}.{connectedAccount.last_sync_error ? <> <strong>{connectedAccount.last_sync_error}</strong></> : null}</>
+                : 'Assisted Mode: posts are published by hand. Connect LinkedIn (signed in as an admin of the Company Page) to publish automatically, to the page and to your own profile.'}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-sm)' }}>
               <button className="btn btn-primary btn-sm" onClick={saveAccountName} disabled={savingAccount}>{savingAccount ? 'Saving...' : 'Save'}</button>
@@ -176,6 +208,25 @@ export default function IntegrationsSettings() {
         ) : (
           <p className="form-hint">No LinkedIn account connected yet.</p>
         )}
+      </div>
+
+      <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>
+        <div className="sm-account-platform" style={{ marginBottom: 8 }}>Personal LinkedIn Profiles</div>
+        {memberAccounts.length === 0 ? (
+          <p className="form-hint">None connected. Connecting LinkedIn above also connects the profile of the person who signs in, so they can post as themselves.</p>
+        ) : memberAccounts.map(m => (
+          <div key={m.id} className="sm-account-row" style={{ marginBottom: 8 }}>
+            <div>
+              <div>{m.account_name}{m.owner_profile_id === profile?.id ? ' (you)' : ''}</div>
+              <span className={`status-badge status-${m.status === 'active' ? 'posted' : 'draft'}`}>{m.status === 'active' ? 'Active' : 'Disconnected'}</span>
+              {m.last_sync_error && <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={m.last_sync_error}>Last sync failed</span>}
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setMemberStatus(m, m.status === 'active' ? 'disconnected' : 'active')}>
+              {m.status === 'active' ? 'Disconnect' : 'Reactivate'}
+            </button>
+          </div>
+        ))}
+        <p className="form-hint">Only the owner of a profile can schedule posts to it. Analytics sync for profile posts; comments on them do not, because LinkedIn does not offer that to this app.</p>
       </div>
 
       <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>

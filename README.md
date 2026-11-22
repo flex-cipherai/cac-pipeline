@@ -27,7 +27,9 @@ cac-pipeline/
 │   ├── migration-social-media.sql          # Social media data model, RLS, storage bucket
 │   ├── migration-social-notifications.sql  # In-app notifications + email templates
 │   ├── migration-social-scheduler-cron.sql # pg_cron jobs for the social media module
-│   ├── migration-social-linkedin-oauth.sql # Phase 2: LinkedIn OAuth token storage
+│   ├── migration-social-linkedin-oauth.sql # LinkedIn OAuth token storage
+│   ├── migration-social-linkedin-publishing.sql # Automated Mode: profile accounts, publish state, synced comments
+│   ├── migration-social-linkedin-sync-cron.sql # pg_cron: hourly LinkedIn analytics + comment sync
 │   ├── migration-website-analytics.sql     # Website analytics: sessions/events, funnel + SEO reports
 │   ├── migration-website-analytics-cron.sql # pg_cron: daily Search Console sync, data retention
 │   ├── migration-role-permissions.sql      # Settings → Permissions: which modules each role can open
@@ -134,17 +136,27 @@ Settings → Permissions shows an amber banner until the enforcement migration h
 - **Setup (in order, each safe to re-run):** `migration-role-permissions.sql`; `migration-booking-lockdown.sql` if not already run; `migration-permissions-enforcement.sql`. The seed gives each role exactly the access it had before, so nothing changes until an admin edits the table. The enforcement migration refuses to run while any managed table still allows anonymous access (it names the policies), and it deletes every other existing policy on the tables it manages, including ones made by hand in the dashboard. Before the permissions migration has run, everyone keeps the original access and the Settings page shows a setup notice.
 - **Deliberate tightenings:** with the default seed each role keeps its current working access. What changes is that a role with no lead-related module can no longer read the leads tables, sales can no longer write settings other than the booking ones, and the leads, quotation and template tables are no longer open to every signed-in user.
 
-### Phase 2 — LinkedIn API (Community Management API)
+### LinkedIn API — Automated Mode (Community Management API)
 
-Assisted Mode (manual copy/paste publishing, manual analytics entry) works with zero LinkedIn API access — see the module description PDF. Phase 2 adds direct API publishing once LinkedIn approves the app for the **Community Management API** product (a reviewed application at developer.linkedin.com, distinct from and much lighter-weight than the ads-focused Marketing Developer Platform).
+LinkedIn approved the app for the **Community Management API**. Connecting LinkedIn once (Settings → Integrations → Connect LinkedIn, signed in as an admin of the Company Page) sets up two publishing targets, both in Automated Mode:
 
-- `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` — set as Supabase Edge Function secrets (`supabase secrets set`), never in `.env` or frontend code.
-- `supabase/migration-social-linkedin-oauth.sql` — adds `connected_account_tokens` (access/refresh tokens, service-role only, no RLS policies granted to any client role) and `oauth_states` (CSRF protection for the OAuth handshake).
-- `sm-linkedin-oauth-start` — admin-only, called from Settings → Integrations ("Connect LinkedIn"); returns the LinkedIn authorization URL.
-- `sm-linkedin-oauth-callback` — deployed with `--no-verify-jwt` since LinkedIn's browser redirect hits it directly (no Supabase session). Exchanges the code for tokens, resolves the administered LinkedIn Organization (requires `rw_organization_admin`, only grantable post-approval), and redirects back to `/settings`.
-- The LinkedIn app's **Authorized redirect URL** must be set to `https://<project-ref>.supabase.co/functions/v1/sm-linkedin-oauth-callback` — not the app's own domain, since only the Edge Function can hold the Client Secret for the token exchange.
-- `connected_accounts.mode` flips to `automated` automatically once an Organization is resolved; until LinkedIn approves the API product, the account can be OAuth-connected but stays in Assisted Mode (`oauth_connected = true`, `mode = 'assisted'`) — no manual toggle needed.
-- `supabase/functions/_shared/linkedin.ts` has the token exchange/refresh helpers `sm-publish` / `sm-fetch-analytics` / `sm-fetch-activity` will use once built.
+- **The Company Page** (`connected_accounts.account_type = 'organization'`): scheduled posts publish automatically; post analytics, the follower count and new comments sync hourly.
+- **The connecting person's own profile** (`account_type = 'member'`, `owner_profile_id` = that BMS user): pick it under **Post As** in the composer. Only the owner can schedule to their profile (database trigger `check_post_account_owner`). Post analytics sync; comments on profile posts do not (that needs `r_member_social_feed`, which LinkedIn does not grant this app).
+
+How it runs:
+
+- **Publishing** — `sm-move-to-ready` (pg_cron, every 5 minutes) publishes due posts whose account is in Automated Mode, and still moves Assisted-Mode posts to Ready to Post. The logic is in `_shared/linkedinPublish.ts`: text, 1–20 images, document/carousel (PDF, PPTX, DOCX), video (MP4, up to 200 MB because the file passes through the Edge Function) and polls (question ≤ 140 characters, 2–4 options of ≤ 30). Media is uploaded once and remembered in `posts.publish_state`; videos and documents wait (status `publishing`) until LinkedIn has processed them, for up to an hour. A failure marks the post `failed` with `publish_error`, and alerts the content team in-app and by email (template `sm_post_failed`). The Content Calendar's **Failed to Publish** panel offers Retry (`sm-publish`) or Post Manually (falls back to Ready to Post).
+- **Sync** — `sm-linkedin-sync` (pg_cron, hourly at :20; also "Sync now" in Integrations). `analytics_snapshots` rows are increments, so each sync stores the change since the last pull (`posts.last_stats`), per post and as one account-level row (source `api`). Stats cover posts from the last 90 days, refreshed every 6 hours per post; comments cover Company Page posts from the last 30 days and land in the Activity Inbox (deduplicated by `activity_events.external_id`). Follower milestones are logged and alerted as before.
+- **Caption text** is sent in LinkedIn's "little text format": `| { } @ [ ] ( ) < > * _ ~ \` are escaped so they show literally, and `#word` stays a hashtag. Mentions typed in the composer are not converted into LinkedIn mentions.
+
+Setup:
+
+- Secrets: `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` (`supabase secrets set`, never in `.env` or frontend code).
+- The LinkedIn app's **Authorized redirect URL**: `https://<project-ref>.supabase.co/functions/v1/sm-linkedin-oauth-callback`.
+- Scopes requested (`LINKEDIN_SCOPES` in `_shared/linkedin.ts`) must all be listed on the app's Auth tab, or LinkedIn refuses the connection: `r_basicprofile w_member_social r_member_postAnalytics r_organization_social r_organization_social_feed w_organization_social rw_organization_admin`.
+- `LINKEDIN_API_VERSION` (`YYYYMM`) in the same file: each version lasts about a year; bump it before it sunsets.
+- Order: `migration-social-linkedin-oauth.sql` → `migration-social-linkedin-publishing.sql` → deploy `sm-publish`, `sm-move-to-ready --no-verify-jwt`, `sm-linkedin-sync --no-verify-jwt`, `sm-linkedin-oauth-start`, `sm-linkedin-oauth-callback --no-verify-jwt` → `migration-social-linkedin-sync-cron.sql` (fill in the project URL and anon key) → Connect LinkedIn in Settings.
+- Access tokens last 60 days. If LinkedIn issues a refresh token it is used automatically; otherwise publishing fails with "reconnect LinkedIn" when it expires, so reconnect every ~2 months.
 
 ### Website Analytics (`/social/website-analytics`)
 

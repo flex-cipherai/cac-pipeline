@@ -200,3 +200,13 @@
     font-size: 10px;
   }
 }
+
+.failed-section {
+  border-left: 4px solid var(--sdfm-red);
+}
+
+.failed-item-error {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--sdfm-red);
+}

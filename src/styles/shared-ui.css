@@ -119,6 +119,7 @@
 .status-changes_requested { color: var(--sdfm-red); background: var(--sdfm-red-light); }
 .status-scheduled { color: #1d4ed8; background: rgba(29, 78, 216, 0.08); }
 .status-ready_to_post { color: #7c3aed; background: rgba(124, 58, 237, 0.08); }
+.status-publishing { color: #0e7490; background: rgba(14, 116, 144, 0.08); }
 .status-posted { color: #15803d; background: rgba(22, 163, 74, 0.08); }
 .status-failed { color: var(--white); background: var(--sdfm-red); }
 

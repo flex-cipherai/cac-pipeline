@@ -162,7 +162,7 @@ export default function BulkScheduler() {
     if (importable.length === 0) { showToast('error', 'No valid rows to import'); return }
 
     setImporting(true)
-    const { data: account } = await supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').maybeSingle()
+    const { data: account } = await supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
     const { data: assetRows } = await supabase.from('content_assets').select('id, file_name')
     const assetByName = new Map((assetRows || []).map(a => [a.file_name, a.id]))
     const pillarCache = new Map()

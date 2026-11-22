@@ -71,7 +71,7 @@ export default function SocialAnalytics() {
     setLoading(true)
     const [accSnap, postSnap, campaignsRes, leadsRes, postsRes] = await Promise.all([
       supabase.from('analytics_snapshots').select('*').is('post_id', null).order('captured_at'),
-      supabase.from('analytics_snapshots').select('*, posts(id, caption, post_type, pillar_id, campaign_id, status, content_pillars(name), content_campaigns(name))').not('post_id', 'is', null).order('captured_at'),
+      supabase.from('analytics_snapshots').select('*, posts(id, account_id, caption, post_type, pillar_id, campaign_id, status, content_pillars(name), content_campaigns(name))').not('post_id', 'is', null).order('captured_at'),
       supabase.from('content_campaigns').select('*'),
       supabase.from('leads').select('id, classification, is_disqualified, current_stage, scheduled_date, source').ilike('source', '%linkedin%'),
       supabase.from('posts').select('id, caption, status').eq('status', 'posted'),
@@ -84,8 +84,20 @@ export default function SocialAnalytics() {
     setLoading(false)
   }
 
-  const filteredAccountSnapshots = useMemo(() => filterByPeriod(accountSnapshots, period, 'captured_at'), [accountSnapshots, period])
-  const filteredPostSnapshots = useMemo(() => filterByPeriod(postSnapshots, period, 'captured_at'), [postSnapshots, period])
+  // Account filter: 'all', or one connected_accounts id (Company Page or a profile).
+  const [accountFilter, setAccountFilter] = useState('all')
+  const [accountOptions, setAccountOptions] = useState([])
+  useEffect(() => {
+    supabase.from('connected_accounts').select('id, account_name, account_type').eq('platform', 'linkedin').order('created_at')
+      .then(({ data }) => setAccountOptions(data || []))
+  }, [])
+
+  const filteredAccountSnapshots = useMemo(() => filterByPeriod(
+    accountFilter === 'all' ? accountSnapshots : accountSnapshots.filter(s => s.account_id === accountFilter),
+    period, 'captured_at'), [accountSnapshots, period, accountFilter])
+  const filteredPostSnapshots = useMemo(() => filterByPeriod(
+    accountFilter === 'all' ? postSnapshots : postSnapshots.filter(s => (s.account_id || s.posts?.account_id) === accountFilter),
+    period, 'captured_at'), [postSnapshots, period, accountFilter])
 
   const totals = useMemo(() => {
     const sum = (arr, key) => arr.reduce((s, r) => s + (Number(r[key]) || 0), 0)
@@ -191,7 +203,7 @@ export default function SocialAnalytics() {
     }
     // Fetch account id for account-level logs
     if (!payload.post_id) {
-      const { data: account } = await supabase.from('connected_accounts').select('id').eq('platform', 'linkedin').maybeSingle()
+      const { data: account } = await supabase.from('connected_accounts').select('id').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
       payload.account_id = account?.id || null
     }
     const { error } = await supabase.from('analytics_snapshots').insert(payload)
@@ -212,7 +224,7 @@ export default function SocialAnalytics() {
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
 
-    const { data: account } = await supabase.from('connected_accounts').select('id').eq('platform', 'linkedin').maybeSingle()
+    const { data: account } = await supabase.from('connected_accounts').select('id').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
 
     const payload = rows.map(r => {
       const norm = {}
@@ -301,9 +313,15 @@ export default function SocialAnalytics() {
       <div className="page-header dash-header">
         <div>
           <h1 className="page-title">LinkedIn Analytics</h1>
-          <p className="page-subtitle">Assisted Mode · metrics logged manually or imported from LinkedIn's CSV export</p>
+          <p className="page-subtitle">Synced hourly from LinkedIn for connected accounts · manual logging and CSV import still work</p>
         </div>
         <div className="dash-header-actions">
+          {accountOptions.length > 1 && (
+            <select className="form-input form-input-sm" value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ width: 'auto' }}>
+              <option value="all">All accounts</option>
+              {accountOptions.map(a => <option key={a.id} value={a.id}>{a.account_type === 'member' ? '👤 ' : '🏢 '}{a.account_name}</option>)}
+            </select>
+          )}
           <PeriodSelector value={period} onChange={setPeriod} />
           <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleCsvImport} />
           <button className="btn btn-secondary btn-sm" onClick={() => csvInputRef.current?.click()}>Import CSV</button>

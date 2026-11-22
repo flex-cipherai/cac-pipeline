@@ -136,3 +136,27 @@
     grid-template-columns: 1fr;
   }
 }
+
+.composer-banner {
+  margin-bottom: var(--space-md);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  background: var(--bg-gray);
+  color: var(--text-primary);
+}
+
+.composer-banner a {
+  color: var(--sdfm-red);
+  font-weight: 600;
+}
+
+.composer-banner-ok {
+  background: rgba(21, 128, 61, 0.08);
+  color: #15803d;
+}
+
+.composer-banner-error {
+  background: rgba(236, 48, 19, 0.08);
+  color: var(--sdfm-red);
+}
