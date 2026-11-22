@@ -23,6 +23,22 @@ export default function IntegrationsSettings() {
   const [importingId, setImportingId] = useState(null)
   const [metaAccounts, setMetaAccounts] = useState([]) // Facebook Pages + Instagram accounts
   const [connectingMeta, setConnectingMeta] = useState(false)
+  const [connectingInstagram, setConnectingInstagram] = useState(false)
+
+  // Instagram connects through Instagram Login (its own sign-in), so the
+  // account doesn't need to be linked to a Facebook Page.
+  async function connectInstagram() {
+    setConnectingInstagram(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('sm-instagram-oauth-start', { body: { redirect_origin: window.location.origin } })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to start the Instagram connection')
+      window.location.href = data.url
+    } catch (err) {
+      showToast('error', err.message)
+      setConnectingInstagram(false)
+    }
+  }
 
   async function connectMeta() {
     setConnectingMeta(true)
@@ -69,7 +85,14 @@ export default function IntegrationsSettings() {
     const params = new URLSearchParams(window.location.search)
     const linkedinStatus = params.get('linkedin')
     const metaStatus = params.get('meta')
-    if (!linkedinStatus && !metaStatus) return
+    const igStatus = params.get('instagram')
+    if (!linkedinStatus && !metaStatus && !igStatus) return
+
+    if (igStatus === 'connected') {
+      showToast('success', `Instagram ${params.get('detail') || ''} connected — make sure it's set to Managed below`)
+    } else if (igStatus) {
+      showToast('error', params.get('detail') || 'Failed to connect Instagram')
+    }
 
     if (metaStatus === 'connected') {
       showToast('success', `Meta connected (${params.get('detail') || 'accounts saved'}) — choose below which ones the BMS manages`)
@@ -89,6 +112,7 @@ export default function IntegrationsSettings() {
 
     params.delete('linkedin')
     params.delete('meta')
+    params.delete('instagram')
     params.delete('detail')
     const newSearch = params.toString()
     window.history.replaceState({}, '', window.location.pathname + (newSearch ? `?${newSearch}` : ''))
@@ -326,12 +350,15 @@ export default function IntegrationsSettings() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {metaAccounts.length > 0 && <button className="btn btn-secondary btn-sm" onClick={syncNow} disabled={syncing}>{syncing ? 'Syncing...' : 'Sync now'}</button>}
+            <button className="btn btn-secondary btn-sm" onClick={connectInstagram} disabled={connectingInstagram}>
+              <PlatformIcon platform="instagram" size={14} /> {connectingInstagram ? 'Redirecting...' : metaAccounts.some(a => a.platform === 'instagram') ? 'Reconnect Instagram' : 'Connect Instagram'}
+            </button>
             <button className="btn btn-primary btn-sm" onClick={connectMeta} disabled={connectingMeta}>
-              {connectingMeta ? 'Redirecting...' : metaAccounts.length ? 'Reconnect Meta' : 'Connect Meta'}
+              <PlatformIcon platform="facebook" size={14} /> {connectingMeta ? 'Redirecting...' : metaAccounts.some(a => a.platform === 'facebook') ? 'Reconnect Facebook' : 'Connect Facebook'}
             </button>
           </div>
         </div>
-        <p className="form-hint">Sign in with the Facebook account that manages your Page. In Meta's window, select the Page <b>and</b> its Instagram account. Reconnect any time to add more.</p>
+        <p className="form-hint"><b>Facebook:</b> sign in with the Facebook account that manages your Page and select it. <b>Instagram:</b> press Connect Instagram and sign in to the Instagram account itself (a professional account; it doesn't need to be linked to the Page).</p>
         {metaAccounts.map(a => (
           <div key={a.id} className="sm-account-row" style={{ marginBottom: 8 }}>
             <div>

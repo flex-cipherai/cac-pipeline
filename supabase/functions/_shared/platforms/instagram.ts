@@ -4,8 +4,27 @@
 // Images must be JPEG. Media is fetched by Meta from short-lived signed
 // links. Publishing is two steps — create a container, then publish it — and
 // videos are processed first, so a post can be "pending" for a few minutes.
+// Connected either through Facebook Login (Page-linked) or Instagram Login.
 
-import { graph, graphAll, getStoredMetaToken, friendlyMetaError, insightDay } from '../meta.ts'
+import { graph, graphAll, getInstagramToken, friendlyMetaError, insightDay, GRAPH, IG_GRAPH } from '../meta.ts'
+
+// Accounts connected through Facebook Login use the Page token on
+// graph.facebook.com; accounts connected through Instagram Login use their
+// own token on graph.instagram.com (getInstagramToken prefixes it "iglogin:").
+// Same endpoints and fields on both.
+function route(token: string) {
+  return token.startsWith('iglogin:') ? { t: token.slice(8), base: IG_GRAPH } : { t: token, base: GRAPH }
+}
+function call(path: string, token: string, params: Record<string, string | number | boolean | undefined> = {}, method: 'GET' | 'POST' = 'GET') {
+  const { t, base } = route(token)
+  return graph(path.startsWith('http') ? path : `${base}/${path}`, t, params, method)
+}
+function callAll(path: string, token: string, params: Record<string, string | number | undefined> = {}, max = 1000) {
+  const { t, base } = route(token)
+  return graphAll(`${base}/${path}`, t, params, max)
+}
+
+
 import {
   type Capabilities, type Connector, type PublishInput, type PublishOutcome,
   type RemoteComment, type RemotePost, type Stats, PublishError, zeroStats,
@@ -19,12 +38,12 @@ function caption(text: string | null, hashtags: string[] | null) {
 }
 
 async function containerStatus(id: string, token: string) {
-  const r = await graph(id, token, { fields: 'status_code,status' })
+  const r = await call(id, token, { fields: 'status_code,status' })
   return { code: String(r.status_code || ''), detail: String(r.status || '') }
 }
 
 async function permalink(id: string, token: string) {
-  try { return (await graph(id, token, { fields: 'permalink' })).permalink as string } catch { return 'https://www.instagram.com/' }
+  try { return (await call(id, token, { fields: 'permalink' })).permalink as string } catch { return 'https://www.instagram.com/' }
 }
 
 export const instagramConnector: Connector = {
@@ -34,7 +53,7 @@ export const instagramConnector: Connector = {
     return { publish: true, firstComment: true, postStats: true, followers: true, comments: true, reply: true }
   },
 
-  getToken: (db, account) => getStoredMetaToken(db, account.id),
+  getToken: (db, account) => getInstagramToken(db, account.id),
 
   postUrl: () => 'https://www.instagram.com/',
 
@@ -53,18 +72,18 @@ export const instagramConnector: Connector = {
           const bad = images.find((m) => !/\.jpe?g$/i.test(m.file_name))
           if (bad) throw new PublishError(`${bad.file_name}: Instagram only accepts JPEG images`)
           if (images.length === 1) {
-            state.container = (await graph(`${ig}/media`, token, { image_url: await signedUrl(images[0]), caption: text }, 'POST')).id
+            state.container = (await call(`${ig}/media`, token, { image_url: await signedUrl(images[0]), caption: text }, 'POST')).id
           } else {
             const children: string[] = []
             for (const m of images) {
-              children.push((await graph(`${ig}/media`, token, { image_url: await signedUrl(m), is_carousel_item: true }, 'POST')).id)
+              children.push((await call(`${ig}/media`, token, { image_url: await signedUrl(m), is_carousel_item: true }, 'POST')).id)
             }
-            state.container = (await graph(`${ig}/media`, token, { media_type: 'CAROUSEL', children: children.join(','), caption: text }, 'POST')).id
+            state.container = (await call(`${ig}/media`, token, { media_type: 'CAROUSEL', children: children.join(','), caption: text }, 'POST')).id
           }
         } else if (post.post_type === 'video') {
           const video = media.find((m) => m.kind === 'video')
           if (!video) throw new PublishError('Video post has no video attached')
-          state.container = (await graph(`${ig}/media`, token, { media_type: 'REELS', video_url: await signedUrl(video, 6 * 3600), caption: text }, 'POST')).id
+          state.container = (await call(`${ig}/media`, token, { media_type: 'REELS', video_url: await signedUrl(video, 6 * 3600), caption: text }, 'POST')).id
         } else {
           throw new PublishError(`Instagram doesn't support ${post.post_type} posts — use an image or a video`)
         }
@@ -83,7 +102,7 @@ export const instagramConnector: Connector = {
       }
 
       // 3. Publish.
-      const res = await graph(`${ig}/media_publish`, token, { creation_id: state.container }, 'POST')
+      const res = await call(`${ig}/media_publish`, token, { creation_id: state.container }, 'POST')
       return { kind: 'posted', externalId: res.id, url: await permalink(res.id, token) }
     } catch (err) {
       if (err instanceof PublishError) throw err
@@ -92,16 +111,16 @@ export const instagramConnector: Connector = {
   },
 
   async postFirstComment(token, _account, mediaId, message) {
-    return (await graph(`${mediaId}/comments`, token, { message }, 'POST')).id
+    return (await call(`${mediaId}/comments`, token, { message }, 'POST')).id
   },
 
   async replyToComment(token, _account, mediaId, parentCommentId, message) {
-    if (!parentCommentId) return (await graph(`${mediaId}/comments`, token, { message }, 'POST')).id
-    return (await graph(`${parentCommentId}/replies`, token, { message }, 'POST')).id
+    if (!parentCommentId) return (await call(`${mediaId}/comments`, token, { message }, 'POST')).id
+    return (await call(`${parentCommentId}/replies`, token, { message }, 'POST')).id
   },
 
   async listComments(token, account, mediaId): Promise<RemoteComment[]> {
-    const items = await graphAll(`${mediaId}/comments`, token, {
+    const items = await callAll(`${mediaId}/comments`, token, {
       fields: 'id,text,username,timestamp,replies{id,text,username,timestamp}', limit: 100,
     }, 500)
     const out: RemoteComment[] = []
@@ -120,13 +139,13 @@ export const instagramConnector: Connector = {
     for (const id of ids) {
       const s = zeroStats()
       try {
-        const m = await graph(id, token, { fields: 'like_count,comments_count' })
+        const m = await call(id, token, { fields: 'like_count,comments_count' })
         s.reactions = m.like_count || 0
         s.comments = m.comments_count || 0
       } catch { /* deleted or not accessible */ }
       for (const set of ['reach,views,shares,saved', 'reach,shares,saved', 'reach']) {
         try {
-          const r = await graph(`${id}/insights`, token, { metric: set })
+          const r = await call(`${id}/insights`, token, { metric: set })
           for (const row of r.data || []) {
             const v = Number(row.values?.[0]?.value ?? row.total_value?.value) || 0
             if (row.name === 'reach') s.reach = v
@@ -143,7 +162,7 @@ export const instagramConnector: Connector = {
   },
 
   async followerCount(token, account) {
-    const r = await graph(account.external_page_id, token, { fields: 'followers_count' })
+    const r = await call(account.external_page_id, token, { fields: 'followers_count' })
     return typeof r.followers_count === 'number' ? r.followers_count : null
   },
 
@@ -154,7 +173,7 @@ export const instagramConnector: Connector = {
     for (let s = Math.max(from.getTime(), to.getTime() - 730 * 86400000); s < to.getTime(); s += 30 * 86400000) {
       const e = Math.min(s + 30 * 86400000, to.getTime())
       try {
-        const r = await graph(`${account.external_page_id}/insights`, token, { metric: 'reach', period: 'day', since: Math.floor(s / 1000), until: Math.floor(e / 1000) })
+        const r = await call(`${account.external_page_id}/insights`, token, { metric: 'reach', period: 'day', since: Math.floor(s / 1000), until: Math.floor(e / 1000) })
         for (const v of r.data?.[0]?.values || []) {
           if (!v.end_time) continue
           const day = insightDay(v.end_time)
@@ -175,7 +194,7 @@ export const instagramConnector: Connector = {
     const out = new Map<string, number>()
     const start = Math.max(from.getTime(), to.getTime() - 29 * 86400000)
     try {
-      const r = await graph(`${account.external_page_id}/insights`, token, { metric: 'follower_count', period: 'day', since: Math.floor(start / 1000), until: Math.floor(to.getTime() / 1000) })
+      const r = await call(`${account.external_page_id}/insights`, token, { metric: 'follower_count', period: 'day', since: Math.floor(start / 1000), until: Math.floor(to.getTime() / 1000) })
       for (const v of r.data?.[0]?.values || []) if (v.end_time) out.set(insightDay(v.end_time), Number(v.value) || 0)
     } catch (err) {
       console.warn('[instagram] follower gains', (err as Error).message)
@@ -184,7 +203,7 @@ export const instagramConnector: Connector = {
   },
 
   async listPosts(token, account, since): Promise<RemotePost[]> {
-    const items = await graphAll(`${account.external_page_id}/media`, token, { fields: 'id,caption,media_type,timestamp,permalink', limit: 100 }, 1000)
+    const items = await callAll(`${account.external_page_id}/media`, token, { fields: 'id,caption,media_type,timestamp,permalink', limit: 100 }, 1000)
     return items
       .filter((m: any) => new Date(m.timestamp) >= since)
       .map((m: any) => ({

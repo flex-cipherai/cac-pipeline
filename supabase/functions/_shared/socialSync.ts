@@ -161,11 +161,11 @@ export async function runSocialSync(db: Db, force = false) {
       const stats = await syncStats(db, account, token, force)
       const comments = await syncComments(db, account, token)
       await db.from('connected_accounts').update({ last_synced_at: new Date().toISOString(), last_sync_error: null }).eq('id', account.id)
-      report[account.account_name] = { ...stats, new_comments: comments }
+      report[`${account.platform}: ${account.account_name}`] = { ...stats, new_comments: comments }
     } catch (err) {
       const message = (err as Error).message
       await db.from('connected_accounts').update({ last_sync_error: message.slice(0, 500) }).eq('id', account.id)
-      report[account.account_name] = { error: message }
+      report[`${account.platform}: ${account.account_name}`] = { error: message }
     }
   }
   return report

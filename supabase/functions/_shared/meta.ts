@@ -152,3 +152,103 @@ export function friendlyMetaError(err: unknown) {
 export function insightDay(endTime: string) {
   return new Date(new Date(endTime).getTime() - 1000).toISOString().slice(0, 10)
 }
+
+// ── Instagram API with Instagram Login (Business Login for Instagram) ──
+// Connects an Instagram professional account directly (no Facebook Page
+// link needed). Its own app ID/secret from the Meta app's Instagram use case:
+// INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET. Tokens last 60 days and are
+// refreshed automatically (allowed once a token is 24 hours old).
+
+export const IG_GRAPH = `https://graph.instagram.com/${META_GRAPH_VERSION}`
+export const INSTAGRAM_SCOPES = [
+  'instagram_business_basic', 'instagram_business_content_publish',
+  'instagram_business_manage_comments', 'instagram_business_manage_insights',
+]
+// Marks a stored token as an Instagram Login token (vs a Facebook Page token).
+export const IG_LOGIN_SCOPE = 'instagram-login'
+
+export function buildInstagramAuthUrl({ redirectUri, state }: { redirectUri: string; state: string }) {
+  const params = new URLSearchParams({
+    client_id: Deno.env.get('INSTAGRAM_APP_ID')!,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: INSTAGRAM_SCOPES.join(','),
+    state,
+  })
+  return `https://www.instagram.com/oauth/authorize?${params.toString()}`
+}
+
+// Code → long-lived (60-day) Instagram user token + the account's IG ID.
+export async function exchangeInstagramCode(code: string, redirectUri: string) {
+  const secret = Deno.env.get('INSTAGRAM_APP_SECRET')!
+  const res = await fetch('https://api.instagram.com/oauth/access_token', {
+    method: 'POST',
+    body: new URLSearchParams({
+      client_id: Deno.env.get('INSTAGRAM_APP_ID')!, client_secret: secret,
+      grant_type: 'authorization_code', redirect_uri: redirectUri, code: code.replace(/#_$/, ''),
+    }),
+  })
+  const json = await res.json().catch(() => ({}))
+  const short = json?.data?.[0] || json
+  if (!res.ok || !short?.access_token) {
+    throw new GraphError(`Instagram: ${json?.error_message || json?.error?.message || res.statusText}`, json?.code || res.status)
+  }
+  const long = await graph('https://graph.instagram.com/access_token', '', { grant_type: 'ig_exchange_token', client_secret: secret, access_token: short.access_token })
+  return { token: long.access_token as string, expiresIn: Number(long.expires_in) || 5184000, permissions: String(short.permissions || '') }
+}
+
+export async function refreshInstagramToken(token: string) {
+  const r = await graph('https://graph.instagram.com/refresh_access_token', '', { grant_type: 'ig_refresh_token', access_token: token })
+  return { token: r.access_token as string, expiresIn: Number(r.expires_in) || 5184000 }
+}
+
+export async function fetchInstagramMe(token: string) {
+  const r = await graph(`${IG_GRAPH}/me`, token, { fields: 'user_id,username,name,profile_picture_url,account_type' })
+  const me = r?.data?.[0] || r
+  if (!me?.user_id && !me?.id) throw new Error('Instagram did not return the account')
+  return { igId: String(me.user_id || me.id), username: me.username as string, name: me.name as string | undefined, avatar: me.profile_picture_url as string | undefined }
+}
+
+// Saves (or refreshes) an Instagram Login account. New accounts start
+// managed only if no Instagram account is managed yet.
+export async function saveInstagramLoginAccount(db: Db, token: string, expiresIn: number) {
+  const me = await fetchInstagramMe(token)
+  const { data: existing } = await db.from('connected_accounts').select('id, status').eq('platform', 'instagram').eq('external_page_id', me.igId).maybeSingle()
+  const { data: managed } = await db.from('connected_accounts').select('id').eq('platform', 'instagram').eq('status', 'active').limit(1)
+  const fields = { account_name: me.username || me.name || 'Instagram', account_type: 'business', avatar_url: me.avatar || null, mode: 'automated', oauth_connected: true, last_sync_error: null }
+  let id = existing?.id
+  if (id) {
+    await db.from('connected_accounts').update(fields).eq('id', id)
+  } else {
+    const { data, error } = await db.from('connected_accounts').insert({ platform: 'instagram', external_page_id: me.igId, status: managed?.length ? 'disconnected' : 'active', ...fields }).select('id').single()
+    if (error) throw new Error(`Could not save @${me.username}: ${error.message}`)
+    id = data.id
+  }
+  await db.from('connected_account_tokens').upsert({
+    account_id: id, access_token: token, scope: IG_LOGIN_SCOPE,
+    token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+  }, { onConflict: 'account_id' })
+  return { username: me.username, isNew: !existing }
+}
+
+// Token for an Instagram account, whichever way it was connected. Instagram
+// Login tokens are refreshed when under 10 days from expiry. Returns the
+// token prefixed "iglogin:" so the connector knows to call graph.instagram.com.
+export async function getInstagramToken(db: Db, accountId: string) {
+  const { data } = await db.from('connected_account_tokens').select('access_token, scope, token_expires_at, updated_at, created_at').eq('account_id', accountId).maybeSingle()
+  if (!data?.access_token) throw new Error('This Instagram account is not connected — use Connect Instagram in Settings → Integrations')
+  if (data.scope !== IG_LOGIN_SCOPE) return data.access_token as string
+  const expires = new Date(data.token_expires_at).getTime()
+  if (expires < Date.now()) throw new Error('The Instagram connection has expired — press Connect Instagram in Settings → Integrations')
+  const age = Date.now() - new Date(data.updated_at || data.created_at).getTime()
+  if (expires - Date.now() < 10 * 86400000 && age > 24 * 3600000) {
+    try {
+      const r = await refreshInstagramToken(data.access_token)
+      await db.from('connected_account_tokens').update({ access_token: r.token, token_expires_at: new Date(Date.now() + r.expiresIn * 1000).toISOString() }).eq('account_id', accountId)
+      return `iglogin:${r.token}`
+    } catch (err) {
+      console.warn('[meta] Instagram token refresh failed:', (err as Error).message)
+    }
+  }
+  return `iglogin:${data.access_token}`
+}
