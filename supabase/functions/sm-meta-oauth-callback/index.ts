@@ -14,7 +14,13 @@
 // Deploy: supabase functions deploy sm-meta-oauth-callback --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { exchangeMetaCode, friendlyMetaError, syncMetaAccounts } from '../_shared/meta.ts'
+import { exchangeMetaCode, friendlyMetaError, graph, syncMetaAccounts } from '../_shared/meta.ts'
+
+// What the BMS needs to publish, read insights and reply on Pages and Instagram.
+const REQUIRED_SCOPES = [
+  'pages_show_list', 'pages_manage_posts', 'pages_read_engagement', 'pages_read_user_content', 'pages_manage_engagement',
+  'read_insights', 'instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights',
+]
 
 Deno.serve(async (req) => {
   const url = new URL(req.url)
@@ -47,10 +53,23 @@ Deno.serve(async (req) => {
 
   try {
     const userToken = await exchangeMetaCode(code, `${supabaseUrl}/functions/v1/sm-meta-oauth-callback`)
+
+    // Which permissions were actually granted (the Login for Business
+    // configuration decides what Meta asks for).
+    const perms = await graph('me/permissions', userToken).catch(() => ({ data: [] }))
+    const granted = new Set((perms.data || []).filter((p: any) => p.status === 'granted').map((p: any) => p.permission))
+    const missing = REQUIRED_SCOPES.filter((s) => !granted.has(s))
+
     const accounts = await syncMetaAccounts(db, userToken)
     if (!accounts.length) return back('error', 'No Facebook Pages were shared — reconnect and select your Page (and its Instagram account)')
     const fb = accounts.filter(a => a.platform === 'facebook').length
     const ig = accounts.filter(a => a.platform === 'instagram').length
+    if (missing.length) {
+      return back('missing_permissions', `Connected ${fb} Page${fb === 1 ? '' : 's'}, but Meta did not grant: ${missing.join(', ')}. Add them to the Facebook Login for Business configuration in the Meta app, then press Reconnect Meta.`)
+    }
+    if (!ig) {
+      return back('connected_no_instagram', `${fb} Facebook Page${fb === 1 ? '' : 's'} connected, but no Instagram account is linked to ${fb === 1 ? 'it' : 'them'}. Link the Instagram professional account to the Page (Page settings → Linked accounts), then press Reconnect Meta.`)
+    }
     return back('connected', `${fb} Facebook Page${fb === 1 ? '' : 's'} and ${ig} Instagram account${ig === 1 ? '' : 's'}`)
   } catch (err) {
     console.error('[sm-meta-oauth-callback]', (err as Error).message)

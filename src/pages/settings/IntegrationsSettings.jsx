@@ -73,6 +73,8 @@ export default function IntegrationsSettings() {
 
     if (metaStatus === 'connected') {
       showToast('success', `Meta connected (${params.get('detail') || 'accounts saved'}) — choose below which ones the BMS manages`)
+    } else if (metaStatus === 'missing_permissions' || metaStatus === 'connected_no_instagram') {
+      showToast('error', params.get('detail') || 'Meta connected only partly')
     } else if (metaStatus === 'error') {
       showToast('error', params.get('detail') || 'Failed to connect Meta')
     }
