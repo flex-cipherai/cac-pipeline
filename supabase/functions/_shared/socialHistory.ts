@@ -82,7 +82,7 @@ export async function importHistory(db: Db, account: Account) {
         const { data: row, error } = await db.from('posts').insert({
           account_id: account.id, post_type: p.postType, caption: p.caption, hashtags: [], mentions: [],
           status: 'posted', posted_at: p.publishedAt, scheduled_at: p.publishedAt, mode: account.mode,
-          external_post_urn: p.externalId, external_post_url: connector.postUrl(p.externalId),
+          external_post_urn: p.externalId, external_post_url: p.url || connector.postUrl(p.externalId),
           origin: 'imported', last_stats: s, stats_synced_at: s ? now : null,
         }).select('id').single()
         if (error || !row) { console.warn('[history] post insert:', error?.message); continue }

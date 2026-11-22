@@ -38,6 +38,8 @@ export interface PublishInput {
   token: string
   media: MediaItem[]
   loadBytes: (m: MediaItem) => Promise<Uint8Array>
+  // A temporary public URL for platforms that fetch media themselves (Meta).
+  signedUrl: (m: MediaItem, seconds?: number) => Promise<string>
   // Connector-owned resumable state (stored in posts.publish_state between runs).
   // deno-lint-ignore no-explicit-any
   state: Record<string, any>
@@ -105,6 +107,7 @@ export interface Connector {
 
 export interface RemotePost {
   externalId: string
+  url?: string // when the platform gives a permalink (otherwise connector.postUrl)
   caption: string
   postType: 'text' | 'image' | 'carousel' | 'video' | 'poll'
   publishedAt: string

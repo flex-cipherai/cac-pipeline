@@ -57,7 +57,13 @@ export async function publishPost(db: Db, postId: string): Promise<PublishResult
       return new Uint8Array(await blob.arrayBuffer())
     }
 
-    const outcome = await connector.publish({ post, account, token, media, loadBytes, state, saveState })
+    const signedUrl = async (m: MediaItem, seconds = 3 * 3600) => {
+      const { data, error: urlError } = await db.storage.from('content-library').createSignedUrl(m.file_path, seconds)
+      if (urlError || !data?.signedUrl) throw new PublishError(`Could not prepare ${m.file_name} for upload`)
+      return data.signedUrl
+    }
+
+    const outcome = await connector.publish({ post, account, token, media, loadBytes, signedUrl, state, saveState })
 
     if (outcome.kind === 'pending') {
       if (Date.now() - new Date(state.started_at).getTime() > PROCESSING_TIMEOUT_MS) {

@@ -54,9 +54,9 @@ export function AccountBar({ accounts, selected, onChange, showComingSoon = true
           <span className="sm-chip-label">{a.account_name}</span>
         </button>
       ))}
-      {showComingSoon && PLATFORM_LIST.filter(p => p.status !== 'live' && !connectedPlatforms.has(p.key)).length > 0 && (
+      {showComingSoon && PLATFORM_LIST.filter(p => p.status === 'coming_soon' && !connectedPlatforms.has(p.key)).length > 0 && (
         <Link to="/settings/integrations" className="sm-chip sm-chip-ghost" title="More networks are on the way">
-          {PLATFORM_LIST.filter(p => p.status !== 'live').map(p => <PlatformIcon key={p.key} platform={p} size={16} />)}
+          {PLATFORM_LIST.filter(p => p.status === 'coming_soon').map(p => <PlatformIcon key={p.key} platform={p} size={16} />)}
           <span className="sm-chip-label">Soon</span>
         </Link>
       )}

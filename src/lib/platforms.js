@@ -35,7 +35,7 @@ export const PLATFORMS = {
     }),
   },
   facebook: {
-    key: 'facebook', name: 'Facebook', short: 'f', color: '#1877F2', status: 'coming_soon',
+    key: 'facebook', name: 'Facebook', short: 'f', color: '#1877F2', status: 'live',
     accountKinds: { page: 'Page' },
     postTypes: ['text', 'image', 'video'],
     limits: { caption: 63206, seeMore: { desktop: 480, mobile: 250 }, images: 10, videoMB: 1024, firstComment: 8000 },
@@ -43,15 +43,15 @@ export const PLATFORMS = {
     capabilities: () => ({ publish: true, firstComment: true, postStats: true, followers: true, comments: true, reply: true }),
   },
   instagram: {
-    key: 'instagram', name: 'Instagram', short: 'IG', color: '#E1306C', status: 'coming_soon',
+    key: 'instagram', name: 'Instagram', short: 'IG', color: '#E1306C', status: 'live',
     accountKinds: { business: 'Business account', creator: 'Creator account' },
-    postTypes: ['image', 'carousel', 'video'],
-    limits: { caption: 2200, seeMore: { desktop: 125, mobile: 125 }, images: 10, videoMB: 1024, hashtags: 30, requiresMedia: true, firstComment: 2200 },
+    postTypes: ['image', 'video'],
+    limits: { caption: 2200, seeMore: { desktop: 125, mobile: 125 }, images: 10, videoMB: 1024, hashtags: 30, requiresMedia: true, jpegOnly: true, firstComment: 2200 },
     defaultBestTimes: [{ weekday: 2, hour: 11 }, { weekday: 3, hour: 11 }, { weekday: 5, hour: 10 }],
     capabilities: () => ({ publish: true, firstComment: true, postStats: true, followers: true, comments: true, reply: true }),
   },
   threads: {
-    key: 'threads', name: 'Threads', short: 'Th', color: '#101010', status: 'coming_soon',
+    key: 'threads', name: 'Threads', short: 'Th', color: '#101010', status: 'off', // not used by SDFM; set 'coming_soon' to show it again
     accountKinds: { profile: 'Profile' },
     postTypes: ['text', 'image', 'carousel', 'video'],
     limits: { caption: 500, seeMore: { desktop: 500, mobile: 500 }, images: 10, videoMB: 1024 },
@@ -121,6 +121,8 @@ export function validateForAccount(account, post) {
     if (L.images && assets.length > L.images) problems.push(`${p.name} allows up to ${L.images} images`)
   }
   if (post.postType === 'video' && assets.some(a => a.file_type !== 'video')) problems.push('Attach a video file')
+  if (L.jpegOnly && assets.some(a => a.file_type === 'image' && !/\.jpe?g$/i.test(a.file_name || ''))) problems.push(`${p.name} only accepts JPEG images (.jpg)`)
+  if (L.hashtags && (post.hashtags || []).length > L.hashtags) problems.push(`${p.name} allows at most ${L.hashtags} hashtags`)
   if (post.postType === 'carousel' && account?.platform === 'linkedin' && assets.some(a => a.file_type !== 'document')) problems.push('Attach a PDF, PPTX or DOCX document')
   if (post.postType === 'poll') {
     const opts = (post.pollOptions || []).map(o => o.trim()).filter(Boolean)

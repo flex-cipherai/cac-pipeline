@@ -1,6 +1,6 @@
 # SDFM Business Management Solution
 
-Business management system for SDFM Group Limited. Manages the full sales lifecycle from lead intake through contract signing, plus Metricool-style social media management under `/social/*` (Planner, multi-network composer, queues and autolists, Analytics, Inbox with replies, scheduled Reports, Link in Bio), built to take any network: LinkedIn is live, Meta / TikTok / X / YouTube plug in as connectors — see `SDFM Social Media Management System Description.pdf` for the module spec. Both modules share the same Supabase project, roles (`admin`, `sales`, `marketing`), and deploy pipeline.
+Business management system for SDFM Group Limited. Manages the full sales lifecycle from lead intake through contract signing, plus Metricool-style social media management under `/social/*` (Planner, multi-network composer, queues and autolists, Analytics, Inbox with replies, scheduled Reports, Link in Bio), built to take any network: LinkedIn, Facebook and Instagram are live; TikTok / X / YouTube plug in as connectors — see `SDFM Social Media Management System Description.pdf` for the module spec. Both modules share the same Supabase project, roles (`admin`, `sales`, `marketing`), and deploy pipeline.
 
 ## Tech Stack
 
@@ -153,6 +153,13 @@ Benchmarked on Metricool. Sidebar: **Planner · Analytics · Inbox · Reports ·
 **Adding a network** (Meta, TikTok, X, YouTube): write `supabase/functions/_shared/platforms/<platform>.ts` implementing `Connector` (`platforms/types.ts`: publish, first comment, post stats, followers, comments, reply), register it in `platforms/index.ts`, add `sm-<platform>-oauth-start/-callback` that create `connected_accounts` rows (`platform`, `account_type`, `external_page_id`) and store tokens in `connected_account_tokens`, then set its `status` to `'live'` in `src/lib/platforms.js`. The publishing engine (`_shared/publisher.ts`), sync (`_shared/socialSync.ts`), inbox, analytics and UI need no change.
 
 Setup order: `migration-social-v2.sql` → deploy `sm-move-to-ready`, `sm-publish`, `sm-sync`, `sm-linkedin-sync`, `sm-autolists`, `sm-reports`, `bio-page` (cron/public ones with `--no-verify-jwt`), `sm-reply`, `sm-linkedin-oauth-start`, `sm-linkedin-oauth-callback --no-verify-jwt`, `sm-linkedin-pages` → `migration-social-v2-cron.sql` (project URL + anon key) → reconnect LinkedIn once (new comment scopes).
+
+### Meta — Facebook Pages & Instagram
+
+- **Connect:** Settings → Integrations → **Connect Meta** (`sm-meta-oauth-start` → Facebook Login → `sm-meta-oauth-callback`, deployed with `--no-verify-jwt`). Every Facebook Page the person manages, and each Page's linked Instagram professional account, is saved as a `connected_accounts` row (`facebook`/`page`, `instagram`/`business`) with the Page token (non-expiring) in `connected_account_tokens`. New accounts start unmanaged unless none of that network is managed yet; choose with **Manage in BMS**.
+- **Secrets:** `META_APP_ID`, `META_APP_SECRET`, and `META_LOGIN_CONFIG_ID` (Facebook Login for Business configuration; without it the scopes in `_shared/meta.ts` are requested directly). Redirect URI on the Meta app: `https://<project-ref>.supabase.co/functions/v1/sm-meta-oauth-callback`. The app is Live; permissions are Standard Access, so only people with a role on the Meta app can connect (no App Review needed for SDFM's own Pages).
+- **Connectors:** `_shared/platforms/facebook.ts` (text, photo, multi-photo, video; first comment; comments and threaded replies; post and Page insights; past posts) and `instagram.ts` (single image, carousel of 2–10 images, video as a Reel; container → publish, videos wait while Instagram processes them; JPEG only, 30 hashtags max; comments and replies; insights; past posts). Media is passed to Meta as short-lived signed Content Library links. Meta retires insight metric names over time; each metric is tried by name with fallbacks, and `META_GRAPH_VERSION` in `_shared/meta.ts` should be bumped before it is retired.
+- Threads is not used by SDFM (`status: 'off'` in `src/lib/platforms.js`).
 
 ### LinkedIn API — Automated Mode (Community Management API)
 

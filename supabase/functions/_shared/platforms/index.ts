@@ -9,11 +9,13 @@
 
 import type { Connector } from './types.ts'
 import { linkedinConnector } from './linkedin.ts'
+import { facebookConnector } from './facebook.ts'
+import { instagramConnector } from './instagram.ts'
 
 const CONNECTORS: Record<string, Connector> = {
   linkedin: linkedinConnector,
-  // facebook: facebookConnector,   (Meta Graph API — Pages)
-  // instagram: instagramConnector, (Meta Graph API — Instagram Business)
+  facebook: facebookConnector,     // Meta Graph API — Pages (sm-meta-oauth-*)
+  instagram: instagramConnector,   // Meta Graph API — Instagram professional accounts
   // threads: threadsConnector,     (Threads API)
   // tiktok: tiktokConnector,       (TikTok Content Posting API)
   // x: xConnector,                 (X API v2)

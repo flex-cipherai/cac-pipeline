@@ -21,6 +21,21 @@ export default function IntegrationsSettings() {
   const [refreshingPages, setRefreshingPages] = useState(false)
   const [togglingId, setTogglingId] = useState(null)
   const [importingId, setImportingId] = useState(null)
+  const [metaAccounts, setMetaAccounts] = useState([]) // Facebook Pages + Instagram accounts
+  const [connectingMeta, setConnectingMeta] = useState(false)
+
+  async function connectMeta() {
+    setConnectingMeta(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('sm-meta-oauth-start', { body: { redirect_origin: window.location.origin } })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Failed to start the Meta connection')
+      window.location.href = data.url
+    } catch (err) {
+      showToast('error', err.message)
+      setConnectingMeta(false)
+    }
+  }
 
   // One-time history import (12 months of daily totals, follower trend and
   // past Company Page posts). Safe to repeat.
@@ -53,7 +68,14 @@ export default function IntegrationsSettings() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const linkedinStatus = params.get('linkedin')
-    if (!linkedinStatus) return
+    const metaStatus = params.get('meta')
+    if (!linkedinStatus && !metaStatus) return
+
+    if (metaStatus === 'connected') {
+      showToast('success', `Meta connected (${params.get('detail') || 'accounts saved'}) — choose below which ones the BMS manages`)
+    } else if (metaStatus === 'error') {
+      showToast('error', params.get('detail') || 'Failed to connect Meta')
+    }
 
     if (linkedinStatus === 'connected') {
       showToast('success', 'LinkedIn connected — choose below which Company Pages the BMS manages')
@@ -64,6 +86,7 @@ export default function IntegrationsSettings() {
     }
 
     params.delete('linkedin')
+    params.delete('meta')
     params.delete('detail')
     const newSearch = params.toString()
     window.history.replaceState({}, '', window.location.pathname + (newSearch ? `?${newSearch}` : ''))
@@ -71,13 +94,16 @@ export default function IntegrationsSettings() {
 
   async function fetchData() {
     const [accountRes, gscRes] = await Promise.all([
-      supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').order('created_at'),
+      supabase.from('connected_accounts').select('*').order('created_at'),
       supabase.from('system_settings').select('key, value').in('key', ['gsc_site_url', 'gsc_last_sync_at', 'gsc_last_sync_status']),
     ])
     if (accountRes.data) {
-      setPages(accountRes.data.filter(a => a.account_type === 'organization')
+      const byManagedThenName = (a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1) || a.account_name.localeCompare(b.account_name)
+      setMetaAccounts(accountRes.data.filter(a => ['facebook', 'instagram'].includes(a.platform))
+        .sort((a, b) => a.platform.localeCompare(b.platform) || byManagedThenName(a, b)))
+      setPages(accountRes.data.filter(a => a.platform === 'linkedin' && a.account_type === 'organization')
         .sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1) || a.account_name.localeCompare(b.account_name)))
-      setMemberAccounts(accountRes.data.filter(a => a.account_type === 'member'))
+      setMemberAccounts(accountRes.data.filter(a => a.platform === 'linkedin' && a.account_type === 'member'))
     }
     if (gscRes.data) {
       const get = k => gscRes.data.find(r => r.key === k)?.value || ''
@@ -106,6 +132,7 @@ export default function IntegrationsSettings() {
     setTogglingId(null)
     if (error) { showToast('error', 'Failed to update page'); return }
     setPages(prev => prev.map(p => p.id === page.id ? { ...p, status: newStatus } : p))
+    setMetaAccounts(prev => prev.map(p => p.id === page.id ? { ...p, status: newStatus } : p))
     showToast('success', turningOff ? `${page.account_name} is no longer managed` : `${page.account_name} is now managed — it appears under Post As`)
   }
 
@@ -290,9 +317,47 @@ export default function IntegrationsSettings() {
       </div>
 
       <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>
+        <div className="sm-account-row">
+          <div>
+            <div className="sm-account-platform"><PlatformIcon platform="facebook" size={18} /> <PlatformIcon platform="instagram" size={18} /> Meta — Facebook &amp; Instagram</div>
+            <span className={`status-badge status-${metaAccounts.length ? 'posted' : 'draft'}`}>{metaAccounts.length ? 'Connected' : 'Not connected'}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {metaAccounts.length > 0 && <button className="btn btn-secondary btn-sm" onClick={syncNow} disabled={syncing}>{syncing ? 'Syncing...' : 'Sync now'}</button>}
+            <button className="btn btn-primary btn-sm" onClick={connectMeta} disabled={connectingMeta}>
+              {connectingMeta ? 'Redirecting...' : metaAccounts.length ? 'Reconnect Meta' : 'Connect Meta'}
+            </button>
+          </div>
+        </div>
+        <p className="form-hint">Sign in with the Facebook account that manages your Page. In Meta's window, select the Page <b>and</b> its Instagram account. Reconnect any time to add more.</p>
+        {metaAccounts.map(a => (
+          <div key={a.id} className="sm-account-row" style={{ marginBottom: 8 }}>
+            <div>
+              <div><PlatformIcon platform={a.platform} size={16} /> {a.account_name} <span className="form-hint">{a.platform === 'facebook' ? 'Facebook Page' : 'Instagram'}</span></div>
+              <span className={`status-badge status-${a.status === 'active' ? 'posted' : 'draft'}`}>{a.status === 'active' ? 'Managed in BMS' : 'Not managed'}</span>
+              {a.status === 'active' && a.last_sync_error && <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={a.last_sync_error}>Last sync failed</span>}
+              {a.status === 'active' && a.last_synced_at && !a.last_sync_error && <span className="form-hint" style={{ marginLeft: 8 }}>Synced {new Date(a.last_synced_at).toLocaleString()}</span>}
+              <HistoryNote account={a} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {a.status === 'active' && (
+                <button className="btn btn-secondary btn-sm" onClick={() => importHistory(a)} disabled={!!importingId}>
+                  {importingId === a.id ? 'Importing…' : a.history_imported_at ? 'Re-import history' : 'Import history'}
+                </button>
+              )}
+              <button className={`btn btn-sm ${a.status === 'active' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => togglePage(a)} disabled={togglingId === a.id}>
+                {a.status === 'active' ? 'Stop managing' : 'Manage in BMS'}
+              </button>
+            </div>
+          </div>
+        ))}
+        <p className="form-hint">Instagram posts need an image (JPEG) or a video; videos go out as Reels. Comments on both sync to the Inbox, where you can reply.</p>
+      </div>
+
+      <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>
         <div className="sm-account-platform" style={{ marginBottom: 8 }}>More networks</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {PLATFORM_LIST.filter(p => p.status !== 'live').map(p => (
+          {PLATFORM_LIST.filter(p => p.status === 'coming_soon').map(p => (
             <span key={p.key} className="sm-chip" style={{ cursor: 'default' }}>
               <PlatformIcon platform={p} size={18} /> {p.name} <span className="status-badge" style={quietBadge}>Coming soon</span>
             </span>

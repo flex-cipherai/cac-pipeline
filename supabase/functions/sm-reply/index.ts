@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
       return jsonResponse({
         success: false,
         error: /403|ACCESS_DENIED|scope/i.test(msg)
-          ? 'LinkedIn refused the reply — reconnect LinkedIn in Settings → Integrations to grant reply permission'
+          ? `${account.account_name} refused the reply — reconnect it in Settings → Integrations and grant every permission`
           : msg,
       })
     }
