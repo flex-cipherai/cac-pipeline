@@ -192,3 +192,11 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Compact input for toolbars (moved from the old Content Calendar styles) */
+.form-input-sm {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: var(--text-sm);
+  width: auto;
+}

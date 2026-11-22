@@ -3,6 +3,8 @@ import { supabase } from '../../lib/supabase'
 import { SettingsHeading } from './SettingsLayout'
 import { useAuth } from '../../lib/AuthContext'
 import useToast from './useToast'
+import { PLATFORM_LIST } from '../../lib/platforms'
+import { PlatformIcon } from '../../components/social/SocialUI'
 
 const quietBadge = { marginLeft: 6, color: 'var(--text-secondary)', background: 'var(--bg-gray)' }
 
@@ -123,8 +125,8 @@ export default function IntegrationsSettings() {
   async function syncNow() {
     setSyncing(true)
     try {
-      const { data, error } = await supabase.functions.invoke('sm-linkedin-sync', { body: { force: true } })
-      if (error) throw new Error('Could not reach sm-linkedin-sync. Has it been deployed?')
+      const { data, error } = await supabase.functions.invoke('sm-sync', { body: { force: true } })
+      if (error) throw new Error('Could not reach sm-sync. Has it been deployed?')
       if (!data?.success) throw new Error(data?.error || 'Sync failed')
       const problems = Object.entries(data.accounts || {}).filter(([, r]) => r.error)
       if (problems.length) showToast('error', problems.map(([n, r]) => `${n}: ${r.error}`).join(' · '))
@@ -251,6 +253,18 @@ export default function IntegrationsSettings() {
           </div>
         ))}
         <p className="form-hint">Only the owner of a profile can schedule posts to it. Analytics sync for profile posts; comments on them do not, because LinkedIn does not offer that to this app.</p>
+      </div>
+
+      <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>
+        <div className="sm-account-platform" style={{ marginBottom: 8 }}>More networks</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {PLATFORM_LIST.filter(p => p.status !== 'live').map(p => (
+            <span key={p.key} className="sm-chip" style={{ cursor: 'default' }}>
+              <PlatformIcon platform={p} size={18} /> {p.name} <span className="status-badge" style={quietBadge}>Coming soon</span>
+            </span>
+          ))}
+        </div>
+        <p className="form-hint">The Planner, composer, Analytics, Inbox and Reports already handle these networks. Each one goes live when its connector is added (it needs that network's developer app and review).</p>
       </div>
 
       <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>

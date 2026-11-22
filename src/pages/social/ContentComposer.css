@@ -160,3 +160,62 @@
   background: rgba(236, 48, 19, 0.08);
   color: var(--sdfm-red);
 }
+
+/* Multi-network composer */
+.cp-accounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-sm);
+}
+
+.cp-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--white);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.cp-account:hover:not(:disabled) { border-color: var(--sdfm-red); }
+.cp-account.on { border-color: var(--sdfm-red); background: var(--sdfm-red-light); box-shadow: inset 0 0 0 1px var(--sdfm-red); }
+.cp-account:disabled { cursor: default; opacity: 0.75; }
+.cp-account-text { display: flex; flex-direction: column; min-width: 0; }
+.cp-account-text b { font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-account-text small { font-size: var(--text-xs); color: var(--text-secondary); }
+
+.cp-caption-tabs { flex-wrap: wrap; }
+.cp-caption-tabs .sm-tab { display: inline-flex; align-items: center; gap: 4px; }
+.cp-override-off { padding: var(--space-md); background: var(--bg-gray); border-radius: 8px; }
+.cp-text-foot { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-sm); }
+.cp-text-foot .btn { margin-right: auto; }
+.cp-optional { font-weight: 400; font-size: var(--text-xs); color: var(--text-muted); margin-left: 6px; }
+
+.cp-check { display: flex; gap: 8px; align-items: center; font-size: var(--text-sm); cursor: pointer; }
+.cp-repeat { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: var(--space-sm); font-size: var(--text-sm); }
+.cp-repeat .form-input { width: auto; }
+.cp-repeat input[type='number'] { width: 64px; }
+
+.cp-problems {
+  background: var(--sdfm-red-light);
+  border: 1px solid rgba(236, 48, 19, 0.25);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-sm);
+}
+
+.cp-problems div { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.cp-preview-head { display: flex; gap: var(--space-sm); align-items: center; justify-content: space-between; margin-bottom: var(--space-sm); flex-wrap: wrap; }
+.cp-preview-head .form-input { width: auto; flex: 1; min-width: 0; }
+
+.composer-actions { flex-wrap: wrap; }

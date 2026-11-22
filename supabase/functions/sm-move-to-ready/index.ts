@@ -1,8 +1,8 @@
 // Supabase Edge Function: sm-move-to-ready
 // The publishing engine, run every 5 minutes by pg_cron. For each post
 // whose scheduled_at has passed:
-//   - Automated Mode (the post's LinkedIn account is connected through the
-//     API): publish it to LinkedIn now (see _shared/linkedinPublish.ts).
+//   - Automated Mode (the post's account is connected through its platform's
+//     API): publish it now (_shared/publisher.ts → _shared/platforms/<platform>.ts).
 //     Posts left in 'publishing' (a video still processing on LinkedIn, or a
 //     run that stopped halfway) are resumed once their lock expires.
 //   - Assisted Mode: move it to 'ready_to_post' and alert the content team
@@ -10,12 +10,12 @@
 //
 // Deploy: supabase functions deploy sm-move-to-ready --no-verify-jwt
 // Schedule: see migration-social-scheduler-cron.sql
-// Requires: RESEND_API_KEY, SENDER_EMAIL, LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET
+// Requires: RESEND_API_KEY, SENDER_EMAIL, and each connected platform's secrets (LINKEDIN_CLIENT_ID / _SECRET)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { renderTemplate, sendViaResend } from '../_shared/resend.ts'
 import { staffWithModule } from '../_shared/access.ts'
-import { claimPosts, countAttempt, publishPost } from '../_shared/linkedinPublish.ts'
+import { claimPosts, countAttempt, isAutomated, publishPost, spawnNextOccurrence } from '../_shared/publisher.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,10 +38,6 @@ function captionPreview(caption: string | null) {
   return text.length > 140 ? `${text.slice(0, 140)}…` : text
 }
 
-function isAutomated(account: { mode?: string; status?: string; external_page_id?: string | null } | null) {
-  return !!account && account.mode === 'automated' && account.status === 'active' && !!account.external_page_id
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -56,7 +52,7 @@ Deno.serve(async (req) => {
 
     const { data: due, error: dueError } = await adminClient
       .from('posts')
-      .select('id, caption, connected_accounts(mode, status, external_page_id)')
+      .select('*, connected_accounts(mode, status, external_page_id)')
       .eq('status', 'scheduled')
       .eq('is_template', false)
       .not('scheduled_at', 'is', null)
@@ -71,6 +67,9 @@ Deno.serve(async (req) => {
     const dueAutomated = (due || []).filter((p: any) => isAutomated(p.connected_accounts))
     // deno-lint-ignore no-explicit-any
     const dueAssisted = (due || []).filter((p: any) => !isAutomated(p.connected_accounts))
+
+    // Recurring posts: queue the next occurrence as each one leaves the schedule.
+    for (const p of due || []) await spawnNextOccurrence(adminClient, p).catch((e) => console.error('[sm-move-to-ready] recurrence:', e.message))
 
     // ── Automated: publish ──
     const results: Record<string, string> = {}

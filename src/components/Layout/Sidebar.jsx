@@ -172,12 +172,12 @@ const MODULES = [
     icon: icons.socialModule,
     items: [
       { module: 'social_calendar', icon: icons.calendarIcon },
-      { module: 'social_composer', icon: icons.compose },
-      { module: 'social_library', icon: icons.library },
-      { module: 'social_approvals', icon: icons.approvals },
       { module: 'social_analytics', icon: icons.analytics },
-      { module: 'website_analytics', icon: icons.website },
       { module: 'social_activity', icon: icons.activity },
+      { module: 'social_reports', icon: icons.approvals },
+      { module: 'social_links', icon: icons.external },
+      { module: 'social_library', icon: icons.library },
+      { module: 'website_analytics', icon: icons.website },
     ],
   },
   {

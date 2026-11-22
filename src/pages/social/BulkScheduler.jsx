@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
-import { fetchPostableAccounts, accountLabel, defaultAccountId } from '../../lib/linkedinAccounts'
+import { fetchPostableAccounts, accountLabel, defaultAccountId } from '../../lib/socialAccounts'
 import './ContentLibrary.css'
 import './BulkScheduler.css'
 

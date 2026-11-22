@@ -1,543 +1,484 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { DateTime } from 'luxon'
 import { supabase } from '../../lib/supabase'
 import { exportCSV, exportSocialAnalyticsPDF } from '../../lib/exportUtils'
 import { isQualified } from '../../lib/scoring'
-import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../../components/PeriodSelector/PeriodSelector'
-import '../Dashboard.css'
-import '../MarketingAnalytics.css'
-import './ContentLibrary.css'
+import { useSocialAccounts } from '../../lib/socialAccounts'
+import { platformOf, POST_TYPE_LABELS } from '../../lib/platforms'
+import { fetchBestTimes, MIN_POSTS } from '../../lib/bestTimes'
+import { AccountBar, AccountAvatar, SocialHeader, StatTile, TrendChart, Heatmap, EmptyState } from '../../components/social/SocialUI'
 import './SocialAnalytics.css'
 
-const METRIC_FIELDS = [
-  { key: 'impressions', label: 'Impressions' },
-  { key: 'reach', label: 'Reach' },
-  { key: 'reactions', label: 'Reactions' },
-  { key: 'comments', label: 'Comments' },
-  { key: 'shares', label: 'Shares' },
-  { key: 'clicks', label: 'Clicks' },
-  { key: 'video_views', label: 'Video Views' },
-  { key: 'follower_count', label: 'Follower Count (running total)' },
+const RANGES = [
+  { key: '7d', label: 'Last 7 days' },
+  { key: '28d', label: 'Last 28 days' },
+  { key: '90d', label: 'Last 90 days' },
+  { key: 'month', label: 'This month' },
+  { key: 'last_month', label: 'Last month' },
+  { key: 'custom', label: 'Custom' },
 ]
 
-const GOAL_LABELS = {
-  impressions: 'Impressions',
-  follower_growth: 'Follower Growth',
-  engagement_rate: 'Engagement Rate',
-  website_traffic: 'Website Traffic (clicks)',
-  discovery_calls: 'Discovery Call Bookings',
+const SORTS = { engagement: 'Engagements', impressions: 'Impressions', rate: 'Engagement rate', clicks: 'Clicks', comments: 'Comments' }
+const WEEKDAYS = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function rangeFor(key, custom) {
+  const now = DateTime.now()
+  switch (key) {
+    case '7d': return { start: now.minus({ days: 7 }).startOf('day'), end: now }
+    case '90d': return { start: now.minus({ days: 90 }).startOf('day'), end: now }
+    case 'month': return { start: now.startOf('month'), end: now }
+    case 'last_month': return { start: now.minus({ months: 1 }).startOf('month'), end: now.minus({ months: 1 }).endOf('month') }
+    case 'custom': {
+      const s = DateTime.fromISO(custom.start || ''), e = DateTime.fromISO(custom.end || '')
+      if (s.isValid && e.isValid && s <= e) return { start: s.startOf('day'), end: e.endOf('day') }
+      return { start: now.minus({ days: 28 }).startOf('day'), end: now }
+    }
+    default: return { start: now.minus({ days: 28 }).startOf('day'), end: now }
+  }
 }
+
+const num = v => Number(v) || 0
+const engagementOf = s => num(s.reactions) + num(s.comments) + num(s.shares)
 
 function emptyMetrics() {
   return { impressions: '', reach: '', reactions: '', comments: '', shares: '', clicks: '', video_views: '', follower_count: '' }
 }
 
+// Analytics (Metricool-style): pick accounts and a range; everything is
+// compared with the period before. Account totals come from account-level
+// analytics_snapshots (increments synced hourly, or logged/imported by hand);
+// post performance from each post's lifetime stats.
 export default function SocialAnalytics() {
-  const now = new Date()
-  const [period, setPeriod] = useState({ mode: 'all', month: now.getMonth(), year: now.getFullYear() })
+  const { accounts, selected, selectedIds, setSelected, loading: accountsLoading } = useSocialAccounts()
+  const [rangeKey, setRangeKey] = useState(() => { try { return localStorage.getItem('sm.analyticsRange') || '28d' } catch { return '28d' } })
+  const [custom, setCustom] = useState({ start: '', end: '' })
+  const [data, setData] = useState(null)
+  const [best, setBest] = useState({ cells: [], isDefault: true, sample: 0 })
   const [loading, setLoading] = useState(true)
+  const [sortBy, setSortBy] = useState('engagement')
+  const [breakdown, setBreakdown] = useState('format')
+  const [drill, setDrill] = useState(null)
+  const [showLog, setShowLog] = useState(false)
+  const [log, setLog] = useState({ account_id: '', post_id: '', date: DateTime.now().toISODate(), fields: emptyMetrics() })
+  const [toast, setToast] = useState(null)
+  const csvRef = useRef(null)
 
-  const [accountSnapshots, setAccountSnapshots] = useState([])
-  const [postSnapshots, setPostSnapshots] = useState([])
-  const [campaigns, setCampaigns] = useState([])
-  const [linkedInLeads, setLinkedInLeads] = useState([])
-  const [posts, setPosts] = useState([])
+  const range = useMemo(() => rangeFor(rangeKey, custom), [rangeKey, custom])
+  const prev = useMemo(() => {
+    const len = range.end.diff(range.start)
+    return { start: range.start.minus(len), end: range.start }
+  }, [range])
+  const visibleAccounts = useMemo(() => accounts.filter(a => selectedIds.includes(a.id)), [accounts, selectedIds])
+  const accountById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts])
 
-  const [showLogModal, setShowLogModal] = useState(false)
-  const [logForPostId, setLogForPostId] = useState('')
-  const [logDate, setLogDate] = useState(new Date().toISOString().slice(0, 10))
-  const [logFields, setLogFields] = useState(emptyMetrics())
-  const [saving, setSaving] = useState(false)
+  function showToast(type, text) { setToast({ type, text }); setTimeout(() => setToast(null), 4000) }
 
-  const [drillDownPost, setDrillDownPost] = useState(null)
-  const [drillDownSnapshots, setDrillDownSnapshots] = useState([])
+  function pickRange(k) {
+    setRangeKey(k)
+    try { localStorage.setItem('sm.analyticsRange', k) } catch { /* ignore */ }
+  }
 
-  const csvInputRef = useRef(null)
-  const [toast, setToast] = useState({ show: false, type: '', text: '' })
+  useEffect(() => { if (!accountsLoading) load() }, [accountsLoading, selectedIds.join(','), range]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchAll() }, [])
-
-  useEffect(() => {
-    if (toast.show) {
-      const t = setTimeout(() => setToast({ show: false, type: '', text: '' }), 4000)
-      return () => clearTimeout(t)
-    }
-  }, [toast.show])
-
-  function showToast(type, text) { setToast({ show: true, type, text }) }
-
-  async function fetchAll() {
+  async function load() {
     setLoading(true)
-    const [accSnap, postSnap, campaignsRes, leadsRes, postsRes] = await Promise.all([
-      supabase.from('analytics_snapshots').select('*').is('post_id', null).order('captured_at'),
-      supabase.from('analytics_snapshots').select('*, posts(id, account_id, caption, post_type, pillar_id, campaign_id, status, content_pillars(name), content_campaigns(name))').not('post_id', 'is', null).order('captured_at'),
+    const ids = selectedIds.length ? selectedIds : ['00000000-0000-0000-0000-000000000000']
+    const platforms = [...new Set(visibleAccounts.map(a => platformOf(a).name.toLowerCase()))]
+    const [snapRes, postsRes, followersRes, campaignsRes, leadsRes] = await Promise.all([
+      supabase.from('analytics_snapshots').select('*').is('post_id', null).in('account_id', ids)
+        .gte('captured_at', prev.start.toISO()).lte('captured_at', range.end.toISO()).order('captured_at'),
+      supabase.from('posts')
+        .select('id, account_id, caption, post_type, posted_at, external_post_url, last_stats, campaign_id, content_pillars(name), content_campaigns(name)')
+        .eq('status', 'posted').eq('is_template', false).in('account_id', ids)
+        .gte('posted_at', prev.start.toISO()).lte('posted_at', range.end.toISO()),
+      supabase.from('analytics_snapshots').select('account_id, follower_count, captured_at').is('post_id', null).in('account_id', ids)
+        .not('follower_count', 'is', null).lte('captured_at', range.end.toISO()).order('captured_at'),
       supabase.from('content_campaigns').select('*'),
-      supabase.from('leads').select('id, classification, is_disqualified, current_stage, scheduled_date, source').ilike('source', '%linkedin%'),
-      supabase.from('posts').select('id, caption, status').eq('status', 'posted'),
+      platforms.length
+        ? supabase.from('leads').select('id, classification, is_disqualified, current_stage, scheduled_date, source, created_at')
+          .or(platforms.map(p => `source.ilike.%${p}%`).join(','))
+          .gte('created_at', range.start.toISO()).lte('created_at', range.end.toISO())
+        : Promise.resolve({ data: [] }),
     ])
-    if (accSnap.data) setAccountSnapshots(accSnap.data)
-    if (postSnap.data) setPostSnapshots(postSnap.data)
-    if (campaignsRes.data) setCampaigns(campaignsRes.data)
-    if (leadsRes.data) setLinkedInLeads(leadsRes.data)
-    if (postsRes.data) setPosts(postsRes.data)
+    setData({ snaps: snapRes.data || [], posts: postsRes.data || [], followers: followersRes.data || [], campaigns: campaignsRes.data || [], leads: leadsRes.data || [] })
+    setBest(await fetchBestTimes(visibleAccounts))
     setLoading(false)
   }
 
-  // Account filter: 'all', or one connected_accounts id (Company Page or a profile).
-  const [accountFilter, setAccountFilter] = useState('all')
-  const [accountOptions, setAccountOptions] = useState([])
-  const [logAccountId, setLogAccountId] = useState('')
-  useEffect(() => {
-    supabase.from('connected_accounts').select('id, account_name, account_type').eq('platform', 'linkedin').order('created_at')
-      .then(({ data }) => {
-        setAccountOptions(data || [])
-        const first = (data || []).find(a => a.account_type === 'organization' && a.status === 'active') || (data || [])[0]
-        setLogAccountId(prev => prev || first?.id || '')
-      })
-  }, [])
+  const inRange = (iso, r) => { const d = DateTime.fromISO(iso); return d >= r.start && d <= r.end }
 
-  const filteredAccountSnapshots = useMemo(() => filterByPeriod(
-    accountFilter === 'all' ? accountSnapshots : accountSnapshots.filter(s => s.account_id === accountFilter),
-    period, 'captured_at'), [accountSnapshots, period, accountFilter])
-  const filteredPostSnapshots = useMemo(() => filterByPeriod(
-    accountFilter === 'all' ? postSnapshots : postSnapshots.filter(s => (s.account_id || s.posts?.account_id) === accountFilter),
-    period, 'captured_at'), [postSnapshots, period, accountFilter])
-
-  const totals = useMemo(() => {
-    const sum = (arr, key) => arr.reduce((s, r) => s + (Number(r[key]) || 0), 0)
-    const totalImpressions = sum(filteredAccountSnapshots, 'impressions')
-    const totalReach = sum(filteredAccountSnapshots, 'reach')
-    const totalReactions = sum(filteredAccountSnapshots, 'reactions')
-    const totalComments = sum(filteredAccountSnapshots, 'comments')
-    const totalShares = sum(filteredAccountSnapshots, 'shares')
-    const totalClicks = sum(filteredAccountSnapshots, 'clicks')
-    const totalVideoViews = sum(filteredAccountSnapshots, 'video_views')
-    const avgEngagementRate = totalImpressions > 0
-      ? (((totalReactions + totalComments + totalShares) / totalImpressions) * 100).toFixed(2)
-      : '0.00'
-
-    const withFollowers = [...filteredAccountSnapshots].filter(s => s.follower_count != null).sort((a, b) => new Date(a.captured_at) - new Date(b.captured_at))
-    const followerGrowth = withFollowers.length >= 2 ? withFollowers[withFollowers.length - 1].follower_count - withFollowers[0].follower_count : 0
-    const currentFollowers = withFollowers.length > 0 ? withFollowers[withFollowers.length - 1].follower_count : null
-
-    return { totalImpressions, totalReach, totalReactions, totalComments, totalShares, totalClicks, totalVideoViews, avgEngagementRate, followerGrowth, currentFollowers }
-  }, [filteredAccountSnapshots])
+  const summary = useMemo(() => {
+    if (!data) return null
+    const sum = (rows, k) => rows.reduce((t, r) => t + num(r[k]), 0)
+    const block = r => {
+      const rows = data.snaps.filter(s => inRange(s.captured_at, r))
+      const impressions = sum(rows, 'impressions')
+      const engagement = rows.reduce((t, s) => t + engagementOf(s), 0)
+      return {
+        impressions, engagement, reach: sum(rows, 'reach'), clicks: sum(rows, 'clicks'), reactions: sum(rows, 'reactions'),
+        comments: sum(rows, 'comments'), shares: sum(rows, 'shares'), videoViews: sum(rows, 'video_views'),
+        rate: impressions ? (engagement / impressions) * 100 : 0,
+        posts: data.posts.filter(p => inRange(p.posted_at, r)).length,
+      }
+    }
+    // Followers: latest per account at a moment, summed.
+    const followersAt = moment => {
+      const latest = {}
+      for (const f of data.followers) if (DateTime.fromISO(f.captured_at) <= moment) latest[f.account_id] = f.follower_count
+      return Object.values(latest).reduce((t, v) => t + v, 0)
+    }
+    return { cur: block(range), prev: block(prev), followers: followersAt(range.end), followersStart: followersAt(range.start), hasFollowers: data.followers.length > 0 }
+  }, [data, range, prev])
 
   const trend = useMemo(() => {
-    const byDate = {}
-    filteredAccountSnapshots.forEach(s => {
-      const d = DateTime.fromISO(s.captured_at).toFormat('d LLL')
-      if (!byDate[d]) byDate[d] = 0
-      byDate[d] += Number(s.impressions) || 0
-    })
-    const entries = Object.entries(byDate).slice(-8)
-    const max = Math.max(...entries.map(([, v]) => v), 1)
-    return { entries, max }
-  }, [filteredAccountSnapshots])
+    if (!data) return { labels: [], series: [] }
+    const days = Math.max(1, Math.ceil(range.end.diff(range.start, 'days').days))
+    const byWeek = days > 60
+    const buckets = new Map()
+    for (let d = range.start.startOf(byWeek ? 'week' : 'day'); d <= range.end; d = d.plus(byWeek ? { weeks: 1 } : { days: 1 })) {
+      buckets.set(d.toISODate(), { impressions: 0, engagement: 0 })
+    }
+    for (const s of data.snaps.filter(s => inRange(s.captured_at, range))) {
+      const key = DateTime.fromISO(s.captured_at).startOf(byWeek ? 'week' : 'day').toISODate()
+      const b = buckets.get(key)
+      if (b) { b.impressions += num(s.impressions); b.engagement += engagementOf(s) }
+    }
+    const keys = [...buckets.keys()]
+    return {
+      labels: keys.map(k => DateTime.fromISO(k).toFormat('d LLL')),
+      series: [
+        { label: 'Impressions', values: keys.map(k => buckets.get(k).impressions), color: '#EC3013' },
+        { label: 'Engagements', values: keys.map(k => buckets.get(k).engagement), color: '#1d4ed8' },
+      ],
+    }
+  }, [data, range])
 
-  function rollupBy(getKey) {
-    const map = new Map()
-    filteredPostSnapshots.forEach(s => {
-      const key = getKey(s.posts)
-      if (!key) return
-      if (!map.has(key)) map.set(key, { name: key, posts: new Set(), impressions: 0, engagement: 0 })
-      const entry = map.get(key)
-      entry.posts.add(s.post_id)
-      entry.impressions += Number(s.impressions) || 0
-      entry.engagement += (Number(s.reactions) || 0) + (Number(s.comments) || 0) + (Number(s.shares) || 0)
+  const periodPosts = useMemo(() => {
+    if (!data) return []
+    return data.posts.filter(p => inRange(p.posted_at, range)).map(p => {
+      const s = p.last_stats || {}
+      const engagement = engagementOf(s)
+      return { ...p, impressions: num(s.impressions), engagement, clicks: num(s.clicks), comments: num(s.comments), rate: num(s.impressions) ? (engagement / num(s.impressions)) * 100 : 0 }
     })
-    return Array.from(map.values()).map(e => ({ name: e.name, posts: e.posts.size, impressions: e.impressions, engagement: e.engagement })).sort((a, b) => b.impressions - a.impressions)
+  }, [data, range])
+
+  const topPosts = useMemo(() => [...periodPosts].sort((a, b) => b[sortBy] - a[sortBy]).slice(0, 10), [periodPosts, sortBy])
+
+  const breakdownRows = useMemo(() => {
+    const keyOf = {
+      format: p => POST_TYPE_LABELS[p.post_type] || p.post_type,
+      pillar: p => p.content_pillars?.name || 'No pillar',
+      campaign: p => p.content_campaigns?.name || 'No campaign',
+      weekday: p => WEEKDAYS[DateTime.fromISO(p.posted_at).weekday],
+      account: p => accountById[p.account_id]?.account_name || 'Unknown',
+    }[breakdown]
+    const map = new Map()
+    for (const p of periodPosts) {
+      const k = keyOf(p)
+      const r = map.get(k) || { name: k, posts: 0, impressions: 0, engagement: 0, clicks: 0 }
+      r.posts++; r.impressions += p.impressions; r.engagement += p.engagement; r.clicks += p.clicks
+      map.set(k, r)
+    }
+    return [...map.values()].map(r => ({ ...r, rate: r.impressions ? (r.engagement / r.impressions) * 100 : 0 }))
+      .sort((a, b) => b.engagement - a.engagement)
+  }, [periodPosts, breakdown, accountById])
+
+  const attribution = useMemo(() => {
+    const leads = data?.leads || []
+    return { total: leads.length, qualified: leads.filter(isQualified).length, calls: leads.filter(l => l.scheduled_date).length }
+  }, [data])
+
+  const goals = useMemo(() => {
+    if (!data) return []
+    const today = DateTime.now().toISODate()
+    return data.campaigns.filter(c => c.target_metric && c.target_value && (!c.end_date || c.end_date >= today)).map(c => {
+      const posts = periodPosts.filter(p => p.campaign_id === c.id)
+      const imp = posts.reduce((t, p) => t + p.impressions, 0)
+      const eng = posts.reduce((t, p) => t + p.engagement, 0)
+      const actual = {
+        impressions: imp,
+        engagement_rate: imp ? Number(((eng / imp) * 100).toFixed(2)) : 0,
+        website_traffic: posts.reduce((t, p) => t + p.clicks, 0),
+        follower_growth: summary ? summary.followers - summary.followersStart : 0,
+        discovery_calls: attribution.calls,
+      }[c.target_metric] || 0
+      return { ...c, actual, pct: Math.min(100, (actual / Number(c.target_value)) * 100) }
+    })
+  }, [data, periodPosts, summary, attribution])
+
+  async function openDrill(p) {
+    const { data: snaps } = await supabase.from('analytics_snapshots').select('*').eq('post_id', p.id).order('captured_at')
+    setDrill({ post: p, snaps: snaps || [] })
   }
 
-  const pillarRollup = useMemo(() => rollupBy(p => p?.content_pillars?.name || 'Uncategorized'), [filteredPostSnapshots])
-  const campaignRollup = useMemo(() => rollupBy(p => p?.content_campaigns?.name || null), [filteredPostSnapshots])
-  const formatRollup = useMemo(() => rollupBy(p => p?.post_type), [filteredPostSnapshots])
-
-  const postDrillDown = useMemo(() => {
-    const map = new Map()
-    postSnapshots.forEach(s => {
-      if (!s.posts) return
-      if (!map.has(s.post_id)) map.set(s.post_id, { post: s.posts, impressions: 0, engagement: 0 })
-      const e = map.get(s.post_id)
-      e.impressions += Number(s.impressions) || 0
-      e.engagement += (Number(s.reactions) || 0) + (Number(s.comments) || 0) + (Number(s.shares) || 0)
+  // ── Manual entry & CSV import ──
+  async function saveLog() {
+    const f = log.fields
+    const accountId = log.post_id
+      ? periodPosts.find(p => p.id === log.post_id)?.account_id || null
+      : (log.account_id || visibleAccounts[0]?.id || null)
+    const { error } = await supabase.from('analytics_snapshots').insert({
+      account_id: accountId, post_id: log.post_id || null, captured_at: new Date(log.date).toISOString(), source: 'manual',
+      impressions: num(f.impressions), reach: num(f.reach), reactions: num(f.reactions), comments: num(f.comments),
+      shares: num(f.shares), clicks: num(f.clicks), video_views: num(f.video_views),
+      follower_count: f.follower_count ? num(f.follower_count) : null,
     })
-    return Array.from(map.values()).sort((a, b) => b.impressions - a.impressions)
-  }, [postSnapshots])
-
-  const pipelineAttribution = useMemo(() => {
-    const total = linkedInLeads.length
-    const qualified = linkedInLeads.filter(isQualified).length
-    const calls = linkedInLeads.filter(l => l.scheduled_date).length
-    return { total, qualified, calls }
-  }, [linkedInLeads])
-
-  function goalActual(campaign) {
-    const relevant = filteredPostSnapshots.filter(s => s.posts?.campaign_id === campaign.id)
-    switch (campaign.target_metric) {
-      case 'impressions': return relevant.reduce((s, r) => s + (Number(r.impressions) || 0), 0)
-      case 'engagement_rate': {
-        const impr = relevant.reduce((s, r) => s + (Number(r.impressions) || 0), 0)
-        const eng = relevant.reduce((s, r) => s + (Number(r.reactions) || 0) + (Number(r.comments) || 0) + (Number(r.shares) || 0), 0)
-        return impr > 0 ? Number(((eng / impr) * 100).toFixed(2)) : 0
-      }
-      case 'website_traffic': return relevant.reduce((s, r) => s + (Number(r.clicks) || 0), 0)
-      case 'follower_growth': return totals.followerGrowth
-      case 'discovery_calls': return pipelineAttribution.calls
-      default: return 0
-    }
-  }
-
-  // ── Manual entry ──
-  async function handleSaveLog() {
-    setSaving(true)
-    const payload = {
-      account_id: null,
-      post_id: logForPostId || null,
-      captured_at: new Date(logDate).toISOString(),
-      source: 'manual',
-      impressions: Number(logFields.impressions) || 0,
-      reach: Number(logFields.reach) || 0,
-      reactions: Number(logFields.reactions) || 0,
-      comments: Number(logFields.comments) || 0,
-      shares: Number(logFields.shares) || 0,
-      clicks: Number(logFields.clicks) || 0,
-      video_views: Number(logFields.video_views) || 0,
-      follower_count: logFields.follower_count ? Number(logFields.follower_count) : null,
-    }
-    // Account-level logs belong to the account chosen in the modal.
-    if (!payload.post_id) payload.account_id = logAccountId || null
-    const { error } = await supabase.from('analytics_snapshots').insert(payload)
-    setSaving(false)
     if (error) { showToast('error', 'Failed to save'); return }
-    showToast('success', 'Analytics logged')
-    setShowLogModal(false)
-    setLogFields(emptyMetrics())
-    setLogForPostId('')
-    fetchAll()
+    setShowLog(false)
+    setLog(l => ({ ...l, post_id: '', fields: emptyMetrics() }))
+    showToast('success', 'Metrics logged')
+    load()
   }
 
-  async function handleCsvImport(e) {
+  async function importCsv(e) {
     const file = e.target.files?.[0]
+    if (csvRef.current) csvRef.current.value = ''
     if (!file) return
-    const buffer = await file.arrayBuffer()
-    const workbook = XLSX.read(buffer, { type: 'array' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
-
-    // A LinkedIn export covers one page: import it into the account picked in the account filter.
-    const account = accountFilter !== 'all'
-      ? accountOptions.find(a => a.id === accountFilter)
-      : accountOptions.length === 1 ? accountOptions[0] : null
-    if (!account) {
-      if (csvInputRef.current) csvInputRef.current.value = ''
-      showToast('error', 'Pick the page this export is for in the account filter, then import again')
-      return
-    }
-
+    if (visibleAccounts.length !== 1) { showToast('error', 'Select exactly one account in the account bar — an export covers one page'); return }
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
     const payload = rows.map(r => {
-      const norm = {}
-      Object.entries(r).forEach(([k, v]) => { norm[String(k).trim().toLowerCase().replace(/\s+/g, '_')] = v })
-      const date = norm.date ? new Date(norm.date) : null
+      const n = {}
+      Object.entries(r).forEach(([k, v]) => { n[String(k).trim().toLowerCase().replace(/\s+/g, '_')] = v })
+      const d = n.date ? new Date(n.date) : null
       return {
-        account_id: account?.id || null,
-        post_id: null,
-        captured_at: date && !isNaN(date.getTime()) ? date.toISOString() : new Date().toISOString(),
-        source: 'csv_import',
-        impressions: Number(norm.impressions) || 0,
-        reach: Number(norm.reach) || 0,
-        reactions: Number(norm.reactions) || 0,
-        comments: Number(norm.comments) || 0,
-        shares: Number(norm.shares) || 0,
-        clicks: Number(norm.clicks) || 0,
-        video_views: Number(norm.video_views) || 0,
-        follower_count: norm.follower_count ? Number(norm.follower_count) : null,
+        account_id: visibleAccounts[0].id, post_id: null, source: 'csv_import',
+        captured_at: d && !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString(),
+        impressions: num(n.impressions), reach: num(n.reach), reactions: num(n.reactions), comments: num(n.comments),
+        shares: num(n.shares), clicks: num(n.clicks), video_views: num(n.video_views), follower_count: n.follower_count ? num(n.follower_count) : null,
       }
     })
-
-    if (payload.length === 0) { showToast('error', 'No rows found in file'); return }
+    if (!payload.length) { showToast('error', 'No rows found in the file'); return }
     const { error } = await supabase.from('analytics_snapshots').insert(payload)
-    if (csvInputRef.current) csvInputRef.current.value = ''
     if (error) { showToast('error', 'Import failed'); return }
-    showToast('success', `Imported ${payload.length} row(s)`)
-    fetchAll()
+    showToast('success', `Imported ${payload.length} row(s) into ${visibleAccounts[0].account_name}`)
+    load()
   }
 
-  async function openDrillDown(entry) {
-    setDrillDownPost(entry.post)
-    const { data } = await supabase.from('analytics_snapshots').select('*').eq('post_id', entry.post.id).order('captured_at')
-    setDrillDownSnapshots(data || [])
+  const periodLabel = `${range.start.toFormat('d LLL yyyy')} – ${range.end.toFormat('d LLL yyyy')}`
+
+  function exportCsvFile() {
+    if (!summary) return
+    const c = summary.cur
+    exportCSV(['Metric', 'This period', 'Previous period'], [
+      ['Period', periodLabel, `${prev.start.toFormat('d LLL yyyy')} – ${prev.end.toFormat('d LLL yyyy')}`],
+      ['Accounts', visibleAccounts.map(a => a.account_name).join('; '), ''],
+      ['Impressions', c.impressions, summary.prev.impressions],
+      ['Engagements', c.engagement, summary.prev.engagement],
+      ['Engagement rate %', c.rate.toFixed(2), summary.prev.rate.toFixed(2)],
+      ['Clicks', c.clicks, summary.prev.clicks],
+      ['Posts published', c.posts, summary.prev.posts],
+      ['Followers', summary.followers, summary.followersStart],
+      [],
+      ['Post', 'Posted', 'Impressions', 'Engagements', 'Rate %', 'Clicks', 'URL'],
+      ...periodPosts.map(p => [p.caption?.slice(0, 80) || '', DateTime.fromISO(p.posted_at).toISODate(), p.impressions, p.engagement, p.rate.toFixed(2), p.clicks, p.external_post_url || '']),
+    ], `SDFM_Social_Analytics_${DateTime.now().toISODate()}`)
   }
 
-  function handleExportCSV() {
-    const headers = ['Metric', 'Value']
-    const rows = [
-      ['Period', getPeriodLabel(period)],
-      ['Impressions', String(totals.totalImpressions)],
-      ['Reach', String(totals.totalReach)],
-      ['Engagement Rate', `${totals.avgEngagementRate}%`],
-      ['Reactions', String(totals.totalReactions)],
-      ['Comments', String(totals.totalComments)],
-      ['Shares', String(totals.totalShares)],
-      ['Clicks', String(totals.totalClicks)],
-      ['Video Views', String(totals.totalVideoViews)],
-      ['Follower Growth', String(totals.followerGrowth)],
-      [''],
-      ['Pillar', 'Posts', 'Impressions', 'Engagement'],
-      ...pillarRollup.map(r => [r.name, String(r.posts), String(r.impressions), String(r.engagement)]),
-    ]
-    exportCSV(headers, rows, `SDFM_LinkedIn_Analytics_${new Date().toISOString().slice(0, 10)}`)
-  }
-
-  function handleExportPDF() {
+  function exportPdfFile() {
+    if (!summary) return
+    const c = summary.cur
+    const m = new Map()
+    for (const p of periodPosts) {
+      const k = p.content_pillars?.name || 'No pillar'
+      const r = m.get(k) || { name: k, posts: 0, impressions: 0, engagement: 0 }
+      r.posts++; r.impressions += p.impressions; r.engagement += p.engagement
+      m.set(k, r)
+    }
     exportSocialAnalyticsPDF({
-      periodLabel: getPeriodLabel(period),
-      totalImpressions: totals.totalImpressions,
-      totalReach: totals.totalReach,
-      avgEngagementRate: totals.avgEngagementRate,
-      totalReactions: totals.totalReactions,
-      totalComments: totals.totalComments,
-      totalShares: totals.totalShares,
-      totalClicks: totals.totalClicks,
-      totalVideoViews: totals.totalVideoViews,
-      followerGrowth: totals.followerGrowth,
-      pillarRollup,
-      leadsFromLinkedIn: pipelineAttribution.total,
-      qualifiedFromLinkedIn: pipelineAttribution.qualified,
-      discoveryCallsFromLinkedIn: pipelineAttribution.calls,
-    }, `SDFM_LinkedIn_Analytics_${new Date().toISOString().slice(0, 10)}`)
-  }
-
-  if (loading) {
-    return (
-      <div>
-        <div className="page-header"><h1 className="page-title">LinkedIn Analytics</h1></div>
-        <div className="dash-stats-row">{[1, 2, 3, 4].map(i => <div key={i} className="skeleton skeleton-card" />)}</div>
-      </div>
-    )
+      title: `Social Media Report — ${visibleAccounts.map(a => a.account_name).join(', ')}`.slice(0, 90),
+      periodLabel,
+      totalImpressions: c.impressions, totalReach: c.reach, avgEngagementRate: c.rate.toFixed(2),
+      totalReactions: c.reactions, totalComments: c.comments, totalShares: c.shares, totalClicks: c.clicks,
+      totalVideoViews: c.videoViews, followerGrowth: summary.followers - summary.followersStart,
+      pillarRollup: [...m.values()],
+      leadsFromLinkedIn: attribution.total, qualifiedFromLinkedIn: attribution.qualified, discoveryCallsFromLinkedIn: attribution.calls,
+    }, `SDFM_Social_Report_${DateTime.now().toISODate()}`)
   }
 
   return (
-    <div>
-      <div className="page-header dash-header">
-        <div>
-          <h1 className="page-title">LinkedIn Analytics</h1>
-          <p className="page-subtitle">Synced hourly from LinkedIn for connected accounts · manual logging and CSV import still work</p>
-        </div>
-        <div className="dash-header-actions">
-          {accountOptions.length > 1 && (
-            <select className="form-input form-input-sm" value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ width: 'auto' }}>
-              <option value="all">All accounts</option>
-              {accountOptions.map(a => <option key={a.id} value={a.id}>{a.account_type === 'member' ? '👤 ' : '🏢 '}{a.account_name}</option>)}
-            </select>
-          )}
-          <PeriodSelector value={period} onChange={setPeriod} />
-          <input ref={csvInputRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleCsvImport} />
-          <button className="btn btn-secondary btn-sm" onClick={() => csvInputRef.current?.click()}>Import CSV</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowLogModal(true)}>Log Metrics</button>
-          <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}>CSV</button>
-          <button className="btn btn-secondary btn-sm" onClick={handleExportPDF}>PDF</button>
-        </div>
-      </div>
-
-      {/* ── Top stats ── */}
-      <div className="dash-stats-row">
-        <div className="stat-card"><div className="stat-label">Impressions</div><div className="stat-value">{totals.totalImpressions.toLocaleString()}</div></div>
-        <div className="stat-card"><div className="stat-label">Reach</div><div className="stat-value">{totals.totalReach.toLocaleString()}</div></div>
-        <div className="stat-card"><div className="stat-label">Engagement Rate</div><div className="stat-value">{totals.avgEngagementRate}%</div></div>
-        <div className="stat-card"><div className="stat-label">Follower Growth</div><div className="stat-value">{totals.followerGrowth >= 0 ? '+' : ''}{totals.followerGrowth}</div></div>
-      </div>
-      <div className="dash-stats-row">
-        <div className="stat-card"><div className="stat-label">Reactions</div><div className="stat-value">{totals.totalReactions.toLocaleString()}</div></div>
-        <div className="stat-card"><div className="stat-label">Comments</div><div className="stat-value">{totals.totalComments.toLocaleString()}</div></div>
-        <div className="stat-card"><div className="stat-label">Shares</div><div className="stat-value">{totals.totalShares.toLocaleString()}</div></div>
-        <div className="stat-card"><div className="stat-label">Link Clicks</div><div className="stat-value">{totals.totalClicks.toLocaleString()}</div></div>
-      </div>
-
-      {/* ── Trend + Pipeline Attribution ── */}
-      <div className="dash-grid-2">
-        <div className="section-card">
-          <div className="section-card-header"><h2 className="section-card-title">Impressions Trend</h2></div>
-          {trend.entries.length === 0 ? (
-            <div className="empty-state"><p className="empty-state-desc">No metrics logged for this period yet.</p></div>
-          ) : (
-            <div className="mkt-bar-chart">
-              {trend.entries.map(([label, value]) => (
-                <div className="mkt-bar-col" key={label}>
-                  <div className="mkt-bar-track"><div className="mkt-bar-fill mkt-bar-total" style={{ height: `${(value / trend.max) * 100}%` }} /></div>
-                  <span className="mkt-bar-label">{label}</span>
-                  <span className="mkt-bar-value">{value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="section-card">
-          <div className="section-card-header"><h2 className="section-card-title">Pipeline Attribution</h2></div>
-          <p className="composer-hint" style={{ marginBottom: 'var(--space-md)' }}>Leads whose source is LinkedIn, from the Sales Pipeline.</p>
-          <div className="sa-attribution-grid">
-            <div><span className="sa-attr-value">{pipelineAttribution.total}</span><span className="sa-attr-label">Leads Sourced</span></div>
-            <div><span className="sa-attr-value">{pipelineAttribution.qualified}</span><span className="sa-attr-label">Qualified</span></div>
-            <div><span className="sa-attr-value">{pipelineAttribution.calls}</span><span className="sa-attr-label">Calls Booked</span></div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Roll-ups ── */}
-      <div className="section-card">
-        <div className="section-card-header"><h2 className="section-card-title">Performance by Content Pillar</h2></div>
-        {pillarRollup.length === 0 ? (
-          <div className="empty-state"><p className="empty-state-desc">No post-level metrics logged yet.</p></div>
-        ) : (
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead><tr><th>Pillar</th><th>Posts</th><th>Impressions</th><th>Engagement</th></tr></thead>
-              <tbody>{pillarRollup.map(r => <tr key={r.name}><td>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td><td>{r.engagement.toLocaleString()}</td></tr>)}</tbody>
-            </table>
-          </div>
+    <div className="analytics-page">
+      <SocialHeader title="Analytics" subtitle={`${periodLabel} · compared with the ${Math.max(1, Math.round(range.end.diff(range.start, 'days').days))} days before`}>
+        <select className="form-input form-input-sm" style={{ width: 'auto' }} value={rangeKey} onChange={e => pickRange(e.target.value)}>
+          {RANGES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+        </select>
+        {rangeKey === 'custom' && (
+          <>
+            <input type="date" className="form-input form-input-sm" style={{ width: 'auto' }} value={custom.start} onChange={e => setCustom(c => ({ ...c, start: e.target.value }))} />
+            <input type="date" className="form-input form-input-sm" style={{ width: 'auto' }} value={custom.end} onChange={e => setCustom(c => ({ ...c, end: e.target.value }))} />
+          </>
         )}
-      </div>
+        <input ref={csvRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={importCsv} />
+        <button className="btn btn-secondary btn-sm" onClick={() => csvRef.current?.click()}>Import CSV</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowLog(true)}>Log metrics</button>
+        <button className="btn btn-secondary btn-sm" onClick={exportCsvFile}>CSV</button>
+        <button className="btn btn-primary btn-sm" onClick={exportPdfFile}>PDF report</button>
+      </SocialHeader>
 
-      <div className="dash-grid-2">
-        <div className="section-card">
-          <div className="section-card-header"><h2 className="section-card-title">By Campaign</h2></div>
-          {campaignRollup.length === 0 ? <div className="empty-state"><p className="empty-state-desc">No campaign data yet.</p></div> : (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead><tr><th>Campaign</th><th>Posts</th><th>Impressions</th></tr></thead>
-                <tbody>{campaignRollup.map(r => <tr key={r.name}><td>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td></tr>)}</tbody>
-              </table>
-            </div>
-          )}
-        </div>
-        <div className="section-card">
-          <div className="section-card-header"><h2 className="section-card-title">By Format</h2></div>
-          {formatRollup.length === 0 ? <div className="empty-state"><p className="empty-state-desc">No format data yet.</p></div> : (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead><tr><th>Format</th><th>Posts</th><th>Impressions</th></tr></thead>
-                <tbody>{formatRollup.map(r => <tr key={r.name}><td style={{ textTransform: 'capitalize' }}>{r.name}</td><td>{r.posts}</td><td>{r.impressions.toLocaleString()}</td></tr>)}</tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      <AccountBar accounts={accounts} selected={selected} onChange={setSelected} />
 
-      {/* ── Goal Tracking ── */}
-      {campaigns.filter(c => c.target_metric && c.target_value).length > 0 && (
-        <div className="section-card">
-          <div className="section-card-header"><h2 className="section-card-title">Goal Tracking</h2></div>
-          <div className="sa-goals-grid">
-            {campaigns.filter(c => c.target_metric && c.target_value).map(c => {
-              const actual = goalActual(c)
-              const pct = Math.min(100, Math.round((actual / c.target_value) * 100))
-              return (
-                <div key={c.id} className="sa-goal-card">
-                  <div className="sa-goal-top"><span>{c.name}</span><span className="composer-hint">{GOAL_LABELS[c.target_metric]}</span></div>
-                  <div className="sa-goal-track"><div className="sa-goal-fill" style={{ width: `${pct}%` }} /></div>
-                  <div className="sa-goal-numbers">{actual.toLocaleString()} / {Number(c.target_value).toLocaleString()} ({pct}%)</div>
-                </div>
-              )
-            })}
+      {loading || !summary ? (
+        <div className="sm-stats">{[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="skeleton skeleton-card" style={{ height: 96 }} />)}</div>
+      ) : (
+        <>
+          <div className="sm-stats">
+            <StatTile label="Followers" value={summary.followers} hint={summary.hasFollowers ? `${summary.followers - summary.followersStart >= 0 ? '+' : ''}${(summary.followers - summary.followersStart).toLocaleString()} in this period` : 'Synced for Company Pages'} />
+            <StatTile label="Impressions" value={summary.cur.impressions} previous={summary.prev.impressions} />
+            <StatTile label="Engagements" value={summary.cur.engagement} previous={summary.prev.engagement} hint="Reactions + comments + shares" />
+            <StatTile label="Engagement rate" value={summary.cur.rate} previous={summary.prev.rate} format={v => `${v.toFixed(2)}%`} />
+            <StatTile label="Clicks" value={summary.cur.clicks} previous={summary.prev.clicks} />
+            <StatTile label="Posts published" value={summary.cur.posts} previous={summary.prev.posts} />
           </div>
-        </div>
-      )}
 
-      {/* ── Post drill-down ── */}
-      <div className="section-card">
-        <div className="section-card-header"><h2 className="section-card-title">Post Performance</h2></div>
-        {postDrillDown.length === 0 ? (
-          <div className="empty-state"><p className="empty-state-desc">No post-level metrics logged yet.</p></div>
-        ) : (
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead><tr><th>Post</th><th>Pillar</th><th>Impressions</th><th>Engagement</th><th></th></tr></thead>
-              <tbody>
-                {postDrillDown.map(e => (
-                  <tr key={e.post.id}>
-                    <td>{(e.post.caption || '').slice(0, 60) || '(No caption)'}</td>
-                    <td>{e.post.content_pillars?.name || '—'}</td>
-                    <td>{e.impressions.toLocaleString()}</td>
-                    <td>{e.engagement.toLocaleString()}</td>
-                    <td><button className="btn btn-secondary btn-sm" onClick={() => openDrillDown(e)}>Details</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="section-card">
+            <div className="section-card-header">
+              <h2 className="section-card-title">Impressions &amp; engagements</h2>
+              <div className="sa-legend"><span style={{ background: '#EC3013' }} />Impressions <span style={{ background: '#1d4ed8' }} />Engagements</div>
+            </div>
+            <TrendChart labels={trend.labels} series={trend.series} />
           </div>
-        )}
-      </div>
 
-      {/* ── Log Metrics Modal ── */}
-      {showLogModal && (
-        <div className="modal-overlay" onClick={() => !saving && setShowLogModal(false)}>
-          <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">Log LinkedIn Metrics</h3>
-            <div className="composer-two-col">
-              <div className="form-group">
-                <label className="form-label">Date</label>
-                <input type="date" className="form-input" value={logDate} onChange={e => setLogDate(e.target.value)} />
+          <div className="sm-grid-2">
+            <div className="section-card">
+              <div className="section-card-header"><h2 className="section-card-title">Best times to post</h2></div>
+              <Heatmap cells={best.cells} valueLabel={v => best.isDefault ? 'recommended' : `${v.toFixed(1)}% avg. engagement`}
+                emptyNote={best.isDefault
+                  ? `Industry best times for your networks. Your own pattern replaces this after ${MIN_POSTS} published posts (${best.sample} so far).`
+                  : `From ${best.sample} published posts: darker = higher average engagement rate.`} />
+            </div>
+            <div className="section-card">
+              <div className="section-card-header"><h2 className="section-card-title">Pipeline attribution</h2></div>
+              <p className="composer-hint">Leads in this period whose source mentions {[...new Set(visibleAccounts.map(a => platformOf(a).name))].join(' or ') || 'a social network'}.</p>
+              <div className="sa-attribution-grid">
+                <div><span className="sa-attr-value">{attribution.total}</span><span className="sa-attr-label">Leads</span></div>
+                <div><span className="sa-attr-value">{attribution.qualified}</span><span className="sa-attr-label">Qualified</span></div>
+                <div><span className="sa-attr-value">{attribution.calls}</span><span className="sa-attr-label">Calls booked</span></div>
               </div>
-              <div className="form-group">
-                <label className="form-label">For a specific post (optional)</label>
-                <select className="form-input" value={logForPostId} onChange={e => setLogForPostId(e.target.value)}>
-                  <option value="">Account-level (whole page)</option>
-                  {posts.map(p => <option key={p.id} value={p.id}>{(p.caption || '').slice(0, 40) || '(No caption)'}</option>)}
-                </select>
-              </div>
-              {!logForPostId && accountOptions.length > 1 && (
-                <div className="form-group">
-                  <label className="form-label">Account</label>
-                  <select className="form-input" value={logAccountId} onChange={e => setLogAccountId(e.target.value)}>
-                    {accountOptions.map(a => <option key={a.id} value={a.id}>{a.account_type === 'member' ? '👤 ' : '🏢 '}{a.account_name}</option>)}
-                  </select>
+              {goals.length > 0 && (
+                <div className="sa-goals">
+                  <h3>Campaign goals</h3>
+                  {goals.map(g => (
+                    <div key={g.id} className="sa-goal">
+                      <div className="sa-goal-head"><span>{g.name}</span><span>{g.actual.toLocaleString()} / {Number(g.target_value).toLocaleString()}</span></div>
+                      <div className="sa-goal-bar"><div style={{ width: `${g.pct}%` }} /></div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-            <div className="sa-log-grid">
-              {METRIC_FIELDS.map(f => (
-                <div className="form-group" key={f.key}>
-                  <label className="form-label">{f.label}</label>
-                  <input type="number" min="0" className="form-input" value={logFields[f.key]} onChange={e => setLogFields(prev => ({ ...prev, [f.key]: e.target.value }))} />
-                </div>
-              ))}
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowLogModal(false)} disabled={saving}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveLog} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-            </div>
           </div>
-        </div>
-      )}
 
-      {/* ── Drill-down modal ── */}
-      {drillDownPost && (
-        <div className="modal-overlay" onClick={() => setDrillDownPost(null)}>
-          <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">{(drillDownPost.caption || '').slice(0, 80) || '(No caption)'}</h3>
-            {drillDownSnapshots.length === 0 ? <p className="modal-subtitle">No snapshots logged.</p> : (
+          <div className="section-card">
+            <div className="section-card-header">
+              <h2 className="section-card-title">Top posts</h2>
+              <div className="sm-tabs">{Object.entries(SORTS).map(([k, l]) => <button key={k} className={`sm-tab ${sortBy === k ? 'active' : ''}`} onClick={() => setSortBy(k)}>{l}</button>)}</div>
+            </div>
+            {topPosts.length === 0 ? <EmptyState title="No published posts in this period">Stats appear within a few hours of publishing.</EmptyState> : (
               <div className="table-scroll">
                 <table className="data-table">
-                  <thead><tr><th>Date</th><th>Impressions</th><th>Reactions</th><th>Comments</th><th>Shares</th><th>Clicks</th></tr></thead>
+                  <thead><tr><th>Post</th><th>Account</th><th>Published</th><th>Impressions</th><th>Engagements</th><th>Rate</th><th>Clicks</th><th></th></tr></thead>
                   <tbody>
-                    {drillDownSnapshots.map(s => (
-                      <tr key={s.id}>
-                        <td>{DateTime.fromISO(s.captured_at).toFormat('d LLL yyyy')}</td>
-                        <td>{s.impressions}</td><td>{s.reactions}</td><td>{s.comments}</td><td>{s.shares}</td><td>{s.clicks}</td>
+                    {topPosts.map(p => (
+                      <tr key={p.id} className="sa-row" onClick={() => openDrill(p)}>
+                        <td className="sa-post-cell">{(p.caption || '(no caption)').slice(0, 80)}<small>{POST_TYPE_LABELS[p.post_type]}</small></td>
+                        <td>{accountById[p.account_id] && <AccountAvatar account={accountById[p.account_id]} size={22} />}</td>
+                        <td>{DateTime.fromISO(p.posted_at).toFormat('d LLL, HH:mm')}</td>
+                        <td>{p.impressions.toLocaleString()}</td>
+                        <td>{p.engagement.toLocaleString()}</td>
+                        <td>{p.rate.toFixed(2)}%</td>
+                        <td>{p.clicks.toLocaleString()}</td>
+                        <td>{p.external_post_url && <a href={p.external_post_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>View</a>}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-            <div className="modal-actions"><button className="btn btn-primary" onClick={() => setDrillDownPost(null)}>Close</button></div>
+          </div>
+
+          <div className="section-card">
+            <div className="section-card-header">
+              <h2 className="section-card-title">What performs</h2>
+              <div className="sm-tabs">
+                {[['format', 'Format'], ['pillar', 'Pillar'], ['campaign', 'Campaign'], ['weekday', 'Weekday'], ['account', 'Account']].map(([k, l]) => (
+                  <button key={k} className={`sm-tab ${breakdown === k ? 'active' : ''}`} onClick={() => setBreakdown(k)}>{l}</button>
+                ))}
+              </div>
+            </div>
+            {breakdownRows.length === 0 ? <EmptyState title="No data yet" /> : (
+              <div className="sa-bars">
+                {breakdownRows.map(r => {
+                  const max = Math.max(...breakdownRows.map(x => x.engagement), 1)
+                  return (
+                    <div key={r.name} className="sa-bar-row">
+                      <span className="sa-bar-name">{r.name}</span>
+                      <span className="sa-bar-track"><span style={{ width: `${(r.engagement / max) * 100}%` }} /></span>
+                      <span className="sa-bar-stats">{r.posts} post{r.posts === 1 ? '' : 's'} · {r.engagement.toLocaleString()} eng. · {r.rate.toFixed(2)}% · {r.impressions.toLocaleString()} impr.</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {drill && (
+        <div className="modal-overlay" onClick={() => setDrill(null)}>
+          <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Post performance</h3>
+            <p className="modal-subtitle">{(drill.post.caption || '').slice(0, 200)}</p>
+            <div className="sm-stats">
+              <StatTile label="Impressions" value={drill.post.impressions} />
+              <StatTile label="Engagements" value={drill.post.engagement} />
+              <StatTile label="Rate" value={drill.post.rate} format={v => `${v.toFixed(2)}%`} />
+              <StatTile label="Clicks" value={drill.post.clicks} />
+            </div>
+            {drill.snaps.length > 1 && (
+              <TrendChart labels={drill.snaps.map(s => DateTime.fromISO(s.captured_at).toFormat('d LLL'))}
+                series={[{ label: 'Impressions', values: drill.snaps.reduce((acc, s) => [...acc, (acc.at(-1) || 0) + num(s.impressions)], []), color: '#EC3013' }]} />
+            )}
+            <div className="modal-actions">
+              {drill.post.external_post_url && <a className="btn btn-secondary" href={drill.post.external_post_url} target="_blank" rel="noopener noreferrer">Open post</a>}
+              <button className="btn btn-primary" onClick={() => setDrill(null)}>Close</button>
+            </div>
           </div>
         </div>
       )}
 
-      {toast.show && <div className={`toast toast-${toast.type}`}>{toast.text}</div>}
+      {showLog && (
+        <div className="modal-overlay" onClick={() => setShowLog(false)}>
+          <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Log metrics</h3>
+            <p className="modal-subtitle">For accounts or numbers the BMS can't sync. Enter the change for that day (not running totals), except followers.</p>
+            <div className="composer-two-col">
+              <div className="form-group"><label className="form-label">Date</label><input type="date" className="form-input" value={log.date} onChange={e => setLog(l => ({ ...l, date: e.target.value }))} /></div>
+              <div className="form-group">
+                <label className="form-label">For</label>
+                <select className="form-input" value={log.post_id || `acc:${log.account_id || visibleAccounts[0]?.id || ''}`}
+                  onChange={e => e.target.value.startsWith('acc:') ? setLog(l => ({ ...l, account_id: e.target.value.slice(4), post_id: '' })) : setLog(l => ({ ...l, post_id: e.target.value }))}>
+                  {visibleAccounts.map(a => <option key={a.id} value={`acc:${a.id}`}>Whole account · {a.account_name}</option>)}
+                  {periodPosts.map(p => <option key={p.id} value={p.id}>Post · {(p.caption || '').slice(0, 40)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="sa-log-grid">
+              {Object.keys(emptyMetrics()).map(k => (
+                <div key={k} className="form-group">
+                  <label className="form-label">{k.replace('_', ' ')}</label>
+                  <input type="number" min="0" className="form-input" value={log.fields[k]} onChange={e => setLog(l => ({ ...l, fields: { ...l.fields, [k]: e.target.value } }))} />
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={() => setShowLog(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveLog}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.text}</div>}
     </div>
   )
 }

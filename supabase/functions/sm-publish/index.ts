@@ -1,5 +1,5 @@
 // Supabase Edge Function: sm-publish
-// Publishes one post to LinkedIn right away — the Content Calendar's
+// Publishes one post right away, on whichever platform its account is on — the Content Calendar's
 // "Retry" (a failed post) and "Publish now" (a scheduled or ready post).
 // Scheduled publishing itself runs in sm-move-to-ready.
 //
@@ -7,11 +7,11 @@
 // Caller must be signed in with access to the Content Calendar.
 //
 // Deploy: supabase functions deploy sm-publish
-// Requires: LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET (+ RESEND_API_KEY, SENDER_EMAIL for alerts)
+// Requires: the platform's secrets (LINKEDIN_CLIENT_ID / _SECRET) + RESEND_API_KEY, SENDER_EMAIL for alerts
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { userHasModule } from '../_shared/access.ts'
-import { claimPosts, countAttempt, publishPost } from '../_shared/linkedinPublish.ts'
+import { claimPosts, countAttempt, isAutomated, publishPost } from '../_shared/publisher.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,8 +62,8 @@ Deno.serve(async (req) => {
     if (account?.account_type === 'member' && account.owner_profile_id !== user.id) {
       return jsonResponse({ success: false, error: 'Only the owner of this LinkedIn profile can publish to it' })
     }
-    if (!account || account.mode !== 'automated' || account.status !== 'active' || !account.external_page_id) {
-      return jsonResponse({ success: false, error: 'This LinkedIn account is not connected for automatic publishing — post it manually' })
+    if (!isAutomated(account)) {
+      return jsonResponse({ success: false, error: 'This account is not connected for automatic publishing — post it manually' })
     }
 
     // A retry starts the upload over, in case the media itself was the problem.

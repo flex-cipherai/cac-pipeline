@@ -26,12 +26,15 @@ import MarketingAnalytics from './pages/MarketingAnalytics'
 import ResetPassword from './pages/ResetPassword'
 import ContentComposer from './pages/social/ContentComposer'
 import ContentLibrary from './pages/social/ContentLibrary'
-import ContentCalendar from './pages/social/ContentCalendar'
+import Planner from './pages/social/Planner'
+import Reports from './pages/social/Reports'
+import LinkInBio from './pages/social/LinkInBio'
+import BioPage from './pages/public/BioPage'
 import BulkScheduler from './pages/social/BulkScheduler'
 import ApprovalQueue from './pages/social/ApprovalQueue'
 import SocialAnalytics from './pages/social/SocialAnalytics'
 import WebsiteAnalytics from './pages/social/WebsiteAnalytics'
-import ActivityInbox from './pages/social/ActivityInbox'
+import Inbox from './pages/social/Inbox'
 
 // Shown to someone whose role has no module switched on in Settings → Permissions.
 function NoAccess() {
@@ -134,12 +137,16 @@ const PROTECTED_ROUTES = [
   { path: '/social/composer', module: 'social_composer', element: <ContentComposer /> },
   { path: '/social/composer/:id', module: 'social_composer', element: <ContentComposer /> },
   { path: '/social/library', module: 'social_library', element: <ContentLibrary /> },
-  { path: '/social/calendar', module: 'social_calendar', element: <ContentCalendar /> },
+  { path: '/social/calendar', module: 'social_calendar', element: <Planner /> },
+  { path: '/social/planner', module: 'social_calendar', element: <Planner /> },
+  { path: '/social/reports', module: 'social_reports', element: <Reports /> },
+  { path: '/social/link-in-bio', module: 'social_links', element: <LinkInBio /> },
   { path: '/social/bulk-schedule', module: 'social_bulk', element: <BulkScheduler /> },
   { path: '/social/approvals', module: 'social_approvals', element: <ApprovalQueue /> },
   { path: '/social/analytics', module: 'social_analytics', element: <SocialAnalytics /> },
   { path: '/social/website-analytics', module: 'website_analytics', element: <WebsiteAnalytics /> },
-  { path: '/social/activity', module: 'social_activity', element: <ActivityInbox /> },
+  { path: '/social/activity', module: 'social_activity', element: <Inbox /> },
+  { path: '/social/inbox', module: 'social_activity', element: <Inbox /> },
 ]
 
 function AppRoutes() {
@@ -150,6 +157,8 @@ function AppRoutes() {
           netlify.toml 301s this path; the route is the fallback for local/dev use. */}
       <Route path="/intake" element={<ExternalRedirect to={BOOKING_URL} />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      {/* Link in Bio — public, no sign-in (served by the bio-page Edge Function) */}
+      <Route path="/l/:slug" element={<BioPage />} />
       <Route
         path="/login"
         element={

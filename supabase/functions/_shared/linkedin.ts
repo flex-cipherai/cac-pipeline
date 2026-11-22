@@ -14,7 +14,7 @@ export const LINKEDIN_API_BASE = 'https://api.linkedin.com/rest'
 // connection. Organization scopes post to and read the Company Page; member
 // scopes post to (and read analytics for) the connecting person's own
 // profile. Comments on member posts need r_member_social_feed, which the app
-// does not have, so those are not synced.
+// does not have, so those are not synced (first comments on them still work).
 export const LINKEDIN_SCOPES = [
   'r_basicprofile',
   'w_member_social',
@@ -22,6 +22,8 @@ export const LINKEDIN_SCOPES = [
   'r_organization_social',
   'r_organization_social_feed',
   'w_organization_social',
+  'w_organization_social_feed', // first comments + inbox replies as the page
+  'w_member_social_feed',       // first comments on profile posts
   'rw_organization_admin',
 ]
 

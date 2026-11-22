@@ -1,0 +1,9 @@
+.rp-list { display: flex; flex-direction: column; gap: var(--space-md); }
+.rp-card { display: flex; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap; }
+.rp-card-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rp-name { font-weight: 700; font-size: var(--text-md); }
+.rp-meta { font-size: var(--text-sm); color: var(--text-secondary); }
+.rp-accounts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rp-actions { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+.rp-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-md); }
+.cp-check { display: flex; gap: 8px; align-items: center; font-size: var(--text-sm); cursor: pointer; margin-bottom: 6px; }

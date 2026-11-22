@@ -115,7 +115,7 @@ export function exportSocialAnalyticsPDF(metrics, filename) {
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(32, 30, 29)
-  doc.text('LinkedIn Performance Report', 14, y)
+  doc.text(metrics.title || 'Social Media Performance Report', 14, y)
   y += 7
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
@@ -182,7 +182,7 @@ export function exportSocialAnalyticsPDF(metrics, filename) {
   autoTable(doc, {
     startY: y,
     body: [
-      ['Leads sourced from LinkedIn', String(metrics.leadsFromLinkedIn)],
+      ['Leads sourced from social', String(metrics.leadsFromLinkedIn)],
       ['Qualified (Hot + Warm)', String(metrics.qualifiedFromLinkedIn)],
       ['Discovery calls booked', String(metrics.discoveryCallsFromLinkedIn)],
     ],

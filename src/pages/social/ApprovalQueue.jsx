@@ -40,13 +40,23 @@ export default function ApprovalQueue() {
 
   async function fetchQueue() {
     setLoading(true)
-    const { data } = await supabase
+    let { data } = await supabase
       .from('posts')
-      .select('*, content_pillars(name), content_campaigns(name), profiles(id, name)')
+      .select('*, content_pillars(name), content_campaigns(name), profiles(id, name), connected_accounts(account_name)')
       .in('status', ['pending_approval', 'changes_requested'])
       .order('created_at', { ascending: true })
 
     if (data) {
+      // One item per post group (a post composed for several accounts); a
+      // decision applies to every account in it.
+      const groups = new Map()
+      for (const p of data) {
+        const key = p.post_group_id || p.id
+        const g = groups.get(key)
+        if (g) g.siblings.push(p)
+        else groups.set(key, { ...p, siblings: [p] })
+      }
+      data = [...groups.values()]
       if (isAdmin) setPending(data.filter(p => p.status === 'pending_approval'))
       setMine(data.filter(p => p.created_by === profile?.id))
     }
@@ -72,7 +82,10 @@ export default function ApprovalQueue() {
       const finalStatus = decisionAction === 'approved'
         ? (decisionPost.scheduled_at ? 'scheduled' : 'draft')
         : decisionAction === 'changes_requested' ? 'changes_requested' : 'draft'
-      await supabase.from('posts').update({ status: finalStatus }).eq('id', decisionPost.id)
+      for (const sib of decisionPost.siblings || [decisionPost]) {
+        const status = decisionAction === 'approved' ? (sib.scheduled_at ? 'scheduled' : 'draft') : finalStatus
+        await supabase.from('posts').update({ status }).eq('id', sib.id)
+      }
 
       await supabase.functions.invoke('sm-notify-event', {
         body: { event: 'approval_decision', post_id: decisionPost.id, actor_id: profile?.id, decision: decisionAction, comment: decisionComment.trim() },
@@ -126,7 +139,7 @@ export default function ApprovalQueue() {
                   <div className="aq-item-main">
                     <div className="aq-item-caption">{captionPreview(post.caption)}</div>
                     <div className="aq-item-meta">
-                      Submitted by {post.profiles?.name || 'Unknown'} · {post.content_pillars?.name || 'No pillar'}
+                      {(post.siblings || [post]).map(p => p.connected_accounts?.account_name).filter(Boolean).join(', ') || 'No account'} · Submitted by {post.profiles?.name || 'Unknown'} · {post.content_pillars?.name || 'No pillar'}
                       {post.scheduled_at && ` · Scheduled for ${DateTime.fromISO(post.scheduled_at).toFormat('d LLL, HH:mm')}`}
                     </div>
                   </div>
