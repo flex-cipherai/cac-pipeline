@@ -222,18 +222,34 @@ Setup:
 
 ### Website Analytics (`/social/website-analytics`)
 
-Answers three questions in one place: **How are people finding us? What are they doing on the website? Are they turning into qualified leads?** It combines first-party website tracking, Lead Intake Form funnel analytics, Google Search Console (SEO) and lead conversion data.
+A Plausible / Fathom-style dashboard for sdfmgroup.com built on our own first-party tracker and Google Search Console. Access follows **Settings → Permissions** (module `website_analytics`).
+
+**What the page shows**
+
+- **Controls:** period (today, yesterday, 7 / 30 / 90 days, this month, last month, 12 months, all time, custom range) and comparison (previous period, same period last year, or none). Today and yesterday are hourly; 12 months and all time are monthly. Days are bucketed in the team time zone.
+- **Filters:** click any row (channel, source, referrer, campaign, page, entry page, exit page, country, language, hostname, device, browser, OS, goal) to filter the whole page by it. Filters stack as chips and, with the period, comparison and tab, live in the URL, so a view can be bookmarked or shared.
+- **Overview:** eight headline KPIs with the change vs the comparison period (unique visitors, visits, pageviews, views per visit, bounce rate, visit duration, conversions, conversion rate). Click a KPI to chart it; the comparison period is drawn as a dashed line. Below: top sources (channels / sources / referrers / UTM campaigns), top pages (pages / entry pages / exit pages), locations (countries / languages / hostnames), devices (device / browser / OS), goals and raw events. "View all" opens the full, searchable list.
+- **Goals & funnels:** every goal with uniques, completions, conversion rate and change; three funnels (book a call, automation scoper, custom-build request) with step-to-step conversion and the biggest drop flagged; lead quality (leads credited to their first visit, hot/warm, tracked share); and the booking journey detail (contact routes, CTA placements, booking follow-up, booking errors, recent lead journeys).
+- **Search Console:** clicks, impressions, CTR and average position with changes, a daily chart (position axis inverted), queries / pages / opportunities ("striking distance": position 4–20 with ≥10 impressions), countries and devices. Clicking a query or page filters the tab; pages show our own organic visits and conversions next to Google's numbers. Sync status, last sync and the data lag are shown on top.
+
+**Definitions**
+
+- *Visitor* = the consented visitor id, otherwise the session (no cookie without consent), so unique visitors can be over-counted for people who reject cookies. *Visit* = a tracker session.
+- *Bounce* = one page, under 10 seconds engaged, and no other interaction. *Visit duration* = engaged time (tab in focus).
+- *Goals* (`wa_event_goal()` in SQL, `GOALS` in `src/pages/social/waUtils.js`): booked a call (`form_submit`), left details on the booking page (`form_lead_captured`), scoper started / got a report / asked to be contacted (`gap_check_start`, `gap_check_report`, `gap_check_contact`), custom-build request, industry enquiry and contact form (`lead_form_submit` by `offer`), and WhatsApp, phone and email clicks. *Conversion* = a visit that completed any goal except "scoper started".
+- *Funnels* count the furthest step a visit reached, so each step implies the earlier ones.
+- *Country* comes from the browser's time zone (`wa_tz_country()`); no IP is stored. Localhost visits are excluded.
+- Each lead is credited to the **first** tracker session that carried it (the reminder email reopens `/book` in a new session).
 
 **How it fits together**
 
 - `public/sdfm-tracker.js` is a small first-party script, installed on every page of `sdfmgroup.com` (including `/book`). It records pageviews, time on page, scroll depth, link/button clicks (labels only), outbound links, downloads and site form submissions, and sends them in batches to the `track_web_batch` database function.
 - The whole visitor journey is on one domain, so no session hand-off is needed: a lead is credited to how the visit **first** arrived (channel, source, campaign, landing page).
 - The booking page (`/book`, `cac-website/js/book.js`) reports `form_view`, `form_start`, `form_step_view` / `form_step_complete` (step 1 details, 2 time, 3 booked), `form_lead_captured`, `form_slot_selected`, `form_submit`, `form_error` (with a `stage`), `form_resume`, `form_answer`, `prep_view`, `prep_complete`, `prep_skip` and a `download_ics` click. No name, email or phone is ever sent; the lead id is sent only to link the visit to the lead it produced.
-- Call-to-action buttons on the site carry `data-sdfm-cta` and a `data-sdfm-label` naming their placement (`hero_book`, `contact_whatsapp`, ...). `CTA_PLACEMENTS` in `WebsiteAnalytics.jsx` maps those labels to readable names; add an entry when you add a CTA. The route (book / WhatsApp / phone / email) is derived from the link target.
-- Reports are computed in Postgres (`web_analytics_*`, `seo_overview`), not in the browser. Details saved, booked, prep answered and "qualified" are read from the real `leads` rows (qualified = hot or warm and not disqualified), never from client events.
-- Each lead is credited to the **first** tracker session that carried it. The reminder email reopens `/book` in a new tab (a new session), so without this the same lead would be counted twice. Those return visits are reported under "Reminder follow-up" and are left out of the funnel.
+- Call-to-action buttons on the site carry `data-sdfm-cta` and a `data-sdfm-label` naming their placement (`hero_book`, `contact_whatsapp`, ...). `CTA_PLACEMENTS` in `src/pages/social/waPlacements.js` maps those labels to readable names; add an entry when you add a CTA. The route (book / WhatsApp / phone / email) is derived from the link target.
+- Reports are computed in Postgres, not in the browser: `web_analytics_report(from, to, tz, filters, interval, compact)` and `seo_report(from, to, filters)` (`supabase/migration-website-analytics-v2.sql`) feed the page; `web_analytics_conversion` still feeds the booking-journey detail, and the older `web_analytics_*` / `seo_overview` functions stay for other callers. Details saved, booked, prep answered and "qualified" are read from the real `leads` rows (qualified = hot or warm and not disqualified), never from client events.
 - WhatsApp, phone and email contacts happen outside the site, so they appear only as clicks ("How visitors choose to get in touch"), never as leads. The page flags visits that went that way and did not book: their conversations live in the WhatsApp inbox and call log.
-- `sm-gsc-sync` pulls Search Console queries, pages, countries and devices into `seo_*` tables daily. Search pages are joined to the tracker, showing for each page how many organic visits landed there and how many became leads.
+- `sm-gsc-sync` pulls Search Console queries, pages, countries and devices into `seo_*` tables. A pg_cron job (`wa-gsc-sync`, 02:30 UTC daily) calls it with the anon key and `{"days": 10}`: Search Console lags 2–3 days and revises recent days, so each run re-syncs a rolling 10-day window ending two days ago (rows are upserted). Anon-key calls are throttled to once per 6 hours and capped at 30 days; signed-in users with Website Analytics access can press **Sync now** (once a minute). Search pages are joined to the tracker, showing for each page how many organic visits landed there and how many became leads.
 
 **Privacy (hybrid consent)**
 
@@ -244,18 +260,18 @@ Answers three questions in one place: **How are people finding us? What are they
 
 **Setup (in this order)**
 
-1. **Database first.** In the Supabase SQL Editor run, in order and each safe to re-run: `supabase/migration-website-analytics.sql`, then (after the booking flow migrations below) `migration-booking-flow-analytics.sql`, then `migration-website-analytics-booking-journey.sql`. The app tolerates the last one not having run yet: the booking-journey sections stay hidden and a note says so.
+1. **Database first.** Run, in order and each safe to re-run (`supabase db query --linked -f <file>`): `supabase/migration-website-analytics.sql`, then (after the booking flow migrations) `migration-booking-flow-analytics.sql`, `migration-website-analytics-booking-journey.sql`, and `migration-website-analytics-v2.sql` (the report functions the page uses; functions only, no data changes).
 2. **Deploy the app.** Netlify serves `/sdfm-tracker.js` with the rest of the app, and `sdfmgroup.com` loads it from there.
-3. **Install on the marketing site.** Open Website Analytics → **Install tracker** and paste the snippet before `</head>` on every page of sdfmgroup.com.
+3. **Install on the marketing site.** Open Website Analytics → **Tracker** and paste the snippet before `</head>` on every page of sdfmgroup.com.
 4. **Exclude your own traffic.** On each browser used by staff, open any tracked page once with `?sdfm_ignore=1` (for example `https://sdfmgroup.com/?sdfm_ignore=1`). `?sdfm_ignore=0` turns tracking back on.
 5. **Search Console (SEO tab).**
    1. In Google Cloud, enable the **Google Search Console API**, create a **service account** and download a JSON key. (A service account is used instead of OAuth: no consent screen, and no refresh token that expires.)
    2. In Search Console → Settings → Users and permissions, add the service account's email (`client_email` in the key) as a user. **Restricted** is enough.
    3. Set the secret. The key may be pasted as JSON or base64 (base64 avoids newline problems in shells). In PowerShell: `supabase secrets set GSC_SERVICE_ACCOUNT_JSON=([Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json")))`
-   4. `supabase functions deploy sm-gsc-sync`
+   4. `supabase functions deploy sm-gsc-sync --no-verify-jwt --use-api`
    5. In **Settings → Integrations → Google Search Console**, enter the property exactly as Search Console lists it (`sc-domain:sdfmgroup.com` or `https://sdfmgroup.com/`) and press **Verify access**.
-   6. In Website Analytics → Search (SEO), press **Sync now**. The first sync backfills 90 days; later syncs refresh the last 7.
-   7. Replace `YOUR_PROJECT_URL` / `YOUR_ANON_KEY` in `supabase/migration-website-analytics-cron.sql` and run it to schedule the daily sync and a weekly purge of raw tracking data older than 760 days.
+   6. In Website Analytics → Search Console, press **Sync now**. The first sync backfills 90 days; later manual syncs refresh the last 7.
+   7. Schedule the daily sync: substitute `YOUR_PROJECT_URL` / `YOUR_ANON_KEY` into a scratch copy of `supabase/migration-website-analytics-gsc-cron.sql` (never commit the real values) and run it. `migration-website-analytics-cron.sql` separately schedules an optional weekly purge of raw tracking data older than 760 days.
 
 Search Console data lags about two days, and Google omits very rare queries, so query rows add up to slightly less than the site totals.
 

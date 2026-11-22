@@ -10,8 +10,12 @@
 //
 // Callers
 //   - pg_cron, daily, using the public anon key (see
-//     migration-website-analytics-cron.sql). Throttled to once per 6 hours so
-//     the public anon key cannot be used to hammer the Google API.
+//     migration-website-analytics-gsc-cron.sql), body { "days": 10 }: Search
+//     Console lags 2–3 days and revises recent days, so each run re-pulls a
+//     rolling 10-day window. Throttled to once per 6 hours and capped at
+//     MAX_DAYS_ANON so the public anon key cannot be used to hammer the
+//     Google API. The anon key carries no user, so the caller is treated as
+//     the cron job. Deploy with --no-verify-jwt like the other cron functions.
 //   - Signed-in admin/marketing users via the "Sync now" button (throttled to
 //     once per minute).
 //
@@ -24,7 +28,7 @@
 //   4. Settings → Integrations in the app: enter the property
 //      (e.g. sc-domain:sdfmgroup.com or https://sdfmgroup.com/).
 //
-// Deploy: supabase functions deploy sm-gsc-sync
+// Deploy: supabase functions deploy sm-gsc-sync --no-verify-jwt --use-api
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { userHasModule } from '../_shared/access.ts'
@@ -47,6 +51,7 @@ const MIN_INTERVAL_CRON_MS = 6 * 60 * 60 * 1000
 const INITIAL_BACKFILL_DAYS = 90
 const DEFAULT_DAYS = 7
 const MAX_DAYS = 480
+const MAX_DAYS_ANON = 30
 const UPSERT_CHUNK = 1000
 
 // deno-lint-ignore no-explicit-any
@@ -125,7 +130,7 @@ Deno.serve(async (req) => {
 
     const { count: existing } = await adminClient.from('seo_daily').select('date', { count: 'exact', head: true })
     const requested = Number(body.days)
-    const days = Math.min(MAX_DAYS, Number.isFinite(requested) && requested > 0
+    const days = Math.min(isTeamMember ? MAX_DAYS : MAX_DAYS_ANON, Number.isFinite(requested) && requested > 0
       ? Math.floor(requested)
       : (existing ? DEFAULT_DAYS : INITIAL_BACKFILL_DAYS))
     const { startDate, endDate } = syncRange(days)

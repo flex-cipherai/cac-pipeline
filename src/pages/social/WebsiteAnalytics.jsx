@@ -1,101 +1,36 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { DateTime } from 'luxon'
 import { supabase } from '../../lib/supabase'
 import { exportCSV } from '../../lib/exportUtils'
-import { QUALIFICATION_QUESTIONS } from '../../lib/scoring'
 import { getTrackerSnippet } from '../../lib/analytics'
-import PeriodSelector, { getPeriodLabel } from '../../components/PeriodSelector/PeriodSelector'
-import '../Dashboard.css'
-import '../MarketingAnalytics.css'
-import './SocialAnalytics.css'
+import WaChart from './WaChart'
+import { CTA_PLACEMENTS } from './waPlacements'
+import {
+  DEFAULT_TZ, PERIODS, COMPARE, FILTERS, GOALS, FUNNELS, METRICS, SEO_METRICS,
+  num, fmtValue, fmtMinutes, pctOf, change, resolveRange, fillSeries,
+  countryInfo, languageName, filterValueLabel,
+} from './waUtils'
 import './WebsiteAnalytics.css'
 
-// Website Analytics answers three questions, in this order:
-//   1. How are people finding us?            -> Acquisition + Search (SEO) tabs
-//   2. What are they doing on the website?   -> Behavior tab
-//   3. Are they becoming qualified leads?    -> Conversion tab
-// All aggregation happens in Postgres (web_analytics_* / seo_overview RPCs):
-// PostgREST silently caps responses at 1,000 rows, which would make
-// event-level reports wrong if we summed them in the browser.
+// Website Analytics, modelled on Plausible / Fathom / GA4:
+//   Overview          headline KPIs with deltas, one trend chart (click a KPI to
+//                     switch metric), sources, pages, locations, devices, goals
+//   Goals & funnels   every goal, three funnels, lead quality, booking journey
+//   Search Console    clicks, impressions, CTR, position, queries, pages
+// Click any row to filter the whole page by it; filters, period, comparison and
+// tab live in the URL so a view can be shared or bookmarked.
+// All aggregation happens in Postgres (web_analytics_report / seo_report in
+// supabase/migration-website-analytics-v2.sql).
 
 const TABS = [
-  { key: 'acquisition', label: 'Acquisition' },
-  { key: 'seo', label: 'Search (SEO)' },
-  { key: 'behavior', label: 'Behavior' },
-  { key: 'conversion', label: 'Conversion' },
+  { key: 'overview', label: 'Overview' },
+  { key: 'goals', label: 'Goals & funnels' },
+  { key: 'search', label: 'Search Console' },
 ]
 
-const PRESETS = [
-  { key: '7d', label: '7 days', days: 7 },
-  { key: '30d', label: '30 days', days: 30 },
-  { key: '90d', label: '90 days', days: 90 },
-  { key: 'month', label: 'Month' },
-  { key: 'custom', label: 'Custom' },
-  { key: 'all', label: 'All time' },
-]
+const METHODS = { book: 'Book on the site', whatsapp: 'WhatsApp', phone: 'Phone call', email: 'Email' }
 
-const FUNNEL_STEPS = [
-  { key: 'sessions', label: 'Website sessions' },
-  { key: 'viewed_form', label: 'Opened the booking page' },
-  { key: 'started_form', label: 'Started filling it in' },
-  { key: 'contact_done', label: 'Saved contact details — lead created' },
-  { key: 'picked_slot', label: 'Picked a call time' },
-  { key: 'submitted', label: 'Booked the call' },
-  { key: 'prep_done', label: 'Answered the prep questions (optional)' },
-  { key: 'qualified', label: 'Hot or warm lead' },
-]
-
-const STEP_LABELS = { 1: 'Contact details', 2: 'Pick a time', 3: 'Booked' }
-
-// The ways a visitor can get in touch. Only "book" ends up in the leads table;
-// the other three happen outside the site, so they are tracked as clicks only.
-const METHODS = [
-  { key: 'book', label: 'Book on the site' },
-  { key: 'whatsapp', label: 'WhatsApp' },
-  { key: 'phone', label: 'Phone call' },
-  { key: 'email', label: 'Email' },
-]
-
-// Where each call-to-action sits, from data-sdfm-label in sdfmgroup.com's markup.
-// A label not listed here (a CTA added later) is shown as written.
-const CTA_PLACEMENTS = {
-  nav_book: 'Top navigation',
-  hero_book: 'Hero', hero_whatsapp: 'Hero',
-  offer_book: 'Offer section', offer_whatsapp: 'Offer section',
-  contact_book: 'Contact section', contact_whatsapp: 'Contact section', contact_phone: 'Contact section', contact_email: 'Contact section',
-  footer_book: 'Footer', footer_whatsapp: 'Footer', footer_phone: 'Footer', footer_email: 'Footer',
-  mobile_book: 'Mobile action bar', mobile_whatsapp: 'Mobile action bar',
-  services_book: 'Services page', services_whatsapp: 'Services page', services_phone: 'Services page', services_email: 'Services page',
-  process_book: 'How it works page', process_whatsapp: 'How it works page', process_phone: 'How it works page', process_email: 'How it works page',
-  faq_book: 'FAQ page', faq_whatsapp: 'FAQ page', faq_phone: 'FAQ page', faq_email: 'FAQ page',
-  contactpage_book: 'Contact page', contactpage_whatsapp: 'Contact page', contactpage_phone: 'Contact page', contactpage_email: 'Contact page',
-  privacy_book: 'Privacy policy page', privacy_whatsapp: 'Privacy policy page', privacy_phone: 'Privacy policy page', privacy_email: 'Privacy policy page',
-  notfound_book: '404 page',
-  // Four-path site (2026-10-18)
-  nav_contact: 'Top navigation · Contact us',
-  hero_assessment: 'Home hero · Book an assessment', hero_guide: 'Home hero · Free guide', hero_industry: 'Home hero · Industry solutions',
-  paths_assessment: 'Home path tabs · Assessment', paths_guide: 'Home path tabs · Guide',
-  paths_industry: 'Home path tabs · Industry', paths_custom: 'Home path tabs · Custom builds',
-  assessment_start: 'Assessment page · Request button', guide_start: 'Guide page · Send button',
-  industry_start: 'Industry page · See systems', custom_start: 'Custom builds page · Request button',
-  product_demo: 'Industry page · Request a demo',
-  mobile_start: 'Mobile action bar · Page button',
-  thanks_guide_download: 'Thank-you page · Guide download',
-  notfound_assessment: '404 page · Assessment',
-  book_nav_whatsapp: 'Booking page · header',
-  book_side_whatsapp: 'Booking page · sidebar', book_side_phone: 'Booking page · sidebar', book_side_email: 'Booking page · sidebar',
-  book_empty_whatsapp: 'Booking page · no times open',
-  book_done_whatsapp: 'Booking page · after booking',
-  book_message_whatsapp: 'Booking page · error screen',
-  download_ics: 'Booking page · add to calendar',
-  // Free automation scoper (2026-10-21)
-  hero_gapcheck: 'Home hero · Automation scoper', paths_gapcheck: 'Home path tabs · Automation scoper', assessment_gapcheck: 'Assessment page · Automation scoper link',
-  gapcheck_start: 'Automation scoper · Start button', gapcheck_report_pdf: 'Automation scoper report · Download PDF',
-  gapcheck_report_assessment: 'Automation scoper report · Full assessment', gapcheck_report_contact: 'Automation scoper report · Contact page',
-  gapcheck_report_whatsapp: 'Automation scoper report',
-}
-
-// What the booking page reports as form_error.stage.
 const ERROR_STAGES = {
   start: 'Contact details could not be saved',
   slot_taken: 'Chosen time was taken by someone else',
@@ -104,213 +39,246 @@ const ERROR_STAGES = {
   already_booked: 'Already had a call booked',
 }
 
-const DEFAULT_TZ = 'Africa/Nairobi'
-
-// ── formatting helpers ──
-const num = n => Number(n || 0).toLocaleString()
-const pct = (a, b, digits = 1) => (b > 0 ? `${((a / b) * 100).toFixed(digits).replace(/\.0$/, '')}%` : '—')
-const ratio = (a, b) => (b > 0 ? a / b : 0)
-
-function fmtDuration(seconds) {
-  const s = Math.round(Number(seconds) || 0)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  return `${m}m ${String(s % 60).padStart(2, '0')}s`
-}
-
-function fmtMinutes(minutes) {
-  const m = Math.round(Number(minutes) || 0)
-  if (m < 60) return `${m} min`
-  if (m < 60 * 48) return `${Math.round(m / 6) / 10} h`
-  return `${Math.round(m / 144) / 10} days`
-}
-
-const methodLabel = key => METHODS.find(m => m.key === key)?.label || key
 const placementLabel = label => CTA_PLACEMENTS[label] || label
-// "Hero · WhatsApp": the placement alone is ambiguous where one spot holds two buttons.
-const placementWithRoute = label => {
-  const route = /_(book|whatsapp|phone|email)$/.exec(label)?.[1]
-  return route && CTA_PLACEMENTS[label] ? `${CTA_PLACEMENTS[label]} · ${methodLabel(route)}` : placementLabel(label)
+
+function missingFunction(err) {
+  return err && (err.code === 'PGRST202' || /could not find the function/i.test(err.message || ''))
 }
 
-function toDateStr(d) {
-  return DateTime.fromJSDate(d).toFormat('yyyy-MM-dd')
-}
+// ── small pieces ──────────────────────────────────────────────────────────────
 
-// Turns the range picker state into query bounds. `to` is exclusive for the
-// timestamp RPCs; `toDate` is inclusive for the SEO (date) RPC. `prev` is the
-// equal-length window just before, for period-over-period deltas.
-function resolveRange(range, tz = DEFAULT_TZ) {
-  const now = new Date()
-  if (range.preset === 'all') {
-    return { from: null, to: null, fromDate: null, toDate: null, prev: null, label: 'All Time' }
-  }
-  if (range.preset === 'custom') {
-    // Whole days in the team time zone, the same zone the RPCs bucket days in.
-    // Both ends are inclusive; an empty `to` means a single day.
-    const start = DateTime.fromISO(range.custom.from, { zone: tz }).startOf('day')
-    const last = DateTime.fromISO(range.custom.to || range.custom.from, { zone: tz }).startOf('day')
-    if (start.isValid && last.isValid && last >= start) {
-      const end = last.plus({ days: 1 })
-      const days = Math.round(end.diff(start, 'days').days)
-      return {
-        from: start.toJSDate(), to: end.toJSDate(),
-        fromDate: start.toISODate(), toDate: last.toISODate(),
-        prev: { from: start.minus({ days }).toJSDate(), to: start.toJSDate() },
-        label: days === 1
-          ? start.toFormat('ccc d LLL yyyy')
-          : `${start.toFormat(start.year === last.year ? 'd LLL' : 'd LLL yyyy')} – ${last.toFormat('d LLL yyyy')}`,
-      }
-    }
-    // An unusable custom range (cleared input) falls back to the default window below.
-    range = { ...range, preset: '30d' }
-  }
-  if (range.preset === 'month') {
-    const from = new Date(range.month.year, range.month.month, 1)
-    const to = new Date(range.month.year, range.month.month + 1, 1)
-    const prevFrom = new Date(range.month.year, range.month.month - 1, 1)
-    return {
-      from, to,
-      fromDate: toDateStr(from), toDate: toDateStr(new Date(to.getTime() - 86400000)),
-      prev: { from: prevFrom, to: from },
-      label: getPeriodLabel({ mode: 'month', ...range.month }),
-    }
-  }
-  const days = PRESETS.find(p => p.key === range.preset)?.days || 30
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const from = new Date(startOfToday.getTime() - (days - 1) * 86400000)
-  const to = new Date(startOfToday.getTime() + 86400000)
-  return {
-    from, to,
-    fromDate: toDateStr(from), toDate: toDateStr(startOfToday),
-    prev: { from: new Date(from.getTime() - days * 86400000), to: from },
-    label: `Last ${days} days`,
-  }
-}
-
-// Fill gaps and bucket a sparse daily series into at most ~30 bars.
-function bucketSeries(points, valueKeys, dateKey = 'day') {
-  if (!points || points.length === 0) return []
-  const byDay = new Map(points.map(p => [p[dateKey], p]))
-  const first = DateTime.fromISO(points[0][dateKey])
-  const last = DateTime.fromISO(points[points.length - 1][dateKey])
-  const spanDays = Math.max(1, Math.round(last.diff(first, 'days').days) + 1)
-  const unit = spanDays > 400 ? 'month' : spanDays > 60 ? 'week' : 'day'
-
-  const buckets = new Map()
-  for (let i = 0; i < spanDays; i++) {
-    const d = first.plus({ days: i })
-    const start = unit === 'month' ? d.startOf('month') : unit === 'week' ? d.startOf('week') : d
-    const key = start.toISODate()
-    if (!buckets.has(key)) {
-      const label = unit === 'month' ? start.toFormat('LLL yy') : start.toFormat('d LLL')
-      buckets.set(key, { key, label, ...Object.fromEntries(valueKeys.map(k => [k, 0])) })
-    }
-    const row = byDay.get(d.toISODate())
-    if (row) valueKeys.forEach(k => { buckets.get(key)[k] += Number(row[k]) || 0 })
-  }
-  return Array.from(buckets.values()).slice(-30)
-}
-
-function pctChange(cur, prev) {
-  if (prev == null) return null
-  if (prev === 0) return cur > 0 ? 100 : 0
-  return ((cur - prev) / prev) * 100
-}
-
-// ── small presentational pieces ──
-function Delta({ cur, prev, invert = false }) {
-  const change = pctChange(Number(cur) || 0, prev == null ? null : Number(prev) || 0)
-  if (change == null) return null
-  const rounded = Math.round(change)
-  if (rounded === 0) return <span className="wa-delta wa-delta-flat">no change</span>
-  const good = invert ? rounded < 0 : rounded > 0
+// Counts compare as % change; rates compare as percentage points.
+function Delta({ cur, prev, fmt, invert = false, small = false }) {
+  if (prev == null || cur == null) return null
+  const isRate = fmt === 'pct' || fmt === 'pct2'
+  const diff = isRate ? Number(cur) - Number(prev) : change(cur, prev)
+  if (diff == null) return <span className={`wa-delta wa-delta-new ${small ? 'sm' : ''}`}>new</span>
+  const rounded = Math.round(Math.abs(diff) * (isRate ? 10 : 1)) / (isRate ? 10 : 1)
+  if (rounded === 0) return <span className={`wa-delta wa-delta-flat ${small ? 'sm' : ''}`}>0{isRate ? ' pts' : '%'}</span>
+  const up = diff > 0
+  const good = invert ? !up : up
   return (
-    <span className={`wa-delta ${good ? 'wa-delta-up' : 'wa-delta-down'}`} title="vs the previous period">
-      {rounded > 0 ? '▲' : '▼'} {Math.abs(rounded)}%
+    <span className={`wa-delta ${good ? 'wa-delta-good' : 'wa-delta-bad'} ${small ? 'sm' : ''}`} title={`Previous: ${fmtValue(prev, fmt)}`}>
+      <span aria-hidden="true">{up ? '↑' : '↓'}</span>
+      <span className="sr-only">{up ? 'up' : 'down'}</span>
+      {rounded.toLocaleString('en-US')}{isRate ? ' pts' : '%'}
     </span>
   )
 }
 
-function Stat({ label, value, sub, delta }) {
+function KpiGrid({ metrics, kpis, prevKpis, selected, onSelect, cols = 4 }) {
   return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      {(sub || delta) && <div className="wa-stat-sub">{delta}{sub && <span>{sub}</span>}</div>}
-    </div>
-  )
-}
-
-function Empty({ children }) {
-  return <div className="empty-state"><p className="empty-state-desc">{children}</p></div>
-}
-
-function BarList({ rows, valueKey = 'sessions', labelKey = 'name', max, suffix, format = num }) {
-  if (!rows || rows.length === 0) return <Empty>No data in this period yet.</Empty>
-  const top = max ?? Math.max(...rows.map(r => Number(r[valueKey]) || 0), 1)
-  return (
-    <div className="wa-barlist">
-      {rows.map((r, i) => (
-        <div className="wa-barlist-row" key={`${r[labelKey]}-${i}`}>
-          <span className="wa-barlist-label" title={r[labelKey]}>{r[labelKey]}</span>
-          <div className="wa-barlist-track"><div className="wa-barlist-fill" style={{ width: `${(Number(r[valueKey]) / top) * 100}%` }} /></div>
-          <span className="wa-barlist-value">{format(r[valueKey])}{suffix}</span>
-        </div>
+    <div className={`wa-kpis wa-kpis-${cols}`} role="tablist" aria-label="Choose the metric for the chart">
+      {metrics.map(m => (
+        <button
+          key={m.key} type="button" role="tab" aria-selected={selected === m.key}
+          className={`wa-kpi ${selected === m.key ? 'active' : ''}`}
+          onClick={() => onSelect(m.key)}
+        >
+          <span className="wa-kpi-label">{m.label}</span>
+          <span className="wa-kpi-value">{fmtValue(kpis?.[m.key], m.fmt)}</span>
+          <span className="wa-kpi-foot">
+            {prevKpis ? <Delta cur={kpis?.[m.key]} prev={prevKpis?.[m.key]} fmt={m.fmt} invert={m.invert} /> : <span className="wa-muted">&nbsp;</span>}
+          </span>
+        </button>
       ))}
     </div>
   )
 }
 
-function TrendChart({ points, series, emptyText = 'No data in this period yet.' }) {
-  if (!points || points.length === 0) return <Empty>{emptyText}</Empty>
-  const max = Math.max(...points.map(p => Math.max(...series.map(s => p[s.key] || 0))), 1)
+function Card({ title, hint, actions, children, className = '' }) {
   return (
-    <>
-      <div className="mkt-bar-chart">
-        {points.map(p => (
-          <div className="mkt-bar-col" key={p.key}>
-            <div className="mkt-bar-track">
-              {series.map(s => (
-                <div key={s.key} className={`mkt-bar-fill ${s.className}`} style={{ height: `${((p[s.key] || 0) / max) * 100}%` }} title={`${p.label}: ${num(p[s.key])} ${s.label}`} />
-              ))}
-            </div>
-            <span className="mkt-bar-label">{points.length > 16 ? '' : p.label}</span>
-            <span className="mkt-bar-value">{points.length > 16 ? '' : num(p[series[0].key])}</span>
+    <section className={`wa-card ${className}`}>
+      {(title || actions) && (
+        <header className="wa-card-head">
+          <div>
+            {title && <h2 className="wa-card-title">{title}</h2>}
+            {hint && <p className="wa-card-hint">{hint}</p>}
           </div>
-        ))}
-      </div>
-      <div className="mkt-bar-legend">
-        {series.map(s => <span key={s.key} className="mkt-bar-legend-item"><span className={`mkt-bar-legend-dot ${s.dot}`} /> {s.label}</span>)}
-        {points.length > 16 && <span className="mkt-bar-legend-item">{points[0].label} – {points[points.length - 1].label}</span>}
-      </div>
-    </>
+          {actions}
+        </header>
+      )}
+      {children}
+    </section>
   )
 }
 
-function Section({ title, hint, children, className = '' }) {
+function Pills({ options, value, onChange, label }) {
   return (
-    <div className={`section-card ${className}`}>
-      <div className="section-card-header"><h2 className="section-card-title">{title}</h2></div>
-      {hint && <p className="wa-hint">{hint}</p>}
-      {children}
+    <div className="wa-pills" role="tablist" aria-label={label}>
+      {options.map(o => (
+        <button key={o.key} type="button" role="tab" aria-selected={value === o.key}
+          className={`wa-pill ${value === o.key ? 'active' : ''}`} onClick={() => onChange(o.key)}>
+          {o.label}
+        </button>
+      ))}
     </div>
   )
 }
 
-function DataTable({ columns, rows, empty = 'No data in this period yet.' }) {
-  if (!rows || rows.length === 0) return <Empty>{empty}</Empty>
+// A ranked list: label with a proportional bar behind it, then value columns.
+// Rows are buttons when `onPick` is given (click = filter by that row).
+function RankList({ rows, columns, labelFor, onPick, activeValue, empty = 'No data in this period.', limit }) {
+  const list = (rows || []).slice(0, limit || undefined)
+  if (list.length === 0) return <div className="wa-empty">{empty}</div>
+  const main = columns[0].key
+  const max = Math.max(1, ...list.map(r => Number(r[main]) || 0))
   return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead><tr>{columns.map(c => <th key={c.key} className={c.num ? 'wa-num' : ''}>{c.label}</th>)}</tr></thead>
+    <div className="wa-rank" role="table">
+      <div className="wa-rank-row wa-rank-head" role="row">
+        <span className="wa-rank-label" role="columnheader">{columns.label || ''}</span>
+        {columns.map(c => <span key={c.key} className={`wa-rank-val ${c.hideSm ? 'wa-hide-sm' : ''}`} role="columnheader">{c.label}</span>)}
+      </div>
+      {list.map((r, i) => {
+        const content = labelFor ? labelFor(r) : r.name
+        const active = activeValue != null && activeValue === r.name
+        const Tag = onPick ? 'button' : 'div'
+        return (
+          <Tag
+            key={`${r.name}-${i}`} role="row" type={onPick ? 'button' : undefined}
+            className={`wa-rank-row ${onPick ? 'clickable' : ''} ${active ? 'active' : ''}`}
+            onClick={onPick ? () => onPick(r) : undefined}
+            title={onPick ? 'Filter by this' : undefined}
+          >
+            <span className="wa-rank-label" role="cell">
+              <span className="wa-rank-bar" style={{ width: `${((Number(r[main]) || 0) / max) * 100}%` }} />
+              <span className="wa-rank-text">{content}</span>
+            </span>
+            {columns.map(c => (
+              <span key={c.key} className={`wa-rank-val ${c.hideSm ? 'wa-hide-sm' : ''}`} role="cell">
+                {c.render ? c.render(r) : fmtValue(r[c.key], c.fmt)}
+              </span>
+            ))}
+          </Tag>
+        )
+      })}
+    </div>
+  )
+}
+
+// A card with sub-tabs, each a RankList. "View all" opens the full list.
+function BreakdownCard({ title, views, onFilter, filters }) {
+  const [active, setActive] = useState(views[0].key)
+  const [expanded, setExpanded] = useState(false)
+  const [query, setQuery] = useState('')
+  const view = views.find(v => v.key === active) || views[0]
+  const pick = view.filterKey && onFilter ? r => { onFilter(view.filterKey, r.name); setExpanded(false) } : undefined
+  const rows = view.rows || []
+  const shown = 8
+  const filtered = query ? rows.filter(r => String(view.text ? view.text(r) : r.name).toLowerCase().includes(query.toLowerCase())) : rows
+  return (
+    <Card
+      title={title}
+      actions={views.length > 1 && <Pills options={views} value={view.key} onChange={k => { setActive(k); setExpanded(false) }} label={`${title} view`} />}
+      className="wa-breakdown"
+    >
+      <RankList rows={rows} columns={view.columns} labelFor={view.labelFor} onPick={pick} limit={shown}
+        activeValue={view.filterKey ? filters?.[view.filterKey] : null} empty={view.empty} />
+      {rows.length > shown && (
+        <button type="button" className="wa-more" onClick={() => setExpanded(true)}>View all {num(rows.length)}</button>
+      )}
+      {expanded && (
+        <div className="modal-overlay" onClick={() => setExpanded(false)}>
+          <div className="modal-card modal-card-wide wa-modal" onClick={e => e.stopPropagation()} role="dialog" aria-label={`${title} · ${view.label}`}>
+            <div className="wa-modal-head">
+              <h3 className="modal-title">{views.length > 1 ? `${title} · ${view.label}` : title}</h3>
+              <button type="button" className="wa-icon-btn" onClick={() => setExpanded(false)} aria-label="Close">×</button>
+            </div>
+            <input className="wa-search" type="search" placeholder="Search" value={query} onChange={e => setQuery(e.target.value)} autoFocus />
+            <div className="wa-modal-body">
+              <RankList rows={filtered} columns={view.columns} labelFor={view.labelFor} onPick={pick}
+                activeValue={view.filterKey ? filters?.[view.filterKey] : null} />
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function Funnel({ def, counts, prevCounts }) {
+  const steps = def.steps.map((label, i) => ({ label, count: Number(counts?.[i] || 0) }))
+  const base = steps[0]?.count || 0
+  let worst = -1
+  let worstRate = 0
+  steps.forEach((s, i) => {
+    if (i < 2) return // "all visits -> opened the page" is mostly people who never meant to
+    const prev = steps[i - 1].count
+    const drop = prev > 0 ? (prev - s.count) / prev : 0
+    if (drop > worstRate) { worstRate = drop; worst = i }
+  })
+  const last = steps[steps.length - 1]
+  const prevLast = prevCounts ? Number(prevCounts[prevCounts.length - 1] || 0) : null
+  return (
+    <div className="wa-funnel">
+      <div className="wa-funnel-summary">
+        <div>
+          <span className="wa-kpi-label">Completed</span>
+          <span className="wa-funnel-big">{num(last.count)}</span>
+          {prevCounts && <Delta cur={last.count} prev={prevLast} fmt="num" small />}
+        </div>
+        <div>
+          <span className="wa-kpi-label">Of all visits</span>
+          <span className="wa-funnel-big">{fmtValue(pctOf(last.count, base), 'pct')}</span>
+        </div>
+        <div>
+          <span className="wa-kpi-label">Of those who opened it</span>
+          <span className="wa-funnel-big">{fmtValue(pctOf(last.count, steps[1]?.count || 0), 'pct')}</span>
+        </div>
+      </div>
+      <ol className="wa-funnel-steps">
+        {steps.map((s, i) => {
+          const prev = i > 0 ? steps[i - 1].count : null
+          const stepRate = prev ? pctOf(s.count, prev) : null
+          return (
+            <li key={s.label} className={`wa-funnel-step ${i === worst ? 'worst' : ''}`}>
+              <div className="wa-funnel-meta">
+                <span className="wa-funnel-n">{i + 1}</span>
+                <span className="wa-funnel-label">{s.label}</span>
+                <span className="wa-funnel-count">{num(s.count)} <span className="wa-muted">{fmtValue(pctOf(s.count, base), 'pct')}</span></span>
+              </div>
+              <div className="wa-funnel-track"><div className="wa-funnel-fill" style={{ width: `${base ? Math.max(s.count ? 1.5 : 0, pctOf(s.count, base)) : 0}%` }} /></div>
+              {i > 0 && (
+                <div className="wa-funnel-drop">
+                  {stepRate != null ? `${fmtValue(stepRate, 'pct')} continued from the step before` : 'No one reached the step before'}
+                  {prev > 0 && prev > s.count && <span> · {num(prev - s.count)} dropped off</span>}
+                  {i === worst && <span className="wa-chip wa-chip-warn">biggest drop</span>}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
+function MiniStat({ label, value, sub }) {
+  return (
+    <div className="wa-mini">
+      <span className="wa-kpi-label">{label}</span>
+      <span className="wa-mini-value">{value}</span>
+      {sub && <span className="wa-muted wa-mini-sub">{sub}</span>}
+    </div>
+  )
+}
+
+function Table({ columns, rows, empty = 'No data in this period.', onRow, activeKey }) {
+  if (!rows || rows.length === 0) return <div className="wa-empty">{empty}</div>
+  return (
+    <div className="wa-table-wrap">
+      <table className="wa-table">
+        <thead>
+          <tr>{columns.map(c => <th key={c.key} className={`${c.num ? 'num' : ''} ${c.hideSm ? 'wa-hide-sm' : ''}`}>{c.label}</th>)}</tr>
+        </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i}>
+            <tr key={r.name || i} className={`${onRow ? 'clickable' : ''} ${activeKey && activeKey === r.name ? 'active' : ''}`}
+              onClick={onRow ? () => onRow(r) : undefined}
+              tabIndex={onRow ? 0 : undefined}
+              onKeyDown={onRow ? e => { if (e.key === 'Enter') onRow(r) } : undefined}>
               {columns.map(c => (
-                <td key={c.key} className={c.num ? 'wa-num' : ''} title={c.title ? c.title(r) : undefined}>
-                  {c.render ? c.render(r) : r[c.key]}
-                </td>
+                <td key={c.key} className={`${c.num ? 'num' : ''} ${c.hideSm ? 'wa-hide-sm' : ''}`}>{c.render ? c.render(r) : r[c.key]}</td>
               ))}
             </tr>
           ))}
@@ -320,127 +288,126 @@ function DataTable({ columns, rows, empty = 'No data in this period yet.' }) {
   )
 }
 
-function QuestionCard({ n, question, answer, detail, active, onClick }) {
-  return (
-    <button type="button" className={`wa-question ${active ? 'active' : ''}`} onClick={onClick}>
-      <span className="wa-question-n">{n}</span>
-      <span className="wa-question-q">{question}</span>
-      <span className="wa-question-a">{answer}</span>
-      <span className="wa-question-d">{detail}</span>
-    </button>
-  )
-}
+// ── page ──────────────────────────────────────────────────────────────────────
 
-const rate = (a, b) => <span className="wa-rate">{pct(a, b)}</span>
-
-// Where one lead got to. `booked` is absent until the booking-journey migration
-// has run; then the status falls back to the lead's score alone.
-function JourneyStatus({ r }) {
-  let text = r.is_disqualified ? 'flagged' : r.classification
-  let tone = r.qualified ? 'wa-chip-ok' : r.is_disqualified ? 'wa-chip-warn' : ''
-  if (r.booked === false) { text = 'details only'; tone = 'wa-chip-warn' }
-  else if (r.booked === true && !r.prep_done) { text = 'booked'; tone = '' }
-  return (
-    <>
-      <span className={`wa-chip ${tone}`}>{text}</span>
-      {r.after_reminder && <span className="wa-muted"> after reminder</span>}
-    </>
-  )
-}
-
-// ────────────────────────────────────────────────────────────────────────────
 export default function WebsiteAnalytics() {
-  const nowD = new Date()
-  const [range, setRange] = useState({ preset: '30d', month: { month: nowD.getMonth(), year: nowD.getFullYear() }, custom: { from: '', to: '' } })
-  const [tab, setTab] = useState('acquisition')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [params, setParams] = useSearchParams()
   const [tz, setTz] = useState(DEFAULT_TZ)
-  const [data, setData] = useState({ acq: null, beh: null, conv: null, seo: null, prevAcq: null, prevConv: null, seoError: null })
+  const [web, setWeb] = useState({ cur: null, prev: null, loading: true, error: null })
+  const [conv, setConv] = useState({ data: null, loading: false, error: null })
+  const [seo, setSeo] = useState({ cur: null, prev: null, loading: false, error: null })
   const [showInstall, setShowInstall] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [toast, setToast] = useState({ show: false, type: '', text: '' })
-  const requestRef = useRef(0)
+  const [toast, setToast] = useState(null)
+  const reqWeb = useRef(0)
+  const reqSeo = useRef(0)
+  const reqConv = useRef(0)
 
-  const resolved = useMemo(() => resolveRange(range, tz), [range, tz])
+  // URL state
+  const tab = TABS.some(t => t.key === params.get('tab')) ? params.get('tab') : 'overview'
+  const period = PERIODS.some(p => p.key === params.get('period')) ? params.get('period') : '30d'
+  const compare = COMPARE.some(c => c.key === params.get('cmp')) ? params.get('cmp') : 'prev'
+  const metric = METRICS.some(m => m.key === params.get('metric')) ? params.get('metric') : 'visitors'
+  const seoMetric = SEO_METRICS.some(m => m.key === params.get('smetric')) ? params.get('smetric') : 'clicks'
+  const funnelKey = FUNNELS.some(f => f.key === params.get('funnel')) ? params.get('funnel') : 'booking'
+  const customFrom = params.get('from') || ''
+  const customTo = params.get('to') || ''
+  const filterString = Object.keys(FILTERS).map(k => `${k}=${params.get(`f.${k}`) || ''}`).join('&')
+  const filters = useMemo(() => {
+    const out = {}
+    Object.keys(FILTERS).forEach(k => { const v = params.get(`f.${k}`); if (v) out[k] = v })
+    return out
+  }, [filterString]) // eslint-disable-line react-hooks/exhaustive-deps
+  const seoFilters = useMemo(() => {
+    const out = {}
+    if (params.get('sq')) out.query = params.get('sq')
+    if (params.get('sp')) out.page = params.get('sp')
+    return out
+  }, [params.get('sq'), params.get('sp')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function update(changes) {
+    setParams(prev => {
+      const next = new URLSearchParams(prev)
+      Object.entries(changes).forEach(([k, v]) => { if (v == null || v === '') next.delete(k); else next.set(k, v) })
+      return next
+    }, { replace: true })
+  }
+  const addFilter = (key, value) => update({ [`f.${key}`]: value })
+  const removeFilter = key => update({ [`f.${key}`]: null })
+  const clearFilters = () => update(Object.fromEntries(Object.keys(FILTERS).map(k => [`f.${k}`, null])))
+
+  const range = useMemo(
+    () => resolveRange({ period, from: customFrom, to: customTo, compare }, tz),
+    [period, customFrom, customTo, compare, tz]
+  )
   const todayStr = DateTime.now().setZone(tz).toISODate()
-
-  function selectPreset(key) {
-    setRange(r => {
-      // First time on Custom: start from the last 7 days rather than an empty picker.
-      if (key === 'custom' && !r.custom.from) {
-        const today = DateTime.now().setZone(tz).startOf('day')
-        return { ...r, preset: key, custom: { from: today.minus({ days: 6 }).toISODate(), to: today.toISODate() } }
-      }
-      return { ...r, preset: key }
-    })
-  }
-
-  // The two ends never cross: moving one past the other drags it along.
-  function setCustomDate(edge, value) {
-    if (!value) return // the browser reports '' while a date is half typed
-    setRange(r => {
-      const custom = { ...r.custom, [edge]: value }
-      if (edge === 'from' && custom.to && custom.to < value) custom.to = value
-      if (edge === 'to' && custom.from && custom.from > value) custom.from = value
-      return { ...r, custom }
-    })
-  }
 
   useEffect(() => {
     supabase.from('system_settings').select('key, value').eq('key', 'team_timezone').maybeSingle()
       .then(({ data: row }) => { if (row?.value) setTz(row.value) })
   }, [])
 
-  useEffect(() => { load() }, [resolved, tz])
-
   useEffect(() => {
-    if (!toast.show) return
-    const t = setTimeout(() => setToast({ show: false, type: '', text: '' }), 5000)
+    if (!toast) return undefined
+    const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
-  }, [toast.show])
+  }, [toast])
 
-  function showToast(type, text) { setToast({ show: true, type, text }) }
+  const bounds = r => ({ p_from: r.from ? r.from.toISOString() : null, p_to: r.to ? r.to.toISOString() : null })
 
-  async function load() {
-    const requestId = ++requestRef.current
-    setLoading(true)
-    setError(null)
-
-    const bounds = r => ({ p_from: r.from ? r.from.toISOString() : null, p_to: r.to ? r.to.toISOString() : null, p_tz: tz })
-    const rpc = (fn, args) => supabase.rpc(fn, args)
-    const calls = [
-      rpc('web_analytics_acquisition', bounds(resolved)),
-      rpc('web_analytics_behavior', bounds(resolved)),
-      rpc('web_analytics_conversion', bounds(resolved)),
-      rpc('seo_overview', { p_from: resolved.fromDate, p_to: resolved.toDate }),
-    ]
-    if (resolved.prev) {
-      calls.push(rpc('web_analytics_acquisition', bounds(resolved.prev)))
-      calls.push(rpc('web_analytics_conversion', bounds(resolved.prev)))
-    }
-    const [acq, beh, conv, seo, prevAcq, prevConv] = await Promise.all(calls)
-
-    if (requestId !== requestRef.current) return // a newer range was picked meanwhile
-
-    const fatal = [acq, beh, conv].find(r => r.error)
-    if (fatal) {
-      const missing = fatal.error.code === 'PGRST202' || /could not find the function/i.test(fatal.error.message || '')
-      setError(missing
-        ? 'Website analytics is not set up yet. Run supabase/migration-website-analytics.sql in the Supabase SQL Editor, then reload.'
-        : `Could not load website analytics: ${fatal.error.message}`)
-      setLoading(false)
-      return
-    }
-
-    setData({
-      acq: acq.data, beh: beh.data, conv: conv.data,
-      seo: seo.error ? null : seo.data,
-      seoError: seo.error ? seo.error.message : null,
-      prevAcq: prevAcq && !prevAcq.error ? prevAcq.data : null,
-      prevConv: prevConv && !prevConv.error ? prevConv.data : null,
+  // Site report: current period (full) + comparison period (compact).
+  useEffect(() => {
+    const id = ++reqWeb.current
+    setWeb(w => ({ ...w, loading: true, error: null }))
+    const args = r => ({ ...bounds(r), p_tz: tz, p_filters: filters, p_interval: range.interval })
+    Promise.all([
+      supabase.rpc('web_analytics_report', { ...args(range), p_compact: false }),
+      range.cmp ? supabase.rpc('web_analytics_report', { ...args(range.cmp), p_compact: true }) : Promise.resolve({ data: null }),
+    ]).then(([cur, prev]) => {
+      if (id !== reqWeb.current) return
+      if (cur.error) {
+        setWeb({ cur: null, prev: null, loading: false, error: missingFunction(cur.error)
+          ? 'The new analytics report is not installed yet. Run supabase/migration-website-analytics-v2.sql, then reload.'
+          : `Could not load website analytics: ${cur.error.message}` })
+        return
+      }
+      setWeb({ cur: cur.data, prev: prev.error ? null : prev.data, loading: false, error: null })
     })
-    setLoading(false)
+  }, [range, tz, filters]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Booking journey detail (Goals tab only; not filterable).
+  useEffect(() => {
+    if (tab !== 'goals') return
+    const id = ++reqConv.current
+    setConv(c => ({ ...c, loading: true }))
+    supabase.rpc('web_analytics_conversion', { ...bounds(range), p_tz: tz }).then(({ data, error }) => {
+      if (id !== reqConv.current) return
+      setConv({ data: error ? null : data, loading: false, error: error ? error.message : null })
+    })
+  }, [tab, range, tz]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Search Console (Search tab only).
+  useEffect(() => {
+    if (tab !== 'search') return
+    loadSeo()
+  }, [tab, range, seoFilters]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function loadSeo() {
+    const id = ++reqSeo.current
+    setSeo(s => ({ ...s, loading: true, error: null }))
+    Promise.all([
+      supabase.rpc('seo_report', { p_from: range.fromDate, p_to: range.toDate, p_filters: seoFilters }),
+      range.cmp ? supabase.rpc('seo_report', { p_from: range.cmp.fromDate, p_to: range.cmp.toDate, p_filters: seoFilters }) : Promise.resolve({ data: null }),
+    ]).then(([cur, prev]) => {
+      if (id !== reqSeo.current) return
+      if (cur.error) {
+        setSeo({ cur: null, prev: null, loading: false, error: missingFunction(cur.error)
+          ? 'Run supabase/migration-website-analytics-v2.sql to enable this tab.'
+          : cur.error.message })
+        return
+      }
+      setSeo({ cur: cur.data, prev: prev.error ? null : prev.data, loading: false, error: null })
+    })
   }
 
   async function syncSearchConsole() {
@@ -449,713 +416,405 @@ export default function WebsiteAnalytics() {
       const { data: res, error: fnError } = await supabase.functions.invoke('sm-gsc-sync', { body: {} })
       if (fnError) throw new Error('Could not reach the sync function. Is sm-gsc-sync deployed?')
       if (!res?.success) throw new Error(res?.error || 'Sync failed')
-      showToast('success', res.skipped ? 'Already synced a moment ago' : `Search Console synced (${num(res.rows?.queries)} query rows)`)
-      load()
+      setToast({ type: 'success', text: res.skipped ? 'Already synced a moment ago' : `Search Console synced (${num(res.rows?.queries)} query rows)` })
+      loadSeo()
     } catch (err) {
-      showToast('error', err.message)
+      setToast({ type: 'error', text: err.message })
     } finally {
       setSyncing(false)
     }
   }
 
-  // ── derived ──
-  const { acq, beh, conv, seo, prevAcq, prevConv } = data
-
-  const sessions = acq?.kpis?.sessions || 0
-  const leads = acq?.kpis?.leads || 0
-  const qualified = acq?.kpis?.qualified || 0
-  const topChannel = acq?.channels?.[0]
-
-  const acqTrend = useMemo(() => bucketSeries(acq?.trend, ['sessions', 'leads']), [acq])
-  const behTrend = useMemo(() => bucketSeries(beh?.trend, ['pageviews']), [beh])
-  const seoTrend = useMemo(() => bucketSeries(seo?.daily?.map(d => ({ ...d, day: d.date })), ['clicks', 'impressions']), [seo])
-
-  const funnel = conv?.funnel
-  const funnelRows = useMemo(() => {
-    if (!funnel) return []
-    const rows = FUNNEL_STEPS.map(s => ({ ...s, count: funnel[s.key] || 0 }))
-    let worst = -1
-    let worstDrop = 0
-    rows.forEach((r, i) => {
-      const prev = i > 0 ? rows[i - 1].count : null
-      r.stepRate = prev ? r.count / prev : null
-      r.drop = prev ? prev - r.count : 0
-      // The first step (all sessions -> opened the form) is mostly people who
-      // were never going to book, so the "biggest leak" callout starts after it.
-      // Only the steps up to booking count: the prep questions are optional, so a drop there is expected.
-      if (i >= 2 && r.key !== 'prep_done' && r.key !== 'qualified' && prev > 0 && r.drop / prev > worstDrop) { worstDrop = r.drop / prev; worst = i }
-    })
-    if (worst >= 0 && worstDrop > 0) rows[worst].worst = true
-    return rows
-  }, [funnel])
-
-  const answersByQuestion = useMemo(() => {
-    const out = {}
-    Object.entries(QUALIFICATION_QUESTIONS).forEach(([q, def]) => {
-      const counts = Object.fromEntries((conv?.answers || []).filter(a => a.q === q).map(a => [a.value, a.sessions]))
-      const total = Object.values(counts).reduce((s, n) => s + n, 0)
-      out[q] = {
-        question: def.question,
-        total,
-        options: def.options.map(o => ({ name: o.label, sessions: counts[o.value] || 0, disqualifier: !!o.disqualifier })),
-      }
-    })
-    return out
-  }, [conv])
-
-  // The booking-journey sections need migration-website-analytics-booking-journey.sql.
-  // Until it has run the keys are simply absent, so those sections stay hidden.
-  const journeyReady = !!conv && conv.follow_up !== undefined
-  const followUp = conv?.follow_up
-  const afterBooking = conv?.after_booking
-  const reach = conv?.contact_reach
-  const methodRows = useMemo(() => METHODS.map(m => {
-    const r = (conv?.contact_methods || []).find(x => x.method === m.key)
-    return { method: m.key, name: m.label, clicks: r?.clicks || 0, sessions: r?.sessions || 0, booked: r?.booked || 0 }
-  }), [conv])
-  const errorRows = useMemo(() => (conv?.errors_by_stage || []).map(r => ({ ...r, name: ERROR_STAGES[r.stage] || r.stage })), [conv])
-
-  const allEmpty = !loading && !error && sessions === 0 && (beh?.kpis?.pageviews || 0) === 0 && (conv?.coverage?.leads_total || 0) === 0
-
-  // ── export ──
-  function handleExportCSV() {
-    const headers = ['Metric', 'Value']
-    const rows = [
-      ['Period', resolved.label],
-      ['Sessions', String(sessions)],
-      ['Visitors', String(acq?.kpis?.visitors || 0)],
-      ['Pageviews', String(beh?.kpis?.pageviews || 0)],
-      ['Avg engaged seconds', String(beh?.kpis?.avg_engaged_seconds || 0)],
-      ['Bounce rate %', String(beh?.kpis?.bounce_rate || 0)],
-      ['Leads', String(leads)],
-      ['Qualified leads', String(qualified)],
-      ['Session to lead rate', pct(leads, sessions)],
-      [''],
-      ['Channel', 'Sessions', 'Leads', 'Qualified'],
-      ...(acq?.channels || []).map(c => [c.channel, String(c.sessions), String(c.leads), String(c.qualified)]),
-      [''],
-      ['Source', 'Medium', 'Sessions', 'Leads', 'Qualified'],
-      ...(acq?.sources || []).map(s => [s.source, s.medium || '', String(s.sessions), String(s.leads), String(s.qualified)]),
-      [''],
-      ['Campaign', 'Sessions', 'Leads', 'Qualified'],
-      ...(acq?.campaigns || []).map(c => [c.campaign, String(c.sessions), String(c.leads), String(c.qualified)]),
-      [''],
-      ['Booking funnel step', 'Visits'],
-      ...funnelRows.map(r => [r.label, String(r.count)]),
-      [''],
-      ...(journeyReady ? [
-        ['Contact route', 'Visits', 'Clicks', 'Booked a call'],
-        ...methodRows.map(m => [m.name, String(m.sessions), String(m.clicks), String(m.booked)]),
-        ['Visits that went off-site and did not book', String(reach?.offsite_not_booked || 0)],
-        [''],
-        ['Call-to-action placement', 'Route', 'Clicks', 'Visits', 'Booked'],
-        ...(conv?.cta_placements || []).map(p => [placementLabel(p.label), methodLabel(p.method), String(p.clicks), String(p.sessions), String(p.booked)]),
-        [''],
-        ['Follow-up', 'Count'],
-        ['Waiting for a time', String(followUp?.waiting || 0)],
-        ['Reminded', String(followUp?.reminded || 0)],
-        ['Booked after reminder', String(followUp?.recovered || 0)],
-        ['Returning visits', String(followUp?.returns || 0)],
-        [''],
-        ['After booking', 'Count'],
-        ['Booked', String(afterBooking?.booked || 0)],
-        ['Added to calendar', String(afterBooking?.calendar_added || 0)],
-        ['Shown prep questions', String(afterBooking?.prep_shown || 0)],
-        ['Skipped prep questions', String(afterBooking?.prep_skipped || 0)],
-        ['Answered prep questions', String(afterBooking?.prep_answered || 0)],
-        [''],
-        ['Booking page problem', 'Visits'],
-        ...errorRows.map(e => [e.name, String(e.sessions)]),
-        [''],
-      ] : []),
-      ['Page', 'Views', 'Avg engaged (s)', 'Avg scroll %'],
-      ...(beh?.top_pages || []).map(p => [`${p.host || ''}${p.path}`, String(p.views), String(p.avg_engaged_seconds ?? ''), String(p.avg_scroll ?? '')]),
-      [''],
-      ['Search query', 'Clicks', 'Impressions', 'CTR', 'Avg position'],
-      ...(seo?.queries || []).map(q => [q.query, String(q.clicks), String(q.impressions), `${(q.ctr * 100).toFixed(1)}%`, String(q.position ?? '')]),
-    ]
-    exportCSV(headers, rows, `SDFM_Website_Analytics_${new Date().toISOString().slice(0, 10)}`)
-  }
-
   async function copySnippet() {
     try {
       await navigator.clipboard.writeText(getTrackerSnippet())
-      showToast('success', 'Snippet copied')
+      setToast({ type: 'success', text: 'Snippet copied' })
     } catch {
-      showToast('error', 'Could not copy — select the text and copy it manually')
+      setToast({ type: 'error', text: 'Could not copy — select the text and copy it manually' })
     }
   }
 
-  // ── render ──
+  // ── derived ──
+  const cur = web.cur
+  const prev = web.prev
+  const kpis = cur?.kpis
+  const metricDef = METRICS.find(m => m.key === metric)
+  const compareLabel = range.cmp ? (compare === 'year' ? 'Same period last year' : 'Previous period') : null
+
+  const series = useMemo(() => {
+    if (!cur) return []
+    const keys = METRICS.map(m => m.key)
+    const pts = fillSeries(cur.series, range, tz, keys)
+    if (range.cmp && prev?.series) {
+      const prevPts = fillSeries(prev.series, { ...range.cmp, interval: range.interval }, tz, keys, 'bucket', range.cmp.end)
+      pts.forEach((p, i) => {
+        p.prevPoint = prevPts[i] || null
+      })
+    }
+    return pts
+  }, [cur, prev, range, tz])
+  const chartPoints = series.map(p => ({
+    key: p.key, label: p.label, longLabel: p.longLabel,
+    value: p[metric],
+    prev: p.prevPoint ? p.prevPoint[metric] : null,
+    prevLabel: p.prevPoint?.longLabel,
+  }))
+
+  const goalRows = useMemo(() => {
+    const visits = kpis?.visits || 0
+    const pv = prev?.kpis?.visits || 0
+    return GOALS.map(g => {
+      const r = (cur?.goals || []).find(x => x.goal === g.key)
+      const p = (prev?.goals || []).find(x => x.goal === g.key)
+      return {
+        ...g, name: g.key,
+        visitors: r?.visitors || 0, visits: r?.visits || 0, completions: r?.completions || 0,
+        cr: pctOf(r?.visits || 0, visits),
+        prevCr: prev ? pctOf(p?.visits || 0, pv) : null,
+        prevVisits: prev ? (p?.visits || 0) : null,
+      }
+    })
+  }, [cur, prev, kpis])
+
+  const hasFilters = Object.keys(filters).length > 0
+  const noData = !web.loading && !web.error && kpis && kpis.visits === 0 && !hasFilters
+
+  // ── CSV ──
+  function handleExportCSV() {
+    const rows = [['Period', range.label], ['Filters', Object.entries(filters).map(([k, v]) => `${FILTERS[k]}: ${filterValueLabel(k, v)}`).join('; ') || 'none'], ['']]
+    if (tab === 'search' && seo.cur) {
+      const s = seo.cur
+      rows.push(['Clicks', s.totals.clicks], ['Impressions', s.totals.impressions], ['CTR %', s.totals.ctr], ['Avg position', s.totals.position ?? ''], [''])
+      rows.push(['Query', 'Clicks', 'Impressions', 'CTR %', 'Position'], ...s.queries.map(q => [q.name, q.clicks, q.impressions, q.ctr, q.position]), [''])
+      rows.push(['Page', 'Clicks', 'Impressions', 'CTR %', 'Position', 'Organic visits', 'Organic conversions'], ...s.pages.map(p => [p.name, p.clicks, p.impressions, p.ctr, p.position, p.organic_visits, p.organic_conversions]))
+    } else if (cur) {
+      METRICS.forEach(m => rows.push([m.label, kpis?.[m.key] ?? '', prev ? `previous: ${prev.kpis?.[m.key] ?? ''}` : '']))
+      rows.push(['Leads (first touch)', kpis?.leads ?? 0], ['Hot or warm leads', kpis?.qualified ?? 0], [''])
+      const block = (title, list, cols) => { rows.push([title, ...cols.map(c => c[0])], ...(list || []).map(r => [r.name, ...cols.map(c => r[c[1]] ?? '')]), ['']) }
+      block('Channel', cur.channels, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Conversions', 'conversions'], ['Bounce %', 'bounce_rate']])
+      block('Source', cur.sources, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Conversions', 'conversions'], ['Bounce %', 'bounce_rate']])
+      block('Referrer', cur.referrers, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Conversions', 'conversions']])
+      block('Campaign', cur.campaigns, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Conversions', 'conversions']])
+      block('Page', cur.pages, [['Visitors', 'visitors'], ['Pageviews', 'pageviews'], ['Time on page (s)', 'time_on_page'], ['Scroll %', 'scroll']])
+      block('Entry page', cur.entry_pages, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Bounce %', 'bounce_rate'], ['Conversions', 'conversions']])
+      block('Exit page', cur.exit_pages, [['Visitors', 'visitors'], ['Exits', 'exits'], ['Exit rate %', 'exit_rate']])
+      block('Device', cur.devices, [['Visitors', 'visitors'], ['Visits', 'visits']])
+      block('Browser', cur.browsers, [['Visitors', 'visitors'], ['Visits', 'visits']])
+      block('OS', cur.systems, [['Visitors', 'visitors'], ['Visits', 'visits']])
+      block('Country', (cur.countries || []).map(c => ({ ...c, name: countryInfo(c.name).name })), [['Visitors', 'visitors'], ['Visits', 'visits']])
+      rows.push(['Goal', 'Visits', 'Completions', 'Conversion rate %'], ...goalRows.map(g => [g.label, g.visits, g.completions, g.cr.toFixed(1)]), [''])
+      FUNNELS.forEach(f => {
+        rows.push([`Funnel: ${f.label}`, 'Visits'], ...f.steps.map((s, i) => [s, cur.funnels?.[f.key]?.[i] ?? 0]), [''])
+      })
+    }
+    exportCSV(['Metric', 'Value'], rows.map(r => r.map(String)), `SDFM_Website_Analytics_${tab}_${DateTime.now().toISODate()}`)
+  }
+
+  // ── header ──
   const header = (
-    <div className="page-header dash-header">
-      <div>
-        <h1 className="page-title">Website Analytics</h1>
-        <p className="page-subtitle">How people find us, what they do on the site, and whether they become qualified leads · {resolved.label}</p>
-      </div>
-      <div className="dash-header-actions">
-        <div className="wa-presets" role="group" aria-label="Date range">
-          {PRESETS.map(p => (
-            <button key={p.key} type="button" className={`wa-preset ${range.preset === p.key ? 'active' : ''}`} onClick={() => selectPreset(p.key)}>{p.label}</button>
-          ))}
+    <div className="wa-header">
+      <div className="wa-title-row">
+        <div>
+          <h1 className="page-title">Website Analytics</h1>
+          <p className="page-subtitle">
+            sdfmgroup.com · {range.label}
+            {range.cmp && <span className="wa-muted"> vs {range.cmp.label}</span>}
+            {cur?.live != null && (
+              <span className="wa-live" title="Visits active in the last 5 minutes"><span className="wa-live-dot" />{num(cur.live)} online now</span>
+            )}
+          </p>
         </div>
-        {range.preset === 'custom' && (
+        <div className="wa-actions">
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowInstall(true)}>Tracker</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleExportCSV} disabled={!cur}>Export CSV</button>
+        </div>
+      </div>
+
+      <div className="wa-controls">
+        <label className="wa-select">
+          <span className="sr-only">Period</span>
+          <select value={period} onChange={e => {
+            const v = e.target.value
+            if (v === 'custom' && !customFrom) {
+              const t = DateTime.now().setZone(tz).startOf('day')
+              update({ period: v, from: t.minus({ days: 6 }).toISODate(), to: t.toISODate() })
+            } else update({ period: v })
+          }}>
+            {PERIODS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+        </label>
+        {period === 'custom' && (
           <div className="wa-daterange" role="group" aria-label="Custom date range">
-            <label>
-              <span>From</span>
-              <input type="date" value={range.custom.from} max={todayStr} onChange={e => setCustomDate('from', e.target.value)} />
-            </label>
-            <label>
-              <span>To</span>
-              <input type="date" value={range.custom.to} min={range.custom.from || undefined} max={todayStr} onChange={e => setCustomDate('to', e.target.value)} />
-            </label>
-            <button
-              type="button"
-              className="wa-preset"
-              title="Show just the From date"
-              onClick={() => setRange(r => ({ ...r, custom: { ...r.custom, to: r.custom.from } }))}
-            >Single day</button>
+            <input type="date" aria-label="From" value={customFrom} max={todayStr}
+              onChange={e => e.target.value && update({ from: e.target.value, to: customTo && customTo < e.target.value ? e.target.value : customTo })} />
+            <span className="wa-muted">to</span>
+            <input type="date" aria-label="To" value={customTo} min={customFrom || undefined} max={todayStr}
+              onChange={e => e.target.value && update({ to: e.target.value })} />
           </div>
         )}
-        {range.preset === 'month' && (
-          <PeriodSelector
-            value={{ mode: 'month', ...range.month }}
-            onChange={v => setRange(r => ({ ...r, month: { month: v.month, year: v.year }, preset: v.mode === 'all' ? 'all' : 'month' }))}
-          />
+        {period !== 'all' && (
+          <label className="wa-select">
+            <span className="sr-only">Compare with</span>
+            <select value={compare} onChange={e => update({ cmp: e.target.value })}>
+              {COMPARE.map(c => <option key={c.key} value={c.key}>{c.key === 'off' ? c.label : `vs ${c.label.toLowerCase()}`}</option>)}
+            </select>
+          </label>
         )}
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowInstall(true)}>Install tracker</button>
-        {!loading && !error && sessions > 0 && <button className="btn btn-secondary btn-sm" onClick={handleExportCSV}>CSV</button>}
       </div>
+
+      {hasFilters && (
+        <div className="wa-filters" aria-label="Active filters">
+          {Object.entries(filters).map(([k, v]) => (
+            <span key={k} className="wa-filter-chip">
+              <span className="wa-muted">{FILTERS[k]} is</span> <strong>{filterValueLabel(k, v)}</strong>
+              <button type="button" onClick={() => removeFilter(k)} aria-label={`Remove ${FILTERS[k]} filter`}>×</button>
+            </span>
+          ))}
+          <button type="button" className="wa-link" onClick={clearFilters}>Clear all</button>
+        </div>
+      )}
+
+      <nav className="wa-tabs" role="tablist" aria-label="Website Analytics sections">
+        {TABS.map(t => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key}
+            className={`wa-tab ${tab === t.key ? 'active' : ''}`}
+            onClick={() => update({ tab: t.key === 'overview' ? null : t.key })}>{t.label}</button>
+        ))}
+      </nav>
     </div>
   )
 
-  if (error) {
-    return (
-      <div>
-        {header}
-        <div className="section-card"><Empty>{error}</Empty></div>
-      </div>
-    )
+  if (web.error && tab !== 'search') {
+    return <div className="wa-page">{header}<Card><div className="wa-empty">{web.error}</div></Card></div>
   }
-
-  if (loading && !acq) {
-    return (
-      <div>
-        {header}
-        <div className="dash-stats-row">{[1, 2, 3, 4].map(i => <div key={i} className="skeleton skeleton-card" />)}</div>
-        <div className="skeleton skeleton-card" style={{ height: 200 }} />
-      </div>
-    )
-  }
-
-  const bounceRate = beh?.kpis?.bounce_rate || 0
 
   return (
-    <div className={loading ? 'wa-loading' : ''}>
+    <div className={`wa-page ${web.loading ? 'wa-loading' : ''}`}>
       {header}
 
-      {allEmpty && (
-        <div className="section-card wa-onboarding">
-          <h2 className="section-card-title">No website activity recorded yet</h2>
-          <p className="wa-hint">
-            The booking page (sdfmgroup.com/book) is tracked by the same snippet as the rest of sdfmgroup.com. Add the tracker snippet to the website to see how visitors find, browse and book.
-          </p>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowInstall(true)}>Show install snippet</button>
-        </div>
+      {tab === 'overview' && (
+        !cur ? <Skeleton /> : (
+          <>
+            {noData && (
+              <Card className="wa-onboarding" title="No visits recorded in this period">
+                <p className="wa-card-hint">The tracker runs on every page of sdfmgroup.com. Pick a longer period, or check the install snippet if the site is new.</p>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowInstall(true)}>Show install snippet</button>
+              </Card>
+            )}
+            <KpiGrid metrics={METRICS} kpis={kpis} prevKpis={prev?.kpis} selected={metric}
+              onSelect={k => update({ metric: k === 'visitors' ? null : k })} />
+            <Card
+              title={metricDef.label}
+              hint={`By ${range.interval}${metric === 'visit_duration' ? ' · engaged time, tab in focus' : ''}${metric === 'bounce_rate' ? ' · one page, under 10 s, no clicks' : ''}${metric === 'conversions' || metric === 'conversion_rate' ? ' · visits that completed any goal except "Scoper: started"' : ''}`}
+              className="wa-chart-card"
+            >
+              <WaChart points={chartPoints} fmt={metricDef.fmt} metricLabel={range.label} compareLabel={compareLabel} />
+            </Card>
+
+            <div className="wa-grid">
+              <BreakdownCard
+                title="Top sources" filters={filters} onFilter={addFilter}
+                views={[
+                  { key: 'channels', label: 'Channels', filterKey: 'channel', rows: cur.channels, columns: visitorCols('Channel', true) },
+                  { key: 'sources', label: 'Sources', filterKey: 'source', rows: cur.sources, columns: visitorCols('Source', true), labelFor: r => <SourceLabel name={r.name} /> },
+                  { key: 'referrers', label: 'Referrers', filterKey: 'referrer', rows: cur.referrers, columns: visitorCols('Referrer', true), labelFor: r => <SourceLabel name={r.name} />, empty: 'No referring sites in this period.' },
+                  { key: 'campaigns', label: 'Campaigns', filterKey: 'campaign', rows: cur.campaigns, columns: visitorCols('UTM campaign', true), empty: 'No visits with utm_campaign in this period.' },
+                ]}
+              />
+              <BreakdownCard
+                title="Top pages" filters={filters} onFilter={addFilter}
+                views={[
+                  { key: 'pages', label: 'Pages', filterKey: 'page', rows: cur.pages, columns: withLabel('Page', [
+                    { key: 'visitors', label: 'Visitors', fmt: 'num' },
+                    { key: 'pageviews', label: 'Views', fmt: 'num', hideSm: true },
+                    { key: 'time_on_page', label: 'Time', fmt: 'dur' },
+                  ]) },
+                  { key: 'entry', label: 'Entry pages', filterKey: 'entry', rows: cur.entry_pages, columns: withLabel('Entry page', [
+                    { key: 'visitors', label: 'Visitors', fmt: 'num' },
+                    { key: 'bounce_rate', label: 'Bounce', fmt: 'pct', hideSm: true },
+                    { key: 'cr', label: 'Conv.', render: r => fmtValue(pctOf(r.conversions, r.visits), 'pct') },
+                  ]) },
+                  { key: 'exit', label: 'Exit pages', filterKey: 'exit', rows: cur.exit_pages, columns: withLabel('Exit page', [
+                    { key: 'visitors', label: 'Visitors', fmt: 'num' },
+                    { key: 'exits', label: 'Exits', fmt: 'num', hideSm: true },
+                    { key: 'exit_rate', label: 'Exit rate', fmt: 'pct' },
+                  ]) },
+                ]}
+              />
+              <BreakdownCard
+                title="Locations" filters={filters} onFilter={addFilter}
+                views={[
+                  { key: 'countries', label: 'Countries', filterKey: 'country', rows: cur.countries, columns: visitorCols('Country'),
+                    labelFor: r => { const c = countryInfo(r.name); return <><span className="wa-cc" aria-hidden="true">{c.code}</span>{c.name}</> },
+                    text: r => countryInfo(r.name).name },
+                  { key: 'languages', label: 'Languages', filterKey: 'language', rows: cur.languages, columns: visitorCols('Language'), labelFor: r => languageName(r.name), text: r => languageName(r.name) },
+                  { key: 'hosts', label: 'Hostnames', filterKey: 'hostname', rows: cur.hostnames, columns: visitorCols('Hostname') },
+                ]}
+              />
+              <BreakdownCard
+                title="Devices" filters={filters} onFilter={addFilter}
+                views={[
+                  { key: 'devices', label: 'Device', filterKey: 'device', rows: cur.devices, columns: visitorCols('Device'), labelFor: r => capitalise(r.name) },
+                  { key: 'browsers', label: 'Browser', filterKey: 'browser', rows: cur.browsers, columns: visitorCols('Browser') },
+                  { key: 'systems', label: 'OS', filterKey: 'os', rows: cur.systems, columns: visitorCols('Operating system') },
+                ]}
+              />
+              <BreakdownCard
+                title="Goals" filters={filters} onFilter={addFilter}
+                views={[
+                  { key: 'goals', label: 'Goals', filterKey: 'goal', rows: goalRows.filter(g => g.visits > 0), columns: withLabel('Goal', [
+                    { key: 'visitors', label: 'Uniques', fmt: 'num' },
+                    { key: 'completions', label: 'Total', fmt: 'num', hideSm: true },
+                    { key: 'cr', label: 'Conv. rate', fmt: 'pct' },
+                  ]), labelFor: r => r.label, text: r => r.label, empty: 'No goals completed in this period.' },
+                ]}
+              />
+              <BreakdownCard
+                title="Events"
+                views={[
+                  { key: 'events', label: 'Events', rows: cur.events, columns: withLabel('Event', [
+                    { key: 'visits', label: 'Visits', fmt: 'num' },
+                    { key: 'events', label: 'Total', fmt: 'num' },
+                  ]), labelFor: r => <code className="wa-code">{r.name}</code>, empty: 'No tracked interactions in this period.' },
+                ]}
+              />
+            </div>
+            <p className="wa-footnote">
+              Visitors are counted without cookies unless the visitor accepted them, so one person on two days can count twice. Country is inferred from the browser's time zone (no IP is stored). Local and preview hosts (localhost) are excluded.
+            </p>
+          </>
+        )
       )}
 
-      {/* ── The three questions ── */}
-      <div className="wa-questions">
-        <QuestionCard
-          n="1" question="How are people finding us?" active={tab === 'acquisition' || tab === 'seo'}
-          answer={topChannel ? `${topChannel.channel} · ${pct(topChannel.sessions, sessions, 0)}` : 'No visits yet'}
-          detail={`${num(sessions)} sessions${seo?.totals?.clicks ? ` · ${num(seo.totals.clicks)} search clicks` : ''}`}
-          onClick={() => setTab('acquisition')}
-        />
-        <QuestionCard
-          n="2" question="What are they doing on the website?" active={tab === 'behavior'}
-          answer={sessions ? `${fmtDuration(beh?.kpis?.avg_engaged_seconds)} engaged · ${beh?.kpis?.pages_per_session || 0} pages per visit` : 'No visits yet'}
-          detail={`${bounceRate}% bounce · ${num(beh?.kpis?.pageviews)} pageviews`}
-          onClick={() => setTab('behavior')}
-        />
-        <QuestionCard
-          n="3" question="Are they becoming qualified leads?" active={tab === 'conversion'}
-          answer={`${num(qualified)} qualified of ${num(leads)} lead${leads === 1 ? '' : 's'}`}
-          detail={`${pct(leads, sessions)} of visits become leads · ${pct(qualified, sessions)} qualified`}
-          onClick={() => setTab('conversion')}
-        />
-      </div>
-
-      <div className="wa-tabs" role="tablist">
-        {TABS.map(t => (
-          <button key={t.key} role="tab" aria-selected={tab === t.key} type="button" className={`wa-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
-        ))}
-      </div>
-
-      {/* ═════════════ ACQUISITION ═════════════ */}
-      {tab === 'acquisition' && (
-        <>
-          <div className="dash-stats-row">
-            <Stat label="Sessions" value={num(sessions)} delta={<Delta cur={sessions} prev={prevAcq?.kpis?.sessions} />} />
-            <Stat label="Visitors" value={num(acq?.kpis?.visitors)} delta={<Delta cur={acq?.kpis?.visitors} prev={prevAcq?.kpis?.visitors} />} sub={acq?.kpis?.returning_sessions ? `${num(acq.kpis.returning_sessions)} returning` : undefined} />
-            <Stat label="Leads" value={num(leads)} delta={<Delta cur={leads} prev={prevAcq?.kpis?.leads} />} />
-            <Stat label="Qualified leads" value={num(qualified)} delta={<Delta cur={qualified} prev={prevAcq?.kpis?.qualified} />} />
-          </div>
-
-          <div className="dash-grid-2">
-            <Section title="Sessions over time">
-              <TrendChart points={acqTrend} series={[
-                { key: 'sessions', label: 'Sessions', className: 'mkt-bar-total', dot: 'total' },
-                { key: 'leads', label: 'Leads', className: 'mkt-bar-qualified', dot: 'qualified' },
-              ]} />
-            </Section>
-            <Section title="Traffic channels" hint="Where each visit came from, by its first touch. Leads and qualified leads are credited to the channel that first brought the visitor.">
-              <DataTable
-                rows={acq?.channels}
+      {tab === 'goals' && (
+        !cur ? <Skeleton /> : (
+          <>
+            <Card title="Goals" hint="A goal counts once per visit. Conversion rate = visits that completed it ÷ all visits. Click a goal to filter the whole page to those visits.">
+              <Table
+                rows={goalRows}
+                onRow={r => addFilter('goal', r.key)}
+                activeKey={filters.goal}
                 columns={[
-                  { key: 'channel', label: 'Channel' },
-                  { key: 'sessions', label: 'Sessions', num: true, render: r => <>{num(r.sessions)} <span className="wa-muted">{pct(r.sessions, sessions, 0)}</span></> },
-                  { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-                  { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-                  { key: 'rate', label: 'Visit → lead', num: true, render: r => rate(r.leads, r.sessions) },
+                  { key: 'label', label: 'Goal', render: r => <><span className={`wa-chip wa-chip-${r.group.toLowerCase()}`}>{r.group}</span> {r.label}</> },
+                  { key: 'visitors', label: 'Uniques', num: true, render: r => num(r.visitors) },
+                  { key: 'completions', label: 'Total', num: true, hideSm: true, render: r => num(r.completions) },
+                  { key: 'cr', label: 'Conv. rate', num: true, render: r => fmtValue(r.cr, 'pct') },
+                  ...(prev ? [{ key: 'delta', label: 'Change', num: true, hideSm: true, render: r => <Delta cur={r.visits} prev={r.prevVisits} fmt="num" small /> }] : []),
                 ]}
               />
-            </Section>
-          </div>
+            </Card>
 
-          <div className="dash-grid-2">
-            <Section title="Top sources">
-              <DataTable
-                rows={acq?.sources}
-                columns={[
-                  { key: 'source', label: 'Source', render: r => <>{r.source}{r.medium ? <span className="wa-muted"> / {r.medium}</span> : null}</> },
-                  { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                  { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-                  { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-                ]}
-              />
-            </Section>
-            <Section title="Campaigns" hint="From utm_campaign. Posts composed in the Social Media module tag their links automatically.">
-              <DataTable
-                rows={acq?.campaigns}
-                empty="No tagged campaign traffic in this period."
-                columns={[
-                  { key: 'campaign', label: 'Campaign' },
-                  { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                  { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-                  { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-                ]}
-              />
-            </Section>
-          </div>
+            <Card
+              title="Funnels"
+              hint="Visits reaching each step. A later step counts as passing the earlier ones, so a funnel can only narrow."
+              actions={<Pills options={FUNNELS} value={funnelKey} onChange={k => update({ funnel: k === 'booking' ? null : k })} label="Funnel" />}
+            >
+              <Funnel def={FUNNELS.find(f => f.key === funnelKey)} counts={cur.funnels?.[funnelKey]} prevCounts={prev?.funnels?.[funnelKey]} />
+            </Card>
 
-          <Section title="Referring sites">
-            <DataTable
-              rows={acq?.referrers}
-              empty="No referral traffic in this period."
-              columns={[
-                { key: 'domain', label: 'Domain' },
-                { key: 'channel', label: 'Channel' },
-                { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-              ]}
-            />
-          </Section>
-        </>
-      )}
-
-      {/* ═════════════ SEO ═════════════ */}
-      {tab === 'seo' && (
-        <>
-          <div className="wa-seo-status">
-            <span>
-              {seo?.status?.gsc_site_url
-                ? <>Property <strong>{seo.status.gsc_site_url}</strong>{seo.totals?.last_date ? <> · data through {seo.totals.last_date}</> : null}{seo.status.gsc_last_sync_at ? <> · synced {DateTime.fromISO(seo.status.gsc_last_sync_at).toRelative()}</> : null}</>
-                : 'Google Search Console is not connected yet.'}
-              {seo?.status?.gsc_last_sync_status && seo.status.gsc_last_sync_status !== 'ok' && (
-                <span className="wa-sync-error"> · {seo.status.gsc_last_sync_status}</span>
-              )}
-            </span>
-            <button className="btn btn-secondary btn-sm" onClick={syncSearchConsole} disabled={syncing}>{syncing ? 'Syncing…' : 'Sync now'}</button>
-          </div>
-
-          {data.seoError ? (
-            <div className="section-card"><Empty>Could not load search data: {data.seoError}. Run migration-website-analytics.sql if you have not yet.</Empty></div>
-          ) : !seo?.totals?.first_date ? (
-            <div className="section-card wa-onboarding">
-              <h2 className="section-card-title">Connect Google Search Console</h2>
-              <ol className="wa-steps">
-                <li>In Google Cloud, enable the <strong>Search Console API</strong> and create a <strong>service account</strong> with a JSON key.</li>
-                <li>In Search Console → Settings → Users and permissions, add the service account's email as a user (Restricted is enough).</li>
-                <li>Set the key as the Supabase secret <code>GSC_SERVICE_ACCOUNT_JSON</code> and deploy <code>sm-gsc-sync</code>.</li>
-                <li>An admin enters the property in <strong>Settings → Integrations</strong>, then press <em>Sync now</em>.</li>
-              </ol>
-              <p className="wa-hint">Full instructions are in the README under “Website Analytics”. The first sync backfills 90 days.</p>
-            </div>
-          ) : (
-            <>
-              <div className="dash-stats-row">
-                <Stat label="Search clicks" value={num(seo.totals.clicks)} />
-                <Stat label="Impressions" value={num(seo.totals.impressions)} />
-                <Stat label="Click-through rate" value={`${(seo.totals.ctr * 100).toFixed(1)}%`} />
-                <Stat label="Avg. position" value={seo.totals.position ?? '—'} sub="lower is better" />
-              </div>
-
-              <div className="dash-grid-2">
-                <Section title="Search clicks over time">
-                  <TrendChart points={seoTrend} series={[{ key: 'clicks', label: 'Clicks', className: 'mkt-bar-qualified', dot: 'qualified' }]} />
-                </Section>
-                <Section title="Opportunities" hint="Queries where we already rank on page 1–2 (position 5–20) with real impressions. The cheapest SEO wins: better titles, snippets and content for these.">
-                  <DataTable
-                    rows={seo.opportunities}
-                    empty="Nothing in striking distance yet."
-                    columns={[
-                      { key: 'query', label: 'Query' },
-                      { key: 'impressions', label: 'Impr.', num: true, render: r => num(r.impressions) },
-                      { key: 'position', label: 'Pos.', num: true, render: r => r.position },
-                      { key: 'ctr', label: 'CTR', num: true, render: r => `${(r.ctr * 100).toFixed(1)}%` },
-                    ]}
-                  />
-                </Section>
-              </div>
-
-              <Section title="Top search queries" hint="Google hides very rare queries for privacy, so these rows add up to a little less than the totals above.">
-                <DataTable
-                  rows={seo.queries}
-                  columns={[
-                    { key: 'query', label: 'Query' },
-                    { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
-                    { key: 'impressions', label: 'Impressions', num: true, render: r => num(r.impressions) },
-                    { key: 'ctr', label: 'CTR', num: true, render: r => `${(r.ctr * 100).toFixed(1)}%` },
-                    { key: 'position', label: 'Avg. position', num: true, render: r => r.position },
-                  ]}
-                />
-              </Section>
-
-              <Section title="Search pages → leads" hint="Search impressions and clicks from Google, joined to our own tracking: how many organic visits landed on each page and how many became a lead.">
-                <DataTable
-                  rows={seo.pages}
-                  columns={[
-                    { key: 'path', label: 'Page', title: r => r.page },
-                    { key: 'clicks', label: 'Search clicks', num: true, render: r => num(r.clicks) },
-                    { key: 'impressions', label: 'Impressions', num: true, render: r => num(r.impressions) },
-                    { key: 'position', label: 'Pos.', num: true, render: r => r.position },
-                    { key: 'organic_sessions', label: 'Organic visits', num: true, render: r => num(r.organic_sessions) },
-                    { key: 'organic_leads', label: 'Leads', num: true, render: r => num(r.organic_leads) },
-                  ]}
-                />
-              </Section>
-
-              <div className="dash-grid-2">
-                <Section title="Countries"><BarList rows={seo.countries} valueKey="clicks" format={num} suffix=" clicks" /></Section>
-                <Section title="Devices"><BarList rows={seo.devices} valueKey="clicks" format={num} suffix=" clicks" /></Section>
-              </div>
-            </>
-          )}
-        </>
-      )}
-
-      {/* ═════════════ BEHAVIOR ═════════════ */}
-      {tab === 'behavior' && (
-        <>
-          <div className="dash-stats-row">
-            <Stat label="Pageviews" value={num(beh?.kpis?.pageviews)} />
-            <Stat label="Avg. time engaged" value={fmtDuration(beh?.kpis?.avg_engaged_seconds)} sub="per session" />
-            <Stat label="Pages / session" value={beh?.kpis?.pages_per_session || 0} />
-            <Stat label="Bounce rate" value={`${bounceRate}%`} sub="lower is better" />
-          </div>
-
-          <div className="dash-grid-2">
-            <Section title="Pageviews over time">
-              <TrendChart points={behTrend} series={[{ key: 'pageviews', label: 'Pageviews', className: 'mkt-bar-total', dot: 'total' }]} />
-            </Section>
-            <Section title="What people click" hint="Link and button labels only — nothing typed into a form is ever recorded.">
-              <DataTable
-                rows={beh?.clicks}
-                empty="No clicks recorded in this period."
-                columns={[
-                  { key: 'label', label: 'Label', title: r => r.label, render: r => placementWithRoute(r.label) },
-                  { key: 'type', label: 'Type', render: r => <span className="wa-chip">{r.type.replace('_', ' ')}</span> },
-                  { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
-                ]}
-              />
-            </Section>
-          </div>
-
-          <Section title="Top pages">
-            <DataTable
-              rows={beh?.top_pages}
-              columns={[
-                { key: 'path', label: 'Page', render: r => <><span>{r.path}</span><span className="wa-muted"> {r.host}</span></> },
-                { key: 'views', label: 'Views', num: true, render: r => num(r.views) },
-                { key: 'sessions', label: 'Visitors', num: true, render: r => num(r.sessions) },
-                { key: 'avg_engaged_seconds', label: 'Avg. time', num: true, render: r => fmtDuration(r.avg_engaged_seconds) },
-                { key: 'avg_scroll', label: 'Avg. scroll', num: true, render: r => (r.avg_scroll != null ? `${r.avg_scroll}%` : '—') },
-              ]}
-            />
-          </Section>
-
-          <Section title="Landing pages" hint="The first page of each visit — and how well it holds attention and converts.">
-            <DataTable
-              rows={beh?.landing_pages}
-              columns={[
-                { key: 'path', label: 'Landing page' },
-                { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                { key: 'bounce_rate', label: 'Bounce', num: true, render: r => `${r.bounce_rate}%` },
-                { key: 'avg_engaged_seconds', label: 'Avg. time', num: true, render: r => fmtDuration(r.avg_engaged_seconds) },
-                { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-                { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-              ]}
-            />
-          </Section>
-
-          <div className="dash-grid-2">
-            <Section title="Devices"><BarList rows={beh?.devices} /></Section>
-            <Section title="Browsers"><BarList rows={beh?.browsers} /></Section>
-          </div>
-          <div className="dash-grid-2">
-            <Section title="Operating systems"><BarList rows={beh?.systems} /></Section>
-            <Section title="Visitor regions" hint="Approximate, from the visitor's browser time zone. No IP address or precise location is stored.">
-              <BarList rows={beh?.timezones} />
-            </Section>
-          </div>
-          <Section title="Returning visitors" hint="Only visitors who accepted cookies can be recognised on a later visit; everyone else is counted once per session.">
-            <div className="sa-attribution-grid">
-              <div><span className="sa-attr-value">{num(beh?.visitor_mix?.new)}</span><span className="sa-attr-label">New sessions</span></div>
-              <div><span className="sa-attr-value">{num(beh?.visitor_mix?.returning)}</span><span className="sa-attr-label">Returning</span></div>
-              <div><span className="sa-attr-value">{pct(beh?.visitor_mix?.consented, sessions, 0)}</span><span className="sa-attr-label">Accepted cookies</span></div>
-            </div>
-          </Section>
-        </>
-      )}
-
-      {/* ═════════════ CONVERSION ═════════════ */}
-      {tab === 'conversion' && (
-        <>
-          <div className="dash-stats-row">
-            <Stat label="Details saved" value={num(leads)} delta={<Delta cur={leads} prev={prevAcq?.kpis?.leads} />} sub={`${pct(leads, sessions)} of sessions`} />
-            <Stat label="Calls booked" value={num(funnel?.submitted)} delta={<Delta cur={funnel?.submitted} prev={prevConv?.funnel?.submitted} />} sub={`${pct(funnel?.submitted, leads, 0)} of details saved`} />
-            <Stat label="Qualified leads" value={num(qualified)} delta={<Delta cur={qualified} prev={prevAcq?.kpis?.qualified} />} sub={`${pct(qualified, funnel?.submitted, 0)} of booked`} />
-            <Stat
-              label="Typical time to book"
-              value={conv?.timing?.median_minutes_to_book != null ? fmtMinutes(conv.timing.median_minutes_to_book) : '—'}
-              sub={conv?.timing?.avg_pages_before_convert ? `${conv.timing.avg_pages_before_convert} pages first · from first visit` : undefined}
-            />
-          </div>
-
-          {conv && !journeyReady && (
-            <div className="wa-note">
-              Run <code>supabase/migration-website-analytics-booking-journey.sql</code> in the Supabase SQL Editor to unlock reminder follow-up, contact routes, after-booking and error reporting. Until then, a lead who returns through the reminder email is counted twice.
-            </div>
-          )}
-
-          {conv?.coverage?.leads_total > 0 && conv.coverage.leads_tracked < conv.coverage.leads_total && (
-            <div className="wa-note">
-              {num(conv.coverage.leads_tracked)} of {num(conv.coverage.leads_total)} leads in this period have website attribution. The rest arrived before tracking started, or from visitors whose browser blocked the tracker.
-            </div>
-          )}
-
-          <Section title="Booking funnel" hint="Each step counts fresh visits that reached it; people coming back through a reminder or prep link are not counted again. Contact details, booking and prep answers come from the leads table, so they cannot be inflated. The red marker shows where the most people are lost on the way to a booked call.">
-            <div className="wa-funnel">
-              {funnelRows.map((r, i) => (
-                <div className={`wa-funnel-row ${r.worst ? 'worst' : ''}`} key={r.key}>
-                  <span className="wa-funnel-label">{r.label}</span>
-                  <div className="wa-funnel-track"><div className="wa-funnel-fill" style={{ width: `${funnelRows[0].count ? Math.max((r.count / funnelRows[0].count) * 100, r.count ? 1 : 0) : 0}%` }} /></div>
-                  <span className="wa-funnel-count">{num(r.count)}</span>
-                  <span className="wa-funnel-rate">
-                    {/* Over 100% happens at the last step: a lead can be scored from partial prep answers. */}
-                    {i === 0 || r.stepRate == null || r.stepRate > 1 ? '' : `${Math.round(r.stepRate * 100)}% continue`}
-                    {r.worst && <strong className="wa-funnel-flag"> · biggest drop</strong>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          <div className="dash-grid-2">
-            <Section title="Booking page steps" hint="Where visitors spend time. Counts every visit to the page, so someone returning from a reminder email shows again at “Pick a time”.">
-              <DataTable
-                rows={conv?.steps?.map(s => ({ ...s, name: STEP_LABELS[s.step] || `Step ${s.step}` }))}
-                empty="No booking page activity in this period."
-                columns={[
-                  { key: 'name', label: 'Step' },
-                  { key: 'views', label: 'Reached', num: true, render: r => num(r.views) },
-                  { key: 'completes', label: 'Continued', num: true, render: r => (r.step === '3' ? '—' : num(r.completes)) },
-                  { key: 'avg_seconds', label: 'Avg. time', num: true, render: r => (r.avg_seconds != null ? fmtDuration(r.avg_seconds) : '—') },
-                ]}
-              />
-              {errorRows.length > 0 ? (
-                <>
-                  <p className="wa-hint" style={{ margin: 'var(--space-md) 0 var(--space-sm)' }}>When something went wrong or was blocked</p>
-                  <DataTable
-                    rows={errorRows}
-                    columns={[
-                      { key: 'name', label: 'What happened' },
-                      { key: 'sessions', label: 'Visits', num: true, render: r => num(r.sessions) },
-                    ]}
-                  />
-                </>
-              ) : conv?.errors > 0 && (
-                <p className="wa-hint" style={{ marginTop: 'var(--space-sm)' }}>
-                  {num(conv.errors)} submission error{conv.errors === 1 ? '' : 's'}
-                </p>
-              )}
-            </Section>
-            <Section title="Conversion by channel">
-              <DataTable
-                rows={conv?.by_channel}
-                columns={[
-                  { key: 'channel', label: 'Channel' },
-                  { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                  { key: 'form_views', label: 'Opened form', num: true, render: r => num(r.form_views) },
-                  { key: 'leads', label: 'Details saved', num: true, render: r => num(r.leads) },
-                  ...(journeyReady ? [{ key: 'booked', label: 'Booked', num: true, render: r => num(r.booked) }] : []),
-                  { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-                  { key: 'rate', label: 'Visit → qualified', num: true, render: r => rate(r.qualified, r.sessions) },
-                ]}
-              />
-            </Section>
-          </div>
-
-          {journeyReady && (
-            <>
-              <div className="dash-grid-2">
-                <Section title="Reminder follow-up" hint="People who saved their details but have not picked a time get one reminder email about 30 minutes later. “Booked after reminder” counts leads whose booking came after that email went out.">
-                  <div className="sa-attribution-grid">
-                    <div><span className="sa-attr-value">{num(followUp?.waiting)}</span><span className="sa-attr-label">Waiting for a time</span></div>
-                    <div><span className="sa-attr-value">{num(followUp?.reminded)}</span><span className="sa-attr-label">Reminded</span></div>
-                    <div>
-                      <span className="sa-attr-value">{num(followUp?.recovered)}</span>
-                      <span className="sa-attr-label">Booked after reminder{followUp?.reminded > 0 ? ` · ${pct(followUp.recovered, followUp.reminded, 0)}` : ''}</span>
-                    </div>
-                    <div><span className="sa-attr-value">{num(followUp?.returns)}</span><span className="sa-attr-label">Returning visits</span></div>
-                  </div>
-                </Section>
-                <Section title="After booking" hint="What people do on the confirmation screen. Prep answers also arrive later through the emailed link, so “answered” can be higher than “shown”.">
-                  <div className="sa-attribution-grid">
-                    <div><span className="sa-attr-value">{pct(afterBooking?.calendar_added, afterBooking?.booked, 0)}</span><span className="sa-attr-label">Added to calendar</span></div>
-                    <div><span className="sa-attr-value">{num(afterBooking?.prep_shown)}</span><span className="sa-attr-label">Shown prep questions</span></div>
-                    <div><span className="sa-attr-value">{num(afterBooking?.prep_skipped)}</span><span className="sa-attr-label">Skipped them</span></div>
-                    <div>
-                      <span className="sa-attr-value">{pct(afterBooking?.prep_answered, afterBooking?.booked, 0)}</span>
-                      <span className="sa-attr-label">Answered{afterBooking?.avg_questions > 0 ? ` · ${afterBooking.avg_questions} of 5 on average` : ''}</span>
-                    </div>
-                  </div>
-                </Section>
-              </div>
-
-              <div className="dash-grid-2">
-                <Section title="How visitors choose to get in touch" hint="Which route each visit took from the call-to-action buttons. WhatsApp, phone and email happen outside the site, so those never appear in the funnel above.">
-                  <DataTable
-                    rows={methodRows}
-                    columns={[
-                      { key: 'name', label: 'Route' },
-                      { key: 'sessions', label: 'Visits', num: true, render: r => num(r.sessions) },
-                      { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
-                      { key: 'booked', label: 'Booked a call', num: true, render: r => num(r.booked) },
-                    ]}
-                  />
-                  {reach?.offsite_not_booked > 0 && (
-                    <div className="wa-note" style={{ marginTop: 'var(--space-md)' }}>
-                      {num(reach.offsite_not_booked)} visit{reach.offsite_not_booked === 1 ? '' : 's'} went to WhatsApp, phone or email and did not book on the site. Those conversations are not in the CRM: check the WhatsApp inbox and call log.
-                    </div>
+            <div className="wa-grid">
+              <Card title="Lead quality" hint="Leads created from a tracked visit, credited to the first visit that carried them.">
+                <div className="wa-minis">
+                  <MiniStat label="Leads" value={num(kpis?.leads)} sub={prev ? <Delta cur={kpis?.leads} prev={prev.kpis?.leads} fmt="num" small /> : null} />
+                  <MiniStat label="Hot or warm" value={num(kpis?.qualified)} sub={kpis?.leads ? `${fmtValue(pctOf(kpis.qualified, kpis.leads), 'pct')} of leads` : null} />
+                  <MiniStat label="Visit → lead" value={fmtValue(pctOf(kpis?.leads || 0, kpis?.visits || 0), 'pct2')} />
+                  {conv.data?.coverage && (
+                    <MiniStat label="Leads tracked" value={`${num(conv.data.coverage.leads_tracked)} / ${num(conv.data.coverage.leads_total)}`} sub="all leads created in the period" />
                   )}
-                </Section>
-                <Section title="Call-to-action placements" hint="Every button that leads to the booking page, WhatsApp, phone or email, by where it sits. “Booked” counts visits that clicked it and later booked a call.">
-                  <DataTable
-                    rows={conv?.cta_placements}
+                </div>
+              </Card>
+              <Card title="How visitors get in touch" hint="Every booking-page, WhatsApp, phone and email click. Ignores the filters above.">
+                {conv.loading && !conv.data ? <div className="wa-empty">Loading…</div> : (
+                  <RankList
+                    rows={(conv.data?.contact_methods || []).map(m => ({ ...m, name: m.method }))}
+                    labelFor={r => METHODS[r.name] || r.name}
+                    columns={withLabel('Route', [
+                      { key: 'sessions', label: 'Visits', fmt: 'num' },
+                      { key: 'clicks', label: 'Clicks', fmt: 'num' },
+                      { key: 'booked', label: 'Booked', fmt: 'num' },
+                    ])}
+                    empty="No contact clicks in this period."
+                  />
+                )}
+              </Card>
+            </div>
+
+            {conv.data && (
+              <>
+                <Card title="Calls to action" hint="Which button placements get clicked (data-sdfm-label on sdfmgroup.com). Ignores the filters above.">
+                  <Table
+                    rows={(conv.data.cta_placements || []).map(p => ({ ...p, name: `${p.label}-${p.method}` }))}
                     empty="No call-to-action clicks in this period."
                     columns={[
-                      { key: 'label', label: 'Placement', title: r => r.label, render: r => placementLabel(r.label) },
-                      { key: 'method', label: 'Route', render: r => <span className="wa-chip">{methodLabel(r.method)}</span> },
+                      { key: 'label', label: 'Placement', render: r => placementLabel(r.label) },
+                      { key: 'method', label: 'Route', hideSm: true, render: r => METHODS[r.method] || r.method },
                       { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
+                      { key: 'sessions', label: 'Visits', num: true, hideSm: true, render: r => num(r.sessions) },
                       { key: 'booked', label: 'Booked', num: true, render: r => num(r.booked) },
                     ]}
                   />
-                </Section>
-              </div>
-            </>
-          )}
-
-          <div className="dash-grid-2">
-            <Section title="Pages that start conversions" hint="Landing pages ranked by the leads they produced.">
-              <DataTable
-                rows={conv?.by_landing}
-                columns={[
-                  { key: 'path', label: 'Landing page' },
-                  { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                  { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-                  { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-                  { key: 'rate', label: 'Visit → lead', num: true, render: r => rate(r.leads, r.sessions) },
-                ]}
-              />
-            </Section>
-            <Section title="Campaign conversion">
-              <DataTable
-                rows={conv?.by_campaign}
-                empty="No tagged campaign traffic in this period."
-                columns={[
-                  { key: 'campaign', label: 'Campaign' },
-                  { key: 'sessions', label: 'Sessions', num: true, render: r => num(r.sessions) },
-                  { key: 'leads', label: 'Leads', num: true, render: r => num(r.leads) },
-                  { key: 'qualified', label: 'Qualified', num: true, render: r => num(r.qualified) },
-                ]}
-              />
-            </Section>
-          </div>
-
-          <Section title="Who answers what" hint="The option each visitor settled on (their last choice) for every prep question, asked after a call is booked. Options marked “flagged” never block a booking, but a large share there means the wrong audience is reaching the page.">
-            <div className="wa-answers">
-              {Object.entries(answersByQuestion).map(([q, a]) => (
-                <div className="wa-answer-block" key={q}>
-                  <div className="wa-answer-q"><span className="wa-question-n">{q.toUpperCase()}</span>{a.question}<span className="wa-muted"> · {num(a.total)} answered</span></div>
-                  <div className="wa-barlist">
-                    {a.options.map(o => (
-                      <div className="wa-barlist-row" key={o.name}>
-                        <span className="wa-barlist-label wa-wide" title={o.name}>{o.name}{o.disqualifier && <span className="wa-chip wa-chip-warn">flagged</span>}</span>
-                        <div className="wa-barlist-track"><div className={`wa-barlist-fill ${o.disqualifier ? 'warn' : ''}`} style={{ width: `${a.total ? (o.sessions / a.total) * 100 : 0}%` }} /></div>
-                        <span className="wa-barlist-value">{num(o.sessions)} <span className="wa-muted">{pct(o.sessions, a.total, 0)}</span></span>
+                </Card>
+                <div className="wa-grid">
+                  {conv.data.follow_up && (
+                    <Card title="Booking follow-up" hint="People who saved their details on the booking page.">
+                      <div className="wa-minis">
+                        <MiniStat label="Details saved" value={num(conv.data.follow_up.details_saved)} />
+                        <MiniStat label="Booked" value={num(conv.data.follow_up.booked)} />
+                        <MiniStat label="Still waiting" value={num(conv.data.follow_up.waiting)} />
+                        <MiniStat label="Booked after reminder" value={num(conv.data.follow_up.recovered)} sub={`${num(conv.data.follow_up.reminded)} reminded`} />
+                        {conv.data.timing?.median_minutes_to_book != null && (
+                          <MiniStat label="Median time to book" value={fmtMinutes(conv.data.timing.median_minutes_to_book)} />
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    </Card>
+                  )}
+                  <Card title="Booking errors" hint="Problems visitors hit on the booking page.">
+                    <RankList
+                      rows={(conv.data.errors_by_stage || []).map(e => ({ ...e, name: e.stage }))}
+                      labelFor={r => ERROR_STAGES[r.name] || r.name}
+                      columns={withLabel('Problem', [{ key: 'sessions', label: 'Visits', fmt: 'num' }, { key: 'events', label: 'Times', fmt: 'num' }])}
+                      empty="No errors in this period."
+                    />
+                  </Card>
                 </div>
-              ))}
-            </div>
-          </Section>
-
-          <Section title="Recent lead journeys" hint="How each of the latest leads found us and what they did first. No names or contact details are shown here.">
-            <DataTable
-              rows={conv?.journeys}
-              empty="No tracked leads in this period yet."
-              columns={[
-                { key: 'at', label: 'When' },
-                { key: 'channel', label: 'Channel', render: r => <>{r.channel}<span className="wa-muted"> {r.source}</span></> },
-                { key: 'landing_path', label: 'Landed on' },
-                { key: 'campaign', label: 'Campaign', render: r => r.campaign || '—' },
-                { key: 'pageviews', label: 'Pages', num: true, render: r => num(r.pageviews) },
-                { key: 'minutes_to_convert', label: 'To details', num: true, render: r => fmtMinutes(r.minutes_to_convert) },
-                { key: 'minutes_to_book', label: 'To book', num: true, render: r => (r.minutes_to_book != null ? fmtMinutes(r.minutes_to_book) : '—') },
-                { key: 'classification', label: 'Status', render: r => <JourneyStatus r={r} /> },
-              ]}
-            />
-          </Section>
-        </>
+                {(conv.data.journeys || []).length > 0 && (
+                  <Card title="Recent lead journeys" hint="How the latest leads found us. No names or contact details are shown here.">
+                    <Table
+                      rows={conv.data.journeys.map((j, i) => ({ ...j, name: `${j.at}-${i}` }))}
+                      columns={[
+                        { key: 'at', label: 'When' },
+                        { key: 'channel', label: 'Channel', render: r => <>{r.channel} <span className="wa-muted">{r.source}</span></> },
+                        { key: 'landing_path', label: 'Landed on', hideSm: true },
+                        { key: 'pageviews', label: 'Pages', num: true, hideSm: true },
+                        { key: 'minutes_to_convert', label: 'To lead', num: true, render: r => fmtMinutes(r.minutes_to_convert) },
+                        { key: 'status', label: 'Status', render: r => (
+                          <span className={`wa-chip ${r.qualified ? 'wa-chip-lead' : ''}`}>{r.is_disqualified ? 'Disqualified' : capitalise(r.classification || 'unscored')}{r.booked ? ' · booked' : ''}</span>
+                        ) },
+                      ]}
+                    />
+                  </Card>
+                )}
+              </>
+            )}
+          </>
+        )
       )}
 
-      {/* ── Install tracker modal ── */}
+      {tab === 'search' && <SearchTab seo={seo} range={range} tz={tz} params={params} update={update} seoMetric={seoMetric} syncing={syncing} onSync={syncSearchConsole} compareLabel={compareLabel} />}
+
       {showInstall && (
         <div className="modal-overlay" onClick={() => setShowInstall(false)}>
           <div className="modal-card modal-card-wide" onClick={e => e.stopPropagation()}>
-            <h3 className="modal-title">Install the website tracker</h3>
+            <h3 className="modal-title">The website tracker</h3>
             <p className="modal-subtitle">
-              Paste this just before <code>&lt;/head&gt;</code> on every page of sdfmgroup.com (it is already on the site). It measures the whole visitor journey, including the booking page.
+              Already on every page of sdfmgroup.com, just before <code>&lt;/head&gt;</code>. Add it to any new page or site you want measured.
             </p>
             <pre className="wa-snippet">{getTrackerSnippet()}</pre>
             <ul className="wa-install-notes">
-              <li><strong>Consent:</strong> visits are always counted anonymously (no IP stored, no persistent ID). A returning-visitor ID is only added when the visitor accepts cookies — the tracker reads <code>localStorage.sdfm_cookie_consent</code> (“accepted” / “rejected”). If the marketing site's cookie banner stores consent elsewhere, call <code>window.sdfm.setConsent('accepted' | 'rejected')</code> from it.</li>
-              <li><strong>Your own visits:</strong> open any page once with <code>?sdfm_ignore=1</code> (e.g. sdfmgroup.com/?sdfm_ignore=1) on each browser you use, so staff and testing don't pollute the numbers. <code>?sdfm_ignore=0</code> turns tracking back on.</li>
-              <li><strong>Call-to-action links:</strong> every button that leads to the booking page, WhatsApp, phone or email carries <code>data-sdfm-cta</code> and a <code>data-sdfm-label</code> naming where it sits (for example <code>hero_book</code>), so you can see which placements get clicks. Add the attribute to any new CTA you create.</li>
-              <li><strong>Privacy policy:</strong> update the cookie section of your privacy policy to mention first-party analytics.</li>
+              <li><strong>Privacy:</strong> no IP address is stored and no cookie is set unless the visitor accepts cookies (then a returning-visitor ID is kept). Consent is read from <code>localStorage.sdfm_cookie_consent</code>, or set with <code>window.sdfm.setConsent('accepted' | 'rejected')</code>.</li>
+              <li><strong>Your own visits:</strong> open any page once with <code>?sdfm_ignore=1</code> on each browser you use; <code>?sdfm_ignore=0</code> turns tracking back on.</li>
+              <li><strong>Buttons:</strong> give every call-to-action <code>data-sdfm-cta</code> and a <code>data-sdfm-label</code> naming where it sits (e.g. <code>hero_book</code>).</li>
+              <li><strong>Goals</strong> come from events the site already sends: <code>form_submit</code> (call booked), <code>gap_check_*</code> (scoper), <code>lead_form_submit</code> (custom build / industry / contact forms), and WhatsApp, phone and email clicks.</li>
             </ul>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={copySnippet}>Copy snippet</button>
@@ -1165,7 +824,177 @@ export default function WebsiteAnalytics() {
         </div>
       )}
 
-      {toast.show && <div className={`toast toast-${toast.type}`}>{toast.text}</div>}
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.text}</div>}
     </div>
   )
 }
+
+// ── Search Console tab ────────────────────────────────────────────────────────
+
+function SearchTab({ seo, range, tz, params, update, seoMetric, syncing, onSync, compareLabel }) {
+  const [view, setView] = useState('queries')
+  const s = seo.cur
+  const p = seo.prev
+  const sq = params.get('sq')
+  const sp = params.get('sp')
+  const metricDef = SEO_METRICS.find(m => m.key === seoMetric)
+
+  const points = useMemo(() => {
+    if (!s) return []
+    const dayRange = { ...range, interval: 'day' }
+    const rows = (s.daily || []).map(d => ({ ...d, bucket: d.date }))
+    const keys = SEO_METRICS.map(m => m.key)
+    const cur = fillSeries(rows, range.start ? dayRange : { ...dayRange, start: null }, tz, keys)
+    const prevPts = p && range.cmp ? fillSeries((p.daily || []).map(d => ({ ...d, bucket: d.date })), { ...range.cmp, interval: 'day' }, tz, keys, 'bucket', range.cmp.end) : []
+    // Position and CTR have no value on a day without impressions.
+    const val = (pt, k) => (pt.empty && (k === 'position' || k === 'ctr') ? null : pt[k])
+    return cur.map((pt, i) => ({
+      key: pt.key, label: pt.label, longLabel: pt.longLabel,
+      value: val(pt, seoMetric),
+      prev: prevPts[i] ? val(prevPts[i], seoMetric) : null,
+      prevLabel: prevPts[i]?.longLabel,
+    }))
+  }, [s, p, range, tz, seoMetric])
+
+  const prevQueries = useMemo(() => new Map((p?.queries || []).map(q => [q.name, q])), [p])
+  const prevPages = useMemo(() => new Map((p?.pages || []).map(q => [q.name, q])), [p])
+
+  if (seo.error) return <Card><div className="wa-empty">{seo.error}</div></Card>
+  if (!s) return <Skeleton />
+
+  const status = s.status || {}
+  const notConfigured = !status.gsc_site_url
+  const lastSync = status.gsc_last_sync_at ? DateTime.fromISO(status.gsc_last_sync_at).setZone(tz) : null
+  const syncOk = !status.gsc_last_sync_status || status.gsc_last_sync_status === 'ok'
+  const lastDate = s.totals?.last_date
+
+  const posChange = (curPos, prevPos) => {
+    if (curPos == null || prevPos == null) return null
+    const d = Math.round((prevPos - curPos) * 10) / 10 // positive = moved up
+    if (d === 0) return <span className="wa-delta wa-delta-flat sm">0</span>
+    return <span className={`wa-delta sm ${d > 0 ? 'wa-delta-good' : 'wa-delta-bad'}`} title={`Previous: ${prevPos}`}>{d > 0 ? '↑' : '↓'}{Math.abs(d)}</span>
+  }
+
+  const queryCols = [
+    { key: 'name', label: 'Query' },
+    { key: 'clicks', label: 'Clicks', num: true, render: r => <>{num(r.clicks)} {p && <Delta cur={r.clicks} prev={prevQueries.get(r.name)?.clicks ?? 0} fmt="num" small />}</> },
+    { key: 'impressions', label: 'Impr.', num: true, render: r => num(r.impressions) },
+    { key: 'ctr', label: 'CTR', num: true, hideSm: true, render: r => fmtValue(r.ctr, 'pct2') },
+    { key: 'position', label: 'Position', num: true, render: r => <>{fmtValue(r.position, 'dec1')} {p && posChange(r.position, prevQueries.get(r.name)?.position)}</> },
+  ]
+  const pageCols = [
+    { key: 'name', label: 'Page' },
+    { key: 'clicks', label: 'Clicks', num: true, render: r => <>{num(r.clicks)} {p && <Delta cur={r.clicks} prev={prevPages.get(r.name)?.clicks ?? 0} fmt="num" small />}</> },
+    { key: 'impressions', label: 'Impr.', num: true, render: r => num(r.impressions) },
+    { key: 'position', label: 'Position', num: true, hideSm: true, render: r => <>{fmtValue(r.position, 'dec1')} {p && posChange(r.position, prevPages.get(r.name)?.position)}</> },
+    { key: 'organic_visits', label: 'Organic visits', num: true, hideSm: true, render: r => num(r.organic_visits) },
+    { key: 'organic_conversions', label: 'Conv.', num: true, render: r => num(r.organic_conversions) },
+  ]
+
+  return (
+    <>
+      <div className={`wa-sync ${syncOk ? '' : 'error'}`}>
+        <div>
+          {notConfigured ? (
+            <strong>Search Console is not connected.</strong>
+          ) : (
+            <>
+              <strong>{status.gsc_site_url}</strong>
+              <span className="wa-muted"> · last synced {lastSync ? lastSync.toRelative() : 'never'}{lastDate ? ` · data up to ${DateTime.fromISO(lastDate).toFormat('d LLL')}` : ''}</span>
+              {!syncOk && <div className="wa-sync-error">{status.gsc_last_sync_status}</div>}
+            </>
+          )}
+          <div className="wa-muted wa-sync-note">Google reports search data 2–3 days late. A daily job re-syncs the last 10 days at 05:30 Nairobi time.</div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={onSync} disabled={syncing || notConfigured}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+      </div>
+
+      {notConfigured ? (
+        <Card title="Connect Search Console">
+          <p className="wa-card-hint">Add the service account to the Search Console property and set the property in Settings → Integrations. See README → Website Analytics for the steps.</p>
+        </Card>
+      ) : (
+        <>
+          {(sq || sp) && (
+            <div className="wa-filters">
+              {sq && <span className="wa-filter-chip"><span className="wa-muted">Query is</span> <strong>{sq}</strong><button type="button" onClick={() => update({ sq: null })} aria-label="Remove query filter">×</button></span>}
+              {sp && <span className="wa-filter-chip"><span className="wa-muted">Page is</span> <strong>{sp}</strong><button type="button" onClick={() => update({ sp: null })} aria-label="Remove page filter">×</button></span>}
+            </div>
+          )}
+          <KpiGrid metrics={SEO_METRICS} kpis={s.totals} prevKpis={p?.totals} selected={seoMetric}
+            onSelect={k => update({ smetric: k === 'clicks' ? null : k })} />
+          <Card title={metricDef.label} hint={seoMetric === 'position' ? 'Lower is better: 1 is the top result.' : 'Google search results, by day.'} className="wa-chart-card">
+            <WaChart points={points} fmt={metricDef.fmt} metricLabel={range.label} compareLabel={compareLabel} reverse={seoMetric === 'position'} />
+          </Card>
+
+          <Card
+            title="Search performance"
+            hint={view === 'opportunities' ? 'Queries already on page 1–2 (position 4–20) with at least 10 impressions: a better title, description or section can win the click.' : 'Click a row to filter this tab by it.'}
+            actions={<Pills options={[{ key: 'queries', label: 'Queries' }, { key: 'pages', label: 'Pages' }, { key: 'opportunities', label: 'Opportunities' }]} value={view} onChange={setView} label="Search table" />}
+          >
+            {view === 'queries' && <Table rows={s.queries} columns={queryCols} onRow={r => update({ sq: r.name })} activeKey={sq} empty="No queries in this period. Google hides rare queries for privacy." />}
+            {view === 'pages' && <Table rows={s.pages} columns={pageCols} onRow={r => update({ sp: r.name })} activeKey={sp} />}
+            {view === 'opportunities' && <Table rows={s.opportunities} columns={queryCols} onRow={r => update({ sq: r.name })} activeKey={sq} empty="No striking-distance queries yet." />}
+          </Card>
+
+          <div className="wa-grid">
+            <Card title="Countries" hint="Whole site; not affected by query or page filters.">
+              <RankList rows={s.countries} columns={withLabel('Country', [{ key: 'clicks', label: 'Clicks', fmt: 'num' }, { key: 'impressions', label: 'Impr.', fmt: 'num' }])}
+                labelFor={r => { const c = countryInfo(r.name); return <><span className="wa-cc" aria-hidden="true">{c.code}</span>{c.name}</> }} limit={10} />
+            </Card>
+            <Card title="Devices" hint="Whole site; not affected by query or page filters.">
+              <RankList rows={s.devices} columns={withLabel('Device', [{ key: 'clicks', label: 'Clicks', fmt: 'num' }, { key: 'impressions', label: 'Impr.', fmt: 'num' }, { key: 'position', label: 'Position', fmt: 'dec1' }])}
+                labelFor={r => capitalise(r.name)} />
+            </Card>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ── helpers used in JSX ──
+
+function withLabel(label, cols) {
+  const c = [...cols]
+  c.label = label
+  return c
+}
+
+function visitorCols(label, withBounce = false) {
+  return withLabel(label, [
+    { key: 'visitors', label: 'Visitors', fmt: 'num' },
+    ...(withBounce ? [{ key: 'bounce_rate', label: 'Bounce', fmt: 'pct', hideSm: true }] : []),
+    { key: 'cr', label: 'Conv.', render: r => fmtValue(pctOf(r.conversions, r.visits), 'pct') },
+  ])
+}
+
+function SourceLabel({ name }) {
+  const domain = /\./.test(name) ? name : SOURCE_DOMAINS[name]
+  return (
+    <>
+      {domain && <img className="wa-favicon" alt="" loading="lazy" src={`https://icons.duckduckgo.com/ip3/${domain}.ico`} onError={e => { e.currentTarget.style.display = 'none' }} />}
+      {name === '(direct)' ? 'Direct / none' : name}
+    </>
+  )
+}
+
+const SOURCE_DOMAINS = {
+  google: 'google.com', bing: 'bing.com', duckduckgo: 'duckduckgo.com', yahoo: 'yahoo.com', linkedin: 'linkedin.com',
+  facebook: 'facebook.com', instagram: 'instagram.com', twitter: 'x.com', youtube: 'youtube.com', whatsapp: 'whatsapp.com',
+  tiktok: 'tiktok.com', reddit: 'reddit.com', gmail: 'mail.google.com', outlook: 'outlook.com', chatgpt: 'chatgpt.com',
+}
+
+function capitalise(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
+
+function Skeleton() {
+  return (
+    <>
+      <div className="wa-kpis wa-kpis-4">{[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="skeleton wa-kpi-skel" />)}</div>
+      <div className="skeleton" style={{ height: 300, borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-lg)' }} />
+    </>
+  )
+}
+
