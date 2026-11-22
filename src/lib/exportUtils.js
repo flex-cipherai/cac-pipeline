@@ -184,7 +184,6 @@ export function exportSocialAnalyticsPDF(metrics, filename) {
     body: [
       ['Leads sourced from social', String(metrics.leadsFromLinkedIn)],
       ['Qualified (Hot + Warm)', String(metrics.qualifiedFromLinkedIn)],
-      ['Discovery calls booked', String(metrics.discoveryCallsFromLinkedIn)],
     ],
     theme: 'plain',
     styles: { fontSize: 9, cellPadding: 4, font: 'helvetica' },

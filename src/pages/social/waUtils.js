@@ -35,8 +35,6 @@ export const FILTERS = {
 // Keys match wa_event_goal() in supabase/migration-website-analytics-v2.sql.
 // `conversion: false` = counted as a goal but not as a conversion.
 export const GOALS = [
-  { key: 'call_booked', label: 'Booked a call', group: 'Lead', conversion: true },
-  { key: 'booking_details', label: 'Left details on the booking page', group: 'Lead', conversion: true },
   { key: 'scoper_contact', label: 'Scoper: asked to be contacted', group: 'Lead', conversion: true },
   { key: 'custom_build', label: 'Custom-build request sent', group: 'Lead', conversion: true },
   { key: 'industry_enquiry', label: 'Industry-solutions enquiry', group: 'Lead', conversion: true },
@@ -51,12 +49,12 @@ export const goalLabel = key => GOALS.find(g => g.key === key)?.label || key
 
 export const FUNNELS = [
   {
-    key: 'booking', label: 'Book a call', goal: 'call_booked',
-    steps: ['All visits', 'Opened the booking page', 'Started the form', 'Saved contact details', 'Picked a time', 'Booked the call'],
+    key: 'scoper', label: 'Automation scoper', goal: 'scoper_contact',
+    steps: ['All visits', 'Opened the scoper', 'Started a review', 'Answered the first question', 'Got the report', 'Left details to be contacted'],
   },
   {
-    key: 'scoper', label: 'Automation scoper', goal: 'scoper_contact',
-    steps: ['All visits', 'Opened the scoper', 'Started a scoping chat', 'Answered the first question', 'Got the report', 'Asked to be contacted'],
+    key: 'contact', label: 'Contact form', goal: 'contact_form',
+    steps: ['All visits', 'Viewed the contact page', 'Started the contact form', 'Sent a message'],
   },
   {
     key: 'custom', label: 'Custom build request', goal: 'custom_build',

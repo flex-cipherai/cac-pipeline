@@ -8,7 +8,7 @@ import WaChart from './WaChart'
 import { CTA_PLACEMENTS } from './waPlacements'
 import {
   DEFAULT_TZ, PERIODS, COMPARE, FILTERS, GOALS, FUNNELS, METRICS, SEO_METRICS,
-  num, fmtValue, fmtMinutes, pctOf, change, resolveRange, fillSeries,
+  num, fmtValue, pctOf, change, resolveRange, fillSeries,
   countryInfo, languageName, filterValueLabel,
 } from './waUtils'
 import './WebsiteAnalytics.css'
@@ -16,7 +16,7 @@ import './WebsiteAnalytics.css'
 // Website Analytics, modelled on Plausible / Fathom / GA4:
 //   Overview          headline KPIs with deltas, one trend chart (click a KPI to
 //                     switch metric), sources, pages, locations, devices, goals
-//   Goals & funnels   every goal, three funnels, lead quality, booking journey
+//   Goals & funnels   every goal, three funnels, contact requests, contact routes, CTAs
 //   Search Console    clicks, impressions, CTR, position, queries, pages
 // Click any row to filter the whole page by it; filters, period, comparison and
 // tab live in the URL so a view can be shared or bookmarked.
@@ -29,15 +29,16 @@ const TABS = [
   { key: 'search', label: 'Search Console' },
 ]
 
-const METHODS = { book: 'Book on the site', whatsapp: 'WhatsApp', phone: 'Phone call', email: 'Email' }
+// Off-site contact routes. Call booking was retired in 2026-11, so old 'book' clicks are not shown.
+const METHODS = { whatsapp: 'WhatsApp', phone: 'Phone call', email: 'Email' }
 
-const ERROR_STAGES = {
-  start: 'Contact details could not be saved',
-  slot_taken: 'Chosen time was taken by someone else',
-  confirm: 'Booking could not be confirmed',
-  rate_limited: 'Blocked for too many attempts',
-  already_booked: 'Already had a call booked',
-}
+// Goals where a visitor leaves their details for SDFM to contact them.
+const CONTACT_GOALS = [
+  { key: 'scoper_contact', label: 'After the scoper' },
+  { key: 'custom_build', label: 'Custom-build requests' },
+  { key: 'industry_enquiry', label: 'Industry enquiries' },
+  { key: 'contact_form', label: 'Contact form' },
+]
 
 const placementLabel = label => CTA_PLACEMENTS[label] || label
 
@@ -309,7 +310,7 @@ export default function WebsiteAnalytics() {
   const compare = COMPARE.some(c => c.key === params.get('cmp')) ? params.get('cmp') : 'prev'
   const metric = METRICS.some(m => m.key === params.get('metric')) ? params.get('metric') : 'visitors'
   const seoMetric = SEO_METRICS.some(m => m.key === params.get('smetric')) ? params.get('smetric') : 'clicks'
-  const funnelKey = FUNNELS.some(f => f.key === params.get('funnel')) ? params.get('funnel') : 'booking'
+  const funnelKey = FUNNELS.some(f => f.key === params.get('funnel')) ? params.get('funnel') : 'scoper'
   const customFrom = params.get('from') || ''
   const customTo = params.get('to') || ''
   const filterString = Object.keys(FILTERS).map(k => `${k}=${params.get(`f.${k}`) || ''}`).join('&')
@@ -489,7 +490,6 @@ export default function WebsiteAnalytics() {
       rows.push(['Page', 'Clicks', 'Impressions', 'CTR %', 'Position', 'Organic visits', 'Organic conversions'], ...s.pages.map(p => [p.name, p.clicks, p.impressions, p.ctr, p.position, p.organic_visits, p.organic_conversions]))
     } else if (cur) {
       METRICS.forEach(m => rows.push([m.label, kpis?.[m.key] ?? '', prev ? `previous: ${prev.kpis?.[m.key] ?? ''}` : '']))
-      rows.push(['Leads (first touch)', kpis?.leads ?? 0], ['Hot or warm leads', kpis?.qualified ?? 0], [''])
       const block = (title, list, cols) => { rows.push([title, ...cols.map(c => c[0])], ...(list || []).map(r => [r.name, ...cols.map(c => r[c[1]] ?? '')]), ['']) }
       block('Channel', cur.channels, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Conversions', 'conversions'], ['Bounce %', 'bounce_rate']])
       block('Source', cur.sources, [['Visitors', 'visitors'], ['Visits', 'visits'], ['Conversions', 'conversions'], ['Bounce %', 'bounce_rate']])
@@ -707,31 +707,29 @@ export default function WebsiteAnalytics() {
             <Card
               title="Funnels"
               hint="Visits reaching each step. A later step counts as passing the earlier ones, so a funnel can only narrow."
-              actions={<Pills options={FUNNELS} value={funnelKey} onChange={k => update({ funnel: k === 'booking' ? null : k })} label="Funnel" />}
+              actions={<Pills options={FUNNELS} value={funnelKey} onChange={k => update({ funnel: k === 'scoper' ? null : k })} label="Funnel" />}
             >
               <Funnel def={FUNNELS.find(f => f.key === funnelKey)} counts={cur.funnels?.[funnelKey]} prevCounts={prev?.funnels?.[funnelKey]} />
             </Card>
 
             <div className="wa-grid">
-              <Card title="Lead quality" hint="Leads created from a tracked visit, credited to the first visit that carried them.">
+              <Card title="Contact requests" hint="People who left their details for us to contact them. Each counts once per visit.">
                 <div className="wa-minis">
-                  <MiniStat label="Leads" value={num(kpis?.leads)} sub={prev ? <Delta cur={kpis?.leads} prev={prev.kpis?.leads} fmt="num" small /> : null} />
-                  <MiniStat label="Hot or warm" value={num(kpis?.qualified)} sub={kpis?.leads ? `${fmtValue(pctOf(kpis.qualified, kpis.leads), 'pct')} of leads` : null} />
-                  <MiniStat label="Visit → lead" value={fmtValue(pctOf(kpis?.leads || 0, kpis?.visits || 0), 'pct2')} />
-                  {conv.data?.coverage && (
-                    <MiniStat label="Leads tracked" value={`${num(conv.data.coverage.leads_tracked)} / ${num(conv.data.coverage.leads_total)}`} sub="all leads created in the period" />
-                  )}
+                  {CONTACT_GOALS.map(g => {
+                    const row = goalRows.find(r => r.key === g.key)
+                    return <MiniStat key={g.key} label={g.label} value={num(row?.visits)} sub={prev ? <Delta cur={row?.visits || 0} prev={row?.prevVisits} fmt="num" small /> : null} />
+                  })}
+                  <MiniStat label="Visit → request" value={fmtValue(pctOf(CONTACT_GOALS.reduce((t, g) => t + (goalRows.find(r => r.key === g.key)?.visits || 0), 0), kpis?.visits || 0), 'pct2')} />
                 </div>
               </Card>
-              <Card title="How visitors get in touch" hint="Every booking-page, WhatsApp, phone and email click. Ignores the filters above.">
+              <Card title="How visitors get in touch" hint="WhatsApp, phone and email clicks anywhere on the site. Ignores the filters above.">
                 {conv.loading && !conv.data ? <div className="wa-empty">Loading…</div> : (
                   <RankList
-                    rows={(conv.data?.contact_methods || []).map(m => ({ ...m, name: m.method }))}
+                    rows={(conv.data?.contact_methods || []).filter(m => METHODS[m.method]).map(m => ({ ...m, name: m.method }))}
                     labelFor={r => METHODS[r.name] || r.name}
                     columns={withLabel('Route', [
                       { key: 'sessions', label: 'Visits', fmt: 'num' },
                       { key: 'clicks', label: 'Clicks', fmt: 'num' },
-                      { key: 'booked', label: 'Booked', fmt: 'num' },
                     ])}
                     empty="No contact clicks in this period."
                   />
@@ -740,61 +738,18 @@ export default function WebsiteAnalytics() {
             </div>
 
             {conv.data && (
-              <>
-                <Card title="Calls to action" hint="Which button placements get clicked (data-sdfm-label on sdfmgroup.com). Ignores the filters above.">
-                  <Table
-                    rows={(conv.data.cta_placements || []).map(p => ({ ...p, name: `${p.label}-${p.method}` }))}
-                    empty="No call-to-action clicks in this period."
-                    columns={[
-                      { key: 'label', label: 'Placement', render: r => placementLabel(r.label) },
-                      { key: 'method', label: 'Route', hideSm: true, render: r => METHODS[r.method] || r.method },
-                      { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
-                      { key: 'sessions', label: 'Visits', num: true, hideSm: true, render: r => num(r.sessions) },
-                      { key: 'booked', label: 'Booked', num: true, render: r => num(r.booked) },
-                    ]}
-                  />
-                </Card>
-                <div className="wa-grid">
-                  {conv.data.follow_up && (
-                    <Card title="Booking follow-up" hint="People who saved their details on the booking page.">
-                      <div className="wa-minis">
-                        <MiniStat label="Details saved" value={num(conv.data.follow_up.details_saved)} />
-                        <MiniStat label="Booked" value={num(conv.data.follow_up.booked)} />
-                        <MiniStat label="Still waiting" value={num(conv.data.follow_up.waiting)} />
-                        <MiniStat label="Booked after reminder" value={num(conv.data.follow_up.recovered)} sub={`${num(conv.data.follow_up.reminded)} reminded`} />
-                        {conv.data.timing?.median_minutes_to_book != null && (
-                          <MiniStat label="Median time to book" value={fmtMinutes(conv.data.timing.median_minutes_to_book)} />
-                        )}
-                      </div>
-                    </Card>
-                  )}
-                  <Card title="Booking errors" hint="Problems visitors hit on the booking page.">
-                    <RankList
-                      rows={(conv.data.errors_by_stage || []).map(e => ({ ...e, name: e.stage }))}
-                      labelFor={r => ERROR_STAGES[r.name] || r.name}
-                      columns={withLabel('Problem', [{ key: 'sessions', label: 'Visits', fmt: 'num' }, { key: 'events', label: 'Times', fmt: 'num' }])}
-                      empty="No errors in this period."
-                    />
-                  </Card>
-                </div>
-                {(conv.data.journeys || []).length > 0 && (
-                  <Card title="Recent lead journeys" hint="How the latest leads found us. No names or contact details are shown here.">
-                    <Table
-                      rows={conv.data.journeys.map((j, i) => ({ ...j, name: `${j.at}-${i}` }))}
-                      columns={[
-                        { key: 'at', label: 'When' },
-                        { key: 'channel', label: 'Channel', render: r => <>{r.channel} <span className="wa-muted">{r.source}</span></> },
-                        { key: 'landing_path', label: 'Landed on', hideSm: true },
-                        { key: 'pageviews', label: 'Pages', num: true, hideSm: true },
-                        { key: 'minutes_to_convert', label: 'To lead', num: true, render: r => fmtMinutes(r.minutes_to_convert) },
-                        { key: 'status', label: 'Status', render: r => (
-                          <span className={`wa-chip ${r.qualified ? 'wa-chip-lead' : ''}`}>{r.is_disqualified ? 'Disqualified' : capitalise(r.classification || 'unscored')}{r.booked ? ' · booked' : ''}</span>
-                        ) },
-                      ]}
-                    />
-                  </Card>
-                )}
-              </>
+              <Card title="Calls to action" hint="Which button placements get clicked (data-sdfm-label on sdfmgroup.com). Ignores the filters above.">
+                <Table
+                  rows={(conv.data.cta_placements || []).filter(p => METHODS[p.method]).map(p => ({ ...p, name: `${p.label}-${p.method}` }))}
+                  empty="No call-to-action clicks in this period."
+                  columns={[
+                    { key: 'label', label: 'Placement', render: r => placementLabel(r.label) },
+                    { key: 'method', label: 'Route', hideSm: true, render: r => METHODS[r.method] || r.method },
+                    { key: 'clicks', label: 'Clicks', num: true, render: r => num(r.clicks) },
+                    { key: 'sessions', label: 'Visits', num: true, render: r => num(r.sessions) },
+                  ]}
+                />
+              </Card>
             )}
           </>
         )
@@ -813,8 +768,8 @@ export default function WebsiteAnalytics() {
             <ul className="wa-install-notes">
               <li><strong>Privacy:</strong> no IP address is stored and no cookie is set unless the visitor accepts cookies (then a returning-visitor ID is kept). Consent is read from <code>localStorage.sdfm_cookie_consent</code>, or set with <code>window.sdfm.setConsent('accepted' | 'rejected')</code>.</li>
               <li><strong>Your own visits:</strong> open any page once with <code>?sdfm_ignore=1</code> on each browser you use; <code>?sdfm_ignore=0</code> turns tracking back on.</li>
-              <li><strong>Buttons:</strong> give every call-to-action <code>data-sdfm-cta</code> and a <code>data-sdfm-label</code> naming where it sits (e.g. <code>hero_book</code>).</li>
-              <li><strong>Goals</strong> come from events the site already sends: <code>form_submit</code> (call booked), <code>gap_check_*</code> (scoper), <code>lead_form_submit</code> (custom build / industry / contact forms), and WhatsApp, phone and email clicks.</li>
+              <li><strong>Buttons:</strong> give every call-to-action <code>data-sdfm-cta</code> and a <code>data-sdfm-label</code> naming where it sits (e.g. <code>hero_gapcheck</code>).</li>
+              <li><strong>Goals</strong> come from events the site already sends: <code>gap_check_*</code> (scoper start, report, and leaving details to be contacted), <code>lead_form_submit</code> (custom build / industry / contact forms), and WhatsApp, phone and email clicks.</li>
             </ul>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={copySnippet}>Copy snippet</button>

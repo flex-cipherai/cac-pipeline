@@ -267,3 +267,11 @@
   margin-top: var(--space-xl);
   font-size: var(--text-sm);
 }
+
+/* Report v2: review scope, summary, self-help steps, measures, good practice */
+.ga-scope { display: inline-block; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sdfm-red); background: var(--sdfm-red-light); border-radius: 999px; padding: 3px 10px; margin: 0 0 var(--space-md); }
+.ga-exec { font-size: var(--text-base); line-height: 1.6; border-left: 3px solid var(--sdfm-red); padding: 4px 0 4px var(--space-md); margin: var(--space-md) 0; }
+.ga-steps { background: var(--bg-gray); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0; font-size: var(--text-sm); }
+.ga-steps ol { margin: 4px 0 0; padding-left: 18px; }
+.ga-measure { font-size: var(--text-sm); font-weight: 700; }
+.ga-good { font-size: var(--text-sm); color: var(--text-secondary); }

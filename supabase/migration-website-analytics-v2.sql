@@ -16,7 +16,7 @@
 --       channels, sources, referrers, campaigns, pages, entry_pages, exit_pages,
 --       devices, browsers, systems, countries, languages, hostnames, events
 --       goals       per goal: visits that completed it and total completions
---       funnels     booking, scoper and custom-build funnels (visits reaching
+--       funnels     scoper, contact-form and custom-build funnels (visits reaching
 --                   each step; a later step implies the earlier ones)
 --       live        visits active in the last 5 minutes (ignores the period)
 --     compact = true returns only kpis, series, goals and funnels: used for the
@@ -29,7 +29,7 @@
 --       devices and sync status.
 --
 -- Older functions (web_analytics_acquisition / _behavior / _conversion,
--- seo_overview) are left in place: the dashboard and the booking-journey
+-- seo_overview) are left in place: the dashboard and the contact-route
 -- detail on the Goals tab still use web_analytics_conversion.
 --
 -- Access: wa_is_content_team() = has_module_access('website_analytics')
@@ -99,15 +99,14 @@ as $$
 $$;
 
 -- Which goal (if any) one tracker event completes. Keys match GOALS in
--- src/pages/social/WebsiteAnalytics.jsx.
+-- src/pages/social/waUtils.js. Call booking was retired (2026-11): the old /book events
+-- (form_submit, form_lead_captured) are no longer goals.
 create or replace function public.wa_event_goal(p_type text, p_props jsonb)
 returns text
 language sql
 immutable
 as $$
   select case
-    when p_type = 'form_submit' then 'call_booked'
-    when p_type = 'form_lead_captured' then 'booking_details'
     when p_type = 'gap_check_start' then 'scoper_start'
     when p_type = 'gap_check_report' then 'scoper_report'
     when p_type = 'gap_check_contact' then 'scoper_contact'
@@ -189,7 +188,7 @@ begin
            x.exit_path,
            coalesce(x.goals, '{}') as goals,
            (w.pageviews <= 1 and w.engaged_ms < 10000 and not coalesce(x.interacted, false)) as bounced,
-           coalesce(x.goals, '{}') && array['call_booked', 'booking_details', 'scoper_report', 'scoper_contact',
+           coalesce(x.goals, '{}') && array['scoper_report', 'scoper_contact',
                                             'custom_build', 'industry_enquiry', 'contact_form',
                                             'whatsapp', 'phone', 'email'] as converted
     from ws_all w
@@ -234,12 +233,10 @@ begin
     select e.session_id, f.funnel, max(f.step) as step
     from ev e
     cross join lateral (values
-      ('booking', case
-         when e.type = 'form_submit' then 6
-         when e.type = 'form_slot_selected' then 5
-         when e.type = 'form_lead_captured' or (e.type = 'form_step_complete' and e.props ->> 'step' = '1') then 4
-         when e.type = 'form_start' then 3
-         when e.type = 'form_view' or (e.type = 'pageview' and e.npath = '/book') then 2 end),
+      ('contact', case
+         when e.type = 'lead_form_submit' and e.props ->> 'offer' = 'contact' then 4
+         when e.type = 'lead_form_start' and e.props ->> 'offer' = 'contact' then 3
+         when e.type = 'pageview' and e.npath = '/contact' then 2 end),
       ('scoper', case
          when e.type = 'gap_check_contact' then 6
          when e.type = 'gap_check_report' then 5
@@ -297,12 +294,10 @@ begin
     ), '[]'::jsonb),
     'funnels', (
       select jsonb_build_object(
-        'booking', jsonb_build_array((select n from total),
-          (select count(*) from fsteps where funnel = 'booking' and step >= 2),
-          (select count(*) from fsteps where funnel = 'booking' and step >= 3),
-          (select count(*) from fsteps where funnel = 'booking' and step >= 4),
-          (select count(*) from fsteps where funnel = 'booking' and step >= 5),
-          (select count(*) from fsteps where funnel = 'booking' and step >= 6)),
+        'contact', jsonb_build_array((select n from total),
+          (select count(*) from fsteps where funnel = 'contact' and step >= 2),
+          (select count(*) from fsteps where funnel = 'contact' and step >= 3),
+          (select count(*) from fsteps where funnel = 'contact' and step >= 4)),
         'scoper', jsonb_build_array((select n from total),
           (select count(*) from fsteps where funnel = 'scoper' and step >= 2),
           (select count(*) from fsteps where funnel = 'scoper' and step >= 3),

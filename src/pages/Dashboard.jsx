@@ -62,7 +62,6 @@ export default function Dashboard() {
   const see = {
     pipeline: can('pipeline') || can('dashboard'),
     inquiries: can('inquiries'),
-    calls: can('leads') || can('pipeline'),
     social: can('social_calendar') || can('social_analytics'),
     inbox: can('social_activity'),
     approvals: can('social_approvals'),
@@ -85,7 +84,6 @@ export default function Dashboard() {
       acts: see.pipeline ? supabase.from('pipeline_activities').select('id, lead_id, medium, summary, occurred_at, author:created_by(name), lead:lead_id(full_name, company_name)').order('created_at', { ascending: false }).limit(12) : skip,
       inq: see.inquiries ? supabase.from('inquiries').select('id, full_name, company_name, status, received_at, first_response_at, next_follow_up').in('status', ['new', 'contacted', 'engaged']) : skip,
       inqNew: see.inquiries ? supabase.from('inquiries').select('id, full_name, company_name, received_at').gte('received_at', prevFrom) : skip,
-      calls: see.calls ? supabase.from('leads').select('id, full_name, company_name, scheduled_date, scheduled_time, current_stage').eq('is_lost', false).gte('scheduled_date', today).order('scheduled_date').limit(5) : skip,
       posted: see.social ? supabase.from('posts').select('id, caption, posted_at, external_post_url').eq('status', 'posted').gte('posted_at', prevFrom).order('posted_at', { ascending: false }) : skip,
       upcoming: see.social ? supabase.from('posts').select('id, caption, scheduled_at, status').in('status', ['scheduled', 'ready_to_post']).gte('scheduled_at', new Date(t).toISOString()).lte('scheduled_at', week).order('scheduled_at').limit(5) : skip,
       failed: see.social ? supabase.from('posts').select('id', { count: 'exact', head: true }).eq('status', 'failed') : skip,
@@ -255,21 +253,27 @@ export default function Dashboard() {
         )}
 
         {/* Coming up */}
-        {(see.calls || see.social) && (
+        {(see.pipeline || see.social) && (
           <section className="ov-card">
             <div className="ov-card-head"><h2>Coming up</h2></div>
-            {see.calls && (
-              <>
-                <p className="ov-sub">Booked calls</p>
-                {ok(r.calls).length === 0 ? <p className="ov-muted">No calls booked.</p> : (
-                  <ul className="ov-list">
-                    {ok(r.calls).map(c => (
-                      <li key={c.id}><Link to="/leads"><span>{c.full_name}{c.company_name ? ` · ${c.company_name}` : ''}</span><em>{new Date(c.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}{c.scheduled_time ? ` · ${c.scheduled_time}` : ''}</em></Link></li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
+            {see.pipeline && (() => {
+              // People who left their details on the website for us to contact them (no calls are booked online).
+              const since = now.getTime() - 14 * 86400000
+              const requests = ok(r.leads).filter(l => l.entry_point !== 'manual' && new Date(l.created_at).getTime() >= since)
+                .sort((x, y) => new Date(y.created_at) - new Date(x.created_at)).slice(0, 5)
+              return (
+                <>
+                  <p className="ov-sub">New contact requests, last 14 days</p>
+                  {requests.length === 0 ? <p className="ov-muted">No new requests.</p> : (
+                    <ul className="ov-list">
+                      {requests.map(l => (
+                        <li key={l.id}><Link to={`/pipeline?lead=${l.id}`}><span>{l.full_name}{l.company_name ? ` · ${l.company_name}` : ''}</span><em>{l.entry_point === 'scoper' ? 'Scoper' : 'Custom build form'} · {timeAgo(l.created_at)}</em></Link></li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )
+            })()}
             {see.social && (
               <>
                 <p className="ov-sub">Scheduled posts, next 7 days</p>

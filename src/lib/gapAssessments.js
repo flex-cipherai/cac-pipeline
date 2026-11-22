@@ -2,7 +2,17 @@
 // The assessment rules themselves (areas, ROI maths, defaults) are shared with the Edge Function from
 // supabase/functions/_shared/gapAssessment.ts, so the CRM and the tool can never disagree about them.
 
+import { DEFAULT_CONFIG } from '../../supabase/functions/_shared/gapAssessment.ts'
+
 export { isMissingTable } from './inquiries'
+
+const DEPARTMENTS = Object.fromEntries(DEFAULT_CONFIG.departments.map(d => [d.key, d]))
+
+// "Whole business" or the department reviewed in depth (review_type / review_department on the row).
+export function reviewLabel(row) {
+  if (row?.review_type === 'department') return DEPARTMENTS[row.review_department]?.label || 'One department'
+  return 'Whole business'
+}
 
 export function kes(n) {
   return 'KES ' + Math.round(Number(n) || 0).toLocaleString('en-US')
@@ -39,9 +49,11 @@ export function statusLabel(status) {
 }
 
 // What staff need to know about a session that never finished: how far it got.
-export function progressNote(row, totalAreas = 8) {
+export function progressNote(row) {
   const covered = (row.areas_covered || []).length
-  return `${row.user_turns} ${row.user_turns === 1 ? 'reply' : 'replies'}, ${covered} of ${totalAreas} areas`
+  const dept = row?.review_type === 'department' ? DEPARTMENTS[row.review_department] : null
+  const total = dept ? dept.topics.length : DEFAULT_CONFIG.areas.length
+  return `${row.user_turns} ${row.user_turns === 1 ? 'reply' : 'replies'}, ${covered} of ${total} ${dept ? 'topics' : 'areas'}`
 }
 
 export function scoreTone(score) {

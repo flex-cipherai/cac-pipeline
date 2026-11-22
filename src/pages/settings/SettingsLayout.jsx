@@ -8,7 +8,8 @@ import './SettingsLayout.css'
 // (lib/permissions.js), so a person only sees the pages they may open; an empty group is not shown.
 const NAV_GROUPS = [
   { label: 'Account', items: ['settings_profile'] },
-  { label: 'Workspace', items: ['settings_booking', 'settings_assessment', 'settings_scoring'] },
+  // Booking & availability (settings_booking) is no longer listed: call booking was retired in 2026-11.
+  { label: 'Workspace', items: ['settings_assessment', 'settings_scoring'] },
   { label: 'Social media', items: ['settings_integrations', 'settings_content'] },
   { label: 'Access', items: ['settings_users', 'settings_permissions'] },
 ]

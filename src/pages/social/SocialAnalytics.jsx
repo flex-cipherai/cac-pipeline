@@ -96,7 +96,7 @@ export default function SocialAnalytics() {
         .not('follower_count', 'is', null).lte('captured_at', range.end.toISO()).order('captured_at'),
       supabase.from('content_campaigns').select('*'),
       platforms.length
-        ? supabase.from('leads').select('id, classification, is_disqualified, current_stage, scheduled_date, source, created_at')
+        ? supabase.from('leads').select('id, classification, is_disqualified, current_stage, source, created_at')
           .or(platforms.map(p => `source.ilike.%${p}%`).join(','))
           .gte('created_at', range.start.toISO()).lte('created_at', range.end.toISO())
         : Promise.resolve({ data: [] }),
@@ -186,7 +186,7 @@ export default function SocialAnalytics() {
 
   const attribution = useMemo(() => {
     const leads = data?.leads || []
-    return { total: leads.length, qualified: leads.filter(isQualified).length, calls: leads.filter(l => l.scheduled_date).length }
+    return { total: leads.length, qualified: leads.filter(isQualified).length }
   }, [data])
 
   const goals = useMemo(() => {
@@ -201,7 +201,6 @@ export default function SocialAnalytics() {
         engagement_rate: imp ? Number(((eng / imp) * 100).toFixed(2)) : 0,
         website_traffic: posts.reduce((t, p) => t + p.clicks, 0),
         follower_growth: summary ? summary.followers - summary.followersStart : 0,
-        discovery_calls: attribution.calls,
       }[c.target_metric] || 0
       return { ...c, actual, pct: Math.min(100, (actual / Number(c.target_value)) * 100) }
     })
@@ -293,7 +292,7 @@ export default function SocialAnalytics() {
       totalReactions: c.reactions, totalComments: c.comments, totalShares: c.shares, totalClicks: c.clicks,
       totalVideoViews: c.videoViews, followerGrowth: summary.followers - summary.followersStart,
       pillarRollup: [...m.values()],
-      leadsFromLinkedIn: attribution.total, qualifiedFromLinkedIn: attribution.qualified, discoveryCallsFromLinkedIn: attribution.calls,
+      leadsFromLinkedIn: attribution.total, qualifiedFromLinkedIn: attribution.qualified,
     }, `SDFM_Social_Report_${DateTime.now().toISODate()}`)
   }
 
@@ -353,7 +352,6 @@ export default function SocialAnalytics() {
               <div className="sa-attribution-grid">
                 <div><span className="sa-attr-value">{attribution.total}</span><span className="sa-attr-label">Leads</span></div>
                 <div><span className="sa-attr-value">{attribution.qualified}</span><span className="sa-attr-label">Qualified</span></div>
-                <div><span className="sa-attr-value">{attribution.calls}</span><span className="sa-attr-label">Calls booked</span></div>
               </div>
               {goals.length > 0 && (
                 <div className="sa-goals">

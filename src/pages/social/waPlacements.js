@@ -24,16 +24,10 @@ export const CTA_PLACEMENTS = {
   mobile_start: 'Mobile action bar · Page button',
   thanks_guide_download: 'Thank-you page · Guide download',
   notfound_assessment: '404 page · Assessment',
-  book_nav_whatsapp: 'Booking page · header',
-  book_side_whatsapp: 'Booking page · sidebar', book_side_phone: 'Booking page · sidebar', book_side_email: 'Booking page · sidebar',
-  book_empty_whatsapp: 'Booking page · no times open',
-  book_done_whatsapp: 'Booking page · after booking',
-  book_message_whatsapp: 'Booking page · error screen',
-  download_ics: 'Booking page · add to calendar',
   // Free automation scoper (2026-10-21)
   hero_gapcheck: 'Home hero · Automation scoper', paths_gapcheck: 'Home path tabs · Automation scoper', assessment_gapcheck: 'Assessment page · Automation scoper link',
   gapcheck_start: 'Automation scoper · Start button', gapcheck_report_pdf: 'Automation scoper report · Download PDF',
-  gapcheck_report_assessment: 'Automation scoper report · Full assessment', gapcheck_report_contact: 'Automation scoper report · Contact page',
+  gapcheck_report_assessment: 'Automation scoper report · Full assessment', gapcheck_report_contact: 'Automation scoper report · Leave details to be contacted',
   gapcheck_report_whatsapp: 'Automation scoper report',
   // Sample report and case summaries pages (2026-11)
   scoper_sample_report: 'Automation scoper · Sample report link', scoper_case_summaries: 'Automation scoper · Case summaries link',
@@ -41,4 +35,5 @@ export const CTA_PLACEMENTS = {
   samplereport_contact: 'Sample report · Contact', samplereport_case_summaries: 'Sample report · Case summaries',
   cases_try_scoper: 'Case summaries · Try the scoper', cases_sample_report: 'Case summaries · Sample report',
   footer_contact: 'Footer · Contact',
+  contactpage_details: 'Contact page · Leave your details',
 }

@@ -28,9 +28,9 @@ function supabaseStore(admin: any, ip: string): Store {
     rateLimit: (action, max, windowMinutes) => allowRequest(admin, ip, action, max, windowMinutes),
     async createSession(row) {
       let { data, error } = await admin.from('gap_assessments').insert(row).select('*').single()
-      // migration-gap-heard-from.sql not run yet: keep the session, drop the optional answer.
-      if (error && /heard_from|source_channel/i.test(error.message || '')) {
-        const { heard_from: _h, heard_from_other: _o, source_channel: _s, ...base } = row
+      // An optional-column migration not run yet: keep the session, drop the optional columns.
+      if (error && /heard_from|source_channel|review_type|review_department/i.test(error.message || '')) {
+        const { heard_from: _h, heard_from_other: _o, source_channel: _s, review_type: _t, review_department: _d, ...base } = row
         ;({ data, error } = await admin.from('gap_assessments').insert(base).select('*').single())
       }
       if (error) fail('create session', error)

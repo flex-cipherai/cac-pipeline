@@ -25,6 +25,7 @@ function ReportView({ report, internal }) {
 
   return (
     <div className="ga-report">
+      {report.scope && <p className="ga-scope">{report.scope.label}</p>}
       <div className="ga-readiness">
         <span className={`ga-score ga-score-${scoreTone(report.readiness.score)} ga-score-lg`}>{report.readiness.score}</span>
         <div>
@@ -33,6 +34,7 @@ function ReportView({ report, internal }) {
         </div>
       </div>
 
+      {report.executive_summary && <p className="ga-exec">{report.executive_summary}</p>}
       {report.company.summary && <p className="ga-company-summary">{report.company.summary}</p>}
       {report.company.staff_estimate && <p className="ga-meta">About {report.company.staff_estimate} staff{report.company.sector ? ` · ${report.company.sector}` : ''}</p>}
 
@@ -67,8 +69,16 @@ function ReportView({ report, internal }) {
             <h4>{g.title}</h4>
             <p>{g.finding}</p>
             {g.evidence && <p className="ga-evidence">They said: {g.evidence}</p>}
+            {g.root_cause && <p><strong>Why it happens.</strong> {g.root_cause}</p>}
             {g.impact && <p><strong>Impact.</strong> {g.impact}</p>}
             {g.opportunity && <p><strong>Opportunity.</strong> {g.opportunity}</p>}
+            {g.first_steps?.length > 0 && (
+              <div className="ga-steps">
+                <strong>First steps we gave them</strong>
+                <ol>{g.first_steps.map((st, i) => <li key={i}>{st}</li>)}</ol>
+              </div>
+            )}
+            {g.measure && <p className="ga-measure">Track: {g.measure}</p>}
             <div className="ga-gap-roi">
               {g.roi.quantified
                 ? <span><strong><Money value={g.roi.annual_low} currency={r.currency} /> to <Money value={g.roi.annual_high} currency={r.currency} /></strong> a year · {g.roi.hours_per_week_recovered} h/week back · {g.confidence} confidence</span>
@@ -90,13 +100,14 @@ function ReportView({ report, internal }) {
         )
       })}
 
-      <h3 className="ga-h">By area</h3>
+      <h3 className="ga-h">{report.scope?.type === 'department' ? 'By topic' : 'By area'}</h3>
       <div className="ga-areas">
         {report.areas.map(a => (
           <div key={a.key} className="ga-area-row">
             <div className="ga-area-head"><span>{a.label}</span><span className="ga-area-score">{a.score == null ? 'n/a' : `${a.score}/5`}</span></div>
             {a.score != null && <div className="ga-bar"><span style={{ width: `${a.score * 20}%` }} /></div>}
             <p>{a.finding}</p>
+            {a.good_practice && <p className="ga-good">Good practice: {a.good_practice}</p>}
           </div>
         ))}
       </div>
@@ -105,6 +116,13 @@ function ReportView({ report, internal }) {
         <>
           <h3 className="ga-h">Already working</h3>
           <ul className="ga-list">{report.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+        </>
+      )}
+
+      {report.risks?.length > 0 && (
+        <>
+          <h3 className="ga-h">Risks</h3>
+          <ul className="ga-list">{report.risks.map((rk, i) => <li key={i}><strong>{rk.title}.</strong> {rk.detail}</li>)}</ul>
         </>
       )}
     </div>

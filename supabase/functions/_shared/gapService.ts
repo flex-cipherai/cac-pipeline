@@ -15,11 +15,11 @@
 
 import {
   buildConfig, buildContents, buildInterviewerSystem, buildReportContents, buildReportSystem, clean, CONFIG_KEYS,
-  computeProgress, heardFromLabel, inquiryMessage, isToken, newToken, parseCurrency, parseJsonLoose, parseTurn, plain, sanitiseReport, sha256Hex,
+  computeProgress, heardFromLabel, openingPrompt, parseScope, inquiryMessage, isToken, newToken, parseCurrency, parseJsonLoose, parseTurn, plain, sanitiseReport, sha256Hex,
   staffBand, teamEmail, validateContact, validateStart,
 } from './gapAssessment.ts'
 import { classifySource, SOURCE_LABELS } from './pipelineSource.ts'
-import type { GapConfig, Message, Report, Turn } from './gapAssessment.ts'
+import type { GapConfig, Message, Report, Scope, Turn } from './gapAssessment.ts'
 import { callJson, LlmError } from './llm.ts'
 import type { CallOptions } from './llm.ts'
 import { domainReceivesMail, fetchSiteSummary } from './netChecks.ts'
@@ -55,8 +55,10 @@ export interface SessionRow {
   cta_clicked_at: string | null
   heard_from?: string | null
   heard_from_other?: string | null
-  // Working behind the report. Before the report exists it only holds the visitor's chosen currency.
-  report_internal?: { currency?: string } | null
+  // Working behind the report. Before the report exists it holds the visitor's chosen currency and review scope.
+  report_internal?: { currency?: string; scope?: Scope } | null
+  review_type?: string | null
+  review_department?: string | null
 }
 
 export interface Store {
@@ -103,16 +105,17 @@ async function loadConfig(store: Store): Promise<{ cfg: GapConfig; appUrl: strin
 
 const firstName = (full: string | null) => (full || '').trim().split(/\s+/)[0] || 'there'
 
-function openingFallback(name: string | null, company: string): Turn {
+function openingFallback(name: string | null, company: string, department = ''): Turn {
+  const focus = department ? `your ${department.toLowerCase()} in depth` : 'how the business runs'
   return {
-    reply: `Hi ${firstName(name)}, thanks for starting the Automation scoper for ${company}. I'll ask about how the business runs, one question at a time, and you'll get a written report at the end. To begin: what does ${company} do, and roughly how many people work there?`,
+    reply: `Hi ${firstName(name)}, thanks for starting the Automation scoper for ${company}. I'll ask about ${focus}, one question at a time, and you'll get a written report at the end. To begin: what does ${company} do, and roughly how many people work there?`,
     areas_covered: [], suggested_replies: ['1 to 5', '6 to 15', '16 to 50', 'More than 50'], ready_for_report: false,
   }
 }
 
 // A model that answers in plain text instead of JSON is still a usable interviewer.
-function lenientTurn(text: string, cfg: GapConfig, covered: string[]): Turn | null {
-  const strict = parseTurn(text, cfg, covered)
+function lenientTurn(text: string, cfg: GapConfig, covered: string[], scope?: Scope): Turn | null {
+  const strict = parseTurn(text, cfg, covered, scope)
   if (strict) return strict
   const t = plain(text, 1200)
   if (t.length < 12 || t.startsWith('{') || t.startsWith('[')) return null
@@ -132,8 +135,14 @@ function sessionCurrency(session: SessionRow, cfg: GapConfig): string {
   return parseCurrency(session.report_internal?.currency, cfg) || 'KES'
 }
 
-function progressOf(cfg: GapConfig, covered: string[], turns: number) {
-  return computeProgress(cfg, covered, turns)
+// The review the visitor chose: the columns if present, else report_internal (kept for older databases).
+function sessionScope(session: SessionRow, cfg: GapConfig): Scope {
+  const fromCols = session.review_type ? parseScope({ review_type: session.review_type, department: session.review_department }, cfg) : null
+  return fromCols || parseScope({ review_type: session.report_internal?.scope?.type, department: session.report_internal?.scope?.department }, cfg) || { type: 'general', department: null }
+}
+
+function progressOf(cfg: GapConfig, covered: string[], turns: number, scope?: Scope) {
+  return computeProgress(cfg, covered, turns, scope)
 }
 
 // ── start ────────────────────────────────────────────────────────────────
@@ -146,7 +155,7 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
   // Honeypot filled, or sent faster than a person can fill the form: pretend it worked, save nothing.
   const tooFast = typeof body.elapsed_ms === 'number' && body.elapsed_ms < MIN_FILL_MS
   if ((typeof body.hp === 'string' && body.hp.trim() !== '') || tooFast) {
-    return ok({ token: newToken(), messages: [{ role: 'assistant', content: openingFallback(null, String(body.company_name || 'your business')).reply }], suggested_replies: [], progress: progressOf(cfg, [], 0) })
+    return ok({ token: newToken(), messages: [{ role: 'assistant', content: openingFallback(null, String(body.company_name || 'your business')).reply }], suggested_replies: [], progress: progressOf(cfg, [], 0, parseScope(body, cfg) || undefined) })
   }
 
   const { errors, value } = validateStart(body, cfg)
@@ -157,11 +166,11 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
   const siteSummary = value.website_url ? await fetchSiteSummary(value.website_url, deps.resolver, deps.fetchImpl) : ''
 
   // Opening message. If every model is down, start anyway with a fixed opening: the visitor is already here.
-  let turn: Turn = openingFallback(null, value.company_name)
+  let turn: Turn = openingFallback(null, value.company_name, value.scope.type === 'department' ? (cfg.departments.find(d => d.key === value.scope.department)?.label || '') : '')
   let usage = { model: null as string | null, calls: 0, input: 0, output: 0 }
   try {
-    const system = buildInterviewerSystem(cfg, { name: '', company: value.company_name, website: value.website_url || '', siteSummary, covered: [], userTurns: 0, currency: value.currency })
-    const res = await (deps.call || callJson)(modelOptions(cfg, deps, system, buildContents([]), 2048, 0.7, 25000), t => lenientTurn(t, cfg, []))
+    const system = buildInterviewerSystem(cfg, { name: '', company: value.company_name, website: value.website_url || '', siteSummary, covered: [], userTurns: 0, currency: value.currency, scope: value.scope })
+    const res = await (deps.call || callJson)(modelOptions(cfg, deps, system, buildContents([], openingPrompt(cfg, value.scope)), 2048, 0.7, 25000), t => lenientTurn(t, cfg, [], value.scope))
     turn = { ...res.value, areas_covered: [], ready_for_report: false }
     usage = { model: res.model, calls: 1, input: res.inputTokens, output: res.outputTokens }
   } catch (err) {
@@ -179,7 +188,8 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
     token_hash: await sha256Hex(token),
     company_name: value.company_name, website_url: value.website_url, website_summary: siteSummary || null,
     source_channel: classifySource({ ...attribution, heard_from: value.heard_from }),
-    report_internal: { currency: value.currency },
+    report_internal: { currency: value.currency, scope: value.scope },
+    review_type: value.scope.type, review_department: value.scope.department,
     heard_from: value.heard_from, heard_from_other: value.heard_from_other,
     model: usage.model, llm_calls: usage.calls, input_tokens: usage.input, output_tokens: usage.output,
     ...attribution,
@@ -191,7 +201,7 @@ async function start(body: Record<string, unknown>, deps: Deps): Promise<Reply> 
     token,
     messages: [{ role: 'assistant', content: turn.reply }],
     suggested_replies: turn.suggested_replies,
-    progress: progressOf(cfg, [], 0),
+    progress: progressOf(cfg, [], 0, value.scope),
   })
 }
 
@@ -221,7 +231,8 @@ async function chat(body: Record<string, unknown>, deps: Deps): Promise<Reply> {
 
   const { cfg } = await loadConfig(store)
   if (!(await store.rateLimit('ga_chat', 80, 60))) return fail(429, 'rate_limited')
-  if (session.user_turns >= cfg.settings.max_user_turns) return fail(409, 'turn_limit', { progress: progressOf(cfg, session.areas_covered, session.user_turns) })
+  const scope = sessionScope(session, cfg)
+  if (session.user_turns >= cfg.settings.max_user_turns) return fail(409, 'turn_limit', { progress: progressOf(cfg, session.areas_covered, session.user_turns, scope) })
 
   if (!(await store.lock(session.id, new Date(now.getTime() - LOCK_STALE_MS).toISOString(), now.toISOString()))) return fail(409, 'busy')
   try {
@@ -230,18 +241,18 @@ async function chat(body: Record<string, unknown>, deps: Deps): Promise<Reply> {
     const system = buildInterviewerSystem(cfg, {
       name: session.full_name || '', company: session.company_name, website: session.website_url || '',
       siteSummary: session.website_summary || '', covered: session.areas_covered, userTurns: turns,
-      currency: sessionCurrency(session, cfg),
+      currency: sessionCurrency(session, cfg), scope,
     })
-    const contents = buildContents([...history, { role: 'user', content: text }])
+    const contents = buildContents([...history, { role: 'user', content: text }], openingPrompt(cfg, scope))
     let res
     try {
-      res = await (deps.call || callJson)(modelOptions(cfg, deps, system, contents, 2048, 0.7, 25000), t => lenientTurn(t, cfg, session.areas_covered))
+      res = await (deps.call || callJson)(modelOptions(cfg, deps, system, contents, 2048, 0.7, 25000), t => lenientTurn(t, cfg, session.areas_covered, scope))
     } catch (err) {
       return llmFailure(err) // the visitor's message was not stored, so they can send it again
     }
 
     const turn = res.value
-    const progress = progressOf(cfg, turn.areas_covered, turns)
+    const progress = progressOf(cfg, turn.areas_covered, turns, scope)
     const ready = progress.at_limit || (turn.ready_for_report && progress.can_finish)
 
     await store.addMessages(session.id, history.length + 1, [{ role: 'user', content: text }, { role: 'assistant', content: turn.reply }])
@@ -265,7 +276,8 @@ async function report(body: Record<string, unknown>, deps: Deps): Promise<Reply>
   if (session.status === 'report_ready' && session.report) return ok({ report: session.report })
 
   const { cfg } = await loadConfig(store)
-  const progress = progressOf(cfg, session.areas_covered, session.user_turns)
+  const scope = sessionScope(session, cfg)
+  const progress = progressOf(cfg, session.areas_covered, session.user_turns, scope)
   if (!progress.can_finish && !progress.at_limit) return fail(409, 'not_ready', { progress })
   if (!(await store.rateLimit('ga_report', 6, 60))) return fail(429, 'rate_limited')
 
@@ -277,14 +289,14 @@ async function report(body: Record<string, unknown>, deps: Deps): Promise<Reply>
 
     const messages = await store.messages(session.id)
     const currency = sessionCurrency(session, cfg)
-    const ctx = { name: session.full_name || '', company: session.company_name, website: session.website_url || '', siteSummary: session.website_summary || '', currency }
+    const ctx = { name: session.full_name || '', company: session.company_name, website: session.website_url || '', siteSummary: session.website_summary || '', currency, scope }
     let res
     try {
       res = await (deps.call || callJson)(
-        modelOptions(cfg, deps, buildReportSystem(cfg), buildReportContents(cfg, ctx, messages), 8192, 0.3, 55000),
+        modelOptions(cfg, deps, buildReportSystem(cfg, scope), buildReportContents(cfg, ctx, messages), 12288, 0.3, 70000),
         t => {
           const j = parseJsonLoose(t) as { gaps?: unknown } | null
-          return j && Array.isArray(j.gaps) ? sanitiseReport(j, cfg, { company: session.company_name, website: session.website_url || '', now, currency }) : null
+          return j && Array.isArray(j.gaps) ? sanitiseReport(j, cfg, { company: session.company_name, website: session.website_url || '', now, currency, scope }) : null
         },
       )
     } catch (err) {
@@ -394,10 +406,12 @@ async function resume(body: Record<string, unknown>, deps: Deps): Promise<Reply>
   if (!session) return fail(404, 'not_found')
   const { cfg } = await loadConfig(deps.store)
   const messages = await deps.store.messages(session.id)
-  const progress = progressOf(cfg, session.areas_covered, session.user_turns)
+  const scope = sessionScope(session, cfg)
+  const progress = progressOf(cfg, session.areas_covered, session.user_turns, scope)
   return ok({
     status: session.status,
     company: { name: session.company_name, full_name: session.full_name },
+    scope,
     messages,
     progress,
     ready: progress.at_limit,

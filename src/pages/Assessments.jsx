@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { exportCSV } from '../lib/exportUtils'
 import { shortDate, timeAgo } from '../lib/inquiries'
-import { heardLabel, isMissingTable, kes, kesShort, progressNote, scoreTone, statusLabel, summarise, valueRange } from '../lib/gapAssessments'
+import { heardLabel, reviewLabel, isMissingTable, kes, kesShort, progressNote, scoreTone, statusLabel, summarise, valueRange } from '../lib/gapAssessments'
 import AssessmentDetail from '../components/AssessmentDetail/AssessmentDetail'
 import PeriodSelector, { filterByPeriod, getPeriodLabel } from '../components/PeriodSelector/PeriodSelector'
 import './AllLeads.css'
@@ -21,7 +21,7 @@ const StatIcons = {
 // Only the columns the list needs; the full report and the internal working load when a row is opened.
 const LIST_COLUMNS = [
   'id', 'status', 'full_name', 'email', 'company_name', 'website_url', 'user_turns', 'areas_covered',
-  'created_at', 'last_activity_at', 'report_generated_at', 'pdf_downloaded_at', 'cta_clicked_at', 'cta_kind', 'inquiry_id', 'heard_from', 'heard_from_other', 'pipeline_lead_id', 'contact_requested_at',
+  'created_at', 'last_activity_at', 'report_generated_at', 'pdf_downloaded_at', 'cta_clicked_at', 'cta_kind', 'inquiry_id', 'heard_from', 'heard_from_other', 'pipeline_lead_id', 'contact_requested_at', 'review_type', 'review_department',
   'readiness:report->readiness', 'roi:report->roi',
 ].join(',')
 
@@ -97,9 +97,9 @@ export default function Assessments() {
     }), [inPeriod, view, search])
 
   function handleExportCSV() {
-    const headers = ['Started', 'Name', 'Company', 'Email', 'Website', 'Status', 'Replies', 'Readiness', 'Heard about us via', 'Currency', 'Value low', 'Value likely', 'Value high', 'Value likely (KES)', 'PDF downloaded', 'Asked for more']
+    const headers = ['Started', 'Name', 'Company', 'Email', 'Website', 'Review', 'Status', 'Replies', 'Readiness', 'Heard about us via', 'Currency', 'Value low', 'Value likely', 'Value high', 'Value likely (KES)', 'PDF downloaded', 'Asked for more']
     const data = filtered.map(r => [
-      r.created_at ? new Date(r.created_at).toLocaleString('en-GB') : '', r.full_name, r.company_name, r.email, r.website_url,
+      r.created_at ? new Date(r.created_at).toLocaleString('en-GB') : '', r.full_name, r.company_name, r.email, r.website_url, reviewLabel(r),
       statusLabel(r.status), r.user_turns, r.readiness?.score ?? '', heardLabel(r),
       r.roi ? (r.roi.currency || 'KES') : '', r.roi?.annual_low ?? '', r.roi?.annual_expected ?? '', r.roi?.annual_high ?? '', r.roi?.annual_expected_kes ?? r.roi?.annual_expected ?? '',
       r.pdf_downloaded_at ? 'Yes' : '', r.cta_clicked_at ? 'Yes' : '',
@@ -210,7 +210,7 @@ export default function Assessments() {
           <div className="leads-table-wrap section-card">
             <table className="data-table">
               <thead>
-                <tr><th>Who</th><th>Status</th><th>Readiness</th><th>Projected value / year</th><th>Heard via</th><th>Follow-up</th><th>Started</th></tr>
+                <tr><th>Who</th><th>Review</th><th>Status</th><th>Readiness</th><th>Projected value / year</th><th>Heard via</th><th>Follow-up</th><th>Started</th></tr>
               </thead>
               <tbody>
                 {filtered.map(r => (
@@ -221,6 +221,7 @@ export default function Assessments() {
                         <span className="inq-sub">{r.full_name || 'Anonymous'}</span>
                       </button>
                     </td>
+                    <td className="inq-muted">{reviewLabel(r)}</td>
                     <td>
                       {r.status === 'report_ready'
                         ? <span className="inq-status inq-status-converted">Report ready</span>
