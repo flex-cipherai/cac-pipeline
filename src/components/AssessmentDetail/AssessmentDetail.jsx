@@ -167,7 +167,7 @@ export default function AssessmentDetail({ id, isAdmin, onClose, onDeleted }) {
                 <div className="lead-detail-avatar">{row.company_name?.charAt(0).toUpperCase()}</div>
                 <div>
                   <h2 className="lead-detail-name">{row.company_name}</h2>
-                  <p className="lead-detail-company">{row.full_name}</p>
+                  <p className="lead-detail-company">{row.full_name || 'Anonymous visitor (no contact details left)'}</p>
                 </div>
               </div>
               <div className="lead-detail-meta-row">
@@ -176,14 +176,19 @@ export default function AssessmentDetail({ id, isAdmin, onClose, onDeleted }) {
                 {row.cta_clicked_at && <span className="ga-chip ga-chip-hot">Asked for more: {ctaLabel(row.cta_kind)}</span>}
               </div>
               <div className="lead-detail-contact-actions">
-                <a href={`mailto:${row.email}`} className="lead-detail-contact-btn" title={`Email ${row.email}`}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><rect x="1" y="3" width="12" height="8" rx="1.5" /><path d="M1 4.5l6 4 6-4" /></svg>
-                  Email
-                </a>
-                <a href={row.website_url} target="_blank" rel="noopener noreferrer" className="lead-detail-contact-btn" title={row.website_url}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><circle cx="7" cy="7" r="5.5" /><path d="M1.5 7h11M7 1.5c1.5 1.6 2.2 3.4 2.2 5.5S8.5 10.9 7 12.5C5.5 10.9 4.8 9.1 4.8 7S5.5 3.1 7 1.5z" /></svg>
-                  Website
-                </a>
+                {row.email && (
+                  <a href={`mailto:${row.email}`} className="lead-detail-contact-btn" title={`Email ${row.email}`}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><rect x="1" y="3" width="12" height="8" rx="1.5" /><path d="M1 4.5l6 4 6-4" /></svg>
+                    Email
+                  </a>
+                )}
+                {row.website_url && (
+                  <a href={row.website_url} target="_blank" rel="noopener noreferrer" className="lead-detail-contact-btn" title={row.website_url}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><circle cx="7" cy="7" r="5.5" /><path d="M1.5 7h11M7 1.5c1.5 1.6 2.2 3.4 2.2 5.5S8.5 10.9 7 12.5C5.5 10.9 4.8 9.1 4.8 7S5.5 3.1 7 1.5z" /></svg>
+                    Website
+                  </a>
+                )}
+                {row.pipeline_lead_id && <Link to={`/pipeline?lead=${row.pipeline_lead_id}`} className="lead-detail-contact-btn">Open in pipeline</Link>}
                 {row.inquiry_id && <Link to="/inquiries" className="lead-detail-contact-btn">Inquiries</Link>}
               </div>
             </>
@@ -215,7 +220,7 @@ export default function AssessmentDetail({ id, isAdmin, onClose, onDeleted }) {
                 <div className="ga-chat">
                   {messages.map(m => (
                     <div key={m.seq} className={`ga-msg ga-msg-${m.role}`}>
-                      <span className="ga-msg-who">{m.role === 'user' ? row.full_name.split(' ')[0] : 'Assistant'}</span>
+                      <span className="ga-msg-who">{m.role === 'user' ? ((row.full_name || '').split(' ')[0] || 'Visitor') : 'Assistant'}</span>
                       <p>{m.content}</p>
                     </div>
                   ))}
@@ -227,8 +232,9 @@ export default function AssessmentDetail({ id, isAdmin, onClose, onDeleted }) {
                 <div className="lead-detail-section">
                   <div className="lead-detail-field-group">
                     {[
-                      ['Email', row.email],
-                      ['Website', row.website_url],
+                      ['Email', row.email || 'Not given'],
+                      ['Phone', row.phone || 'Not given'],
+                      ['Website', row.website_url || 'Not given'],
                       ['Started', shortDateTime(row.created_at)],
                       ['Report ready', row.report_generated_at ? shortDateTime(row.report_generated_at) : 'Not yet'],
                       ['Last activity', shortDateTime(row.last_activity_at)],

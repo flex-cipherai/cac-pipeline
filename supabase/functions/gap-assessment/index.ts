@@ -1,7 +1,7 @@
 // Supabase Edge Function: gap-assessment
 // Public. Runs the free Automation scoper on sdfmgroup.com/ai-gap-check: validates the visitor, interviews them
-// with Gemini, builds the gap report and ROI, and hands the finished assessment to the team (an inquiry in
-// the CRM plus an email). The browser never sees the API key, the prompts or the working behind the ROI.
+// with Gemini, builds the gap report and ROI, and, when the visitor asks to be contacted at the end, makes
+// them an active lead in the sales pipeline and emails the team. The browser never sees the API key, the prompts or the working behind the ROI.
 //
 // All behaviour is in _shared/gapService.ts (tested under Node). This file only connects it to Supabase,
 // Resend and the network.
@@ -26,15 +26,11 @@ function supabaseStore(admin: any, ip: string): Store {
       return data || []
     },
     rateLimit: (action, max, windowMinutes) => allowRequest(admin, ip, action, max, windowMinutes),
-    async countSessionsForEmailSince(email, iso) {
-      const { count } = await admin.from('gap_assessments').select('id', { count: 'exact', head: true }).eq('email', email).gte('created_at', iso)
-      return count ?? 0
-    },
     async createSession(row) {
       let { data, error } = await admin.from('gap_assessments').insert(row).select('*').single()
       // migration-gap-heard-from.sql not run yet: keep the session, drop the optional answer.
-      if (error && /heard_from/i.test(error.message || '')) {
-        const { heard_from: _h, heard_from_other: _o, ...base } = row
+      if (error && /heard_from|source_channel/i.test(error.message || '')) {
+        const { heard_from: _h, heard_from_other: _o, source_channel: _s, ...base } = row
         ;({ data, error } = await admin.from('gap_assessments').insert(base).select('*').single())
       }
       if (error) fail('create session', error)
@@ -66,6 +62,11 @@ function supabaseStore(admin: any, ip: string): Store {
       const { error } = await admin.from('gap_assessment_messages').insert(rows)
       if (error) fail('save messages', error)
     },
+    async createPipelineLead(row) {
+      const { data, error } = await admin.from('pipeline_leads').insert(row).select('id').single()
+      if (error) fail('create pipeline lead', error)
+      return data.id as string
+    },
     async createInquiry(row) {
       let { data, error } = await admin.from('inquiries').insert(row).select('id').single()
       // migration-website-leads.sql / migration-gap-assessments.sql not run yet: keep the enquiry, drop the extras.
@@ -77,7 +78,7 @@ function supabaseStore(admin: any, ip: string): Store {
       return data?.id ?? null
     },
     async staffEmails() {
-      const staff = await staffWithModule(admin, 'assessments', ['admin', 'sales'], 'email')
+      const staff = await staffWithModule(admin, 'pipeline', ['admin', 'sales'], 'email')
       return staff.map((p: any) => p.email).filter(Boolean)
     },
   }

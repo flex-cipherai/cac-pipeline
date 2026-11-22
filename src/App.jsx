@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/Layout/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Pipeline from './pages/Pipeline'
+import SalesPipeline from './pages/SalesPipeline'
 import AllLeads from './pages/AllLeads'
 import Inquiries from './pages/Inquiries'
 import Assessments from './pages/Assessments'
@@ -115,7 +115,7 @@ const PROTECTED_ROUTES = [
   { path: '/dashboard', module: 'dashboard', element: <Dashboard /> },
   { path: '/inquiries', module: 'inquiries', element: <Inquiries /> },
   { path: '/assessments', module: 'assessments', element: <Assessments /> },
-  { path: '/pipeline', module: 'pipeline', element: <Pipeline /> },
+  { path: '/pipeline', module: 'pipeline', element: <SalesPipeline /> },
   { path: '/leads', module: 'leads', element: <AllLeads /> },
   { path: '/quotations', module: 'quotations', element: <QuotationGenerator /> },
   { path: '/notifications', module: 'notifications', element: <Notifications /> },

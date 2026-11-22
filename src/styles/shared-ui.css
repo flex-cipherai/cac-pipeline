@@ -1,5 +1,5 @@
 /* ─── Shared UI primitives for the Social Media module ───
-   Same modal/toast/status-badge shapes as Settings.css/Pipeline.css —
+   Same modal/toast/status-badge shapes as Settings.css —
    pulled into one file since multiple new pages need them, instead of
    redefining them per page. Imported via @import from each page's CSS. */
 

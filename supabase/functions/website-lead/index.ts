@@ -3,6 +3,9 @@
 // saves each as an inquiry (channel "website") in the CRM, emails the visitor a confirmation and
 // alerts the team. Everything is validated again here: the browser is never trusted.
 //
+// A custom build request goes straight into the sales pipeline instead: an active lead (stage 2) on the
+// Custom builds board, with the 48-hour follow-up rule. If that table is missing it falls back to an inquiry.
+//
 // An inquiry is the CRM's "someone reached out" record (see migration-inquiries.sql); staff work it in
 // Inquiries and convert it to a lead. migration-website-leads.sql adds columns for offer, staff band,
 // sector and attribution. Until that migration is run the same data is still saved, inside the message.
@@ -17,6 +20,7 @@ import { staffWithModule } from '../_shared/access.ts'
 import {
   buildMessage, detectSource, followUpDate, sourceDetail, teamEmail, validateLead, visitorEmail,
 } from '../_shared/websiteLead.ts'
+import { classifySource } from '../_shared/pipelineSource.ts'
 
 // Real people need a moment to fill a form; the page itself waits this long before sending.
 const MIN_FILL_MS = 2500
@@ -62,7 +66,24 @@ Deno.serve(async (req) => {
       utm_source: value.utm_source, utm_medium: value.utm_medium, utm_campaign: value.utm_campaign, utm_term: value.utm_term,
     }
 
-    let { error } = await admin.from('inquiries').insert({ ...base, ...extra })
+    // Custom build requests are pipeline leads. Anything else (or a pipeline that is not set up yet) is an inquiry.
+    let savedAsLead = false
+    if (value.offer === 'custom') {
+      const { error: leadError } = await admin.from('pipeline_leads').insert({
+        service_line: 'custom_build', stage: 'active', entry_point: 'custom_build_form',
+        full_name: value.full_name, company_name: value.business_name, email: value.email, phone: value.phone,
+        source_channel: classifySource({ utm_source: value.utm_source, utm_medium: value.utm_medium, referrer: value.referrer, page_url: value.page_url }),
+        source_detail: sourceDetail(value), summary: buildMessage(value).slice(0, 4000),
+        staff_band: value.staff_band, sector: value.sector,
+        page_url: value.page_url, referrer: value.referrer,
+        utm_source: value.utm_source, utm_medium: value.utm_medium, utm_campaign: value.utm_campaign, utm_term: value.utm_term,
+      })
+      if (leadError) console.error('[website-lead] pipeline lead failed, saving an inquiry instead', leadError.message)
+      else savedAsLead = true
+    }
+
+    let error: { message?: string } | null = null
+    if (!savedAsLead) ({ error } = await admin.from('inquiries').insert({ ...base, ...extra }))
     // migration-website-leads.sql not run yet: save without the extra columns rather than lose the enquiry.
     if (error && /column|schema cache/i.test(error.message || '')) {
       console.warn('[website-lead] extra columns missing, saving the base inquiry', error.message)
@@ -78,7 +99,7 @@ Deno.serve(async (req) => {
       requireResendKey()
       const visitor = visitorEmail(value, SITE_URL)
       const alert = teamEmail(value, source)
-      const staff = (await staffWithModule(admin, 'inquiries', ['admin', 'sales'], 'email')).filter((p: any) => p.email)
+      const staff = (await staffWithModule(admin, savedAsLead ? 'pipeline' : 'inquiries', ['admin', 'sales'], 'email')).filter((p: any) => p.email)
       await Promise.race([
         Promise.allSettled([
           sendViaResend([value.email], visitor.subject, visitor.html),

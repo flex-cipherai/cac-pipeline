@@ -21,7 +21,7 @@ const StatIcons = {
 // Only the columns the list needs; the full report and the internal working load when a row is opened.
 const LIST_COLUMNS = [
   'id', 'status', 'full_name', 'email', 'company_name', 'website_url', 'user_turns', 'areas_covered',
-  'created_at', 'last_activity_at', 'report_generated_at', 'pdf_downloaded_at', 'cta_clicked_at', 'cta_kind', 'inquiry_id', 'heard_from', 'heard_from_other',
+  'created_at', 'last_activity_at', 'report_generated_at', 'pdf_downloaded_at', 'cta_clicked_at', 'cta_kind', 'inquiry_id', 'heard_from', 'heard_from_other', 'pipeline_lead_id', 'contact_requested_at',
   'readiness:report->readiness', 'roi:report->roi',
 ].join(',')
 
@@ -218,7 +218,7 @@ export default function Assessments() {
                     <td>
                       <button className="inq-row-link" onClick={e => { e.stopPropagation(); select(r.id) }}>
                         <span className="leads-name">{r.company_name}</span>
-                        <span className="inq-sub">{r.full_name}</span>
+                        <span className="inq-sub">{r.full_name || 'Anonymous'}</span>
                       </button>
                     </td>
                     <td>
@@ -233,8 +233,9 @@ export default function Assessments() {
                       <div className="inq-next">
                         {r.pdf_downloaded_at && <span className="ga-chip">PDF</span>}
                         {r.cta_clicked_at && <span className="ga-chip ga-chip-hot">Asked for more</span>}
-                        {r.inquiry_id && !r.pdf_downloaded_at && !r.cta_clicked_at && <span className="inq-sub">Inquiry logged</span>}
-                        {!r.inquiry_id && !r.pdf_downloaded_at && !r.cta_clicked_at && <span className="inq-sub">—</span>}
+                        {(r.pipeline_lead_id || r.contact_requested_at) && <span className="inq-sub">Asked to be contacted</span>}
+                        {!r.pipeline_lead_id && !r.contact_requested_at && r.inquiry_id && !r.pdf_downloaded_at && !r.cta_clicked_at && <span className="inq-sub">Inquiry logged</span>}
+                        {!r.pipeline_lead_id && !r.contact_requested_at && !r.inquiry_id && !r.pdf_downloaded_at && !r.cta_clicked_at && <span className="inq-sub">—</span>}
                       </div>
                     </td>
                     <td className="inq-muted" title={shortDate(r.created_at)}>{timeAgo(r.created_at)}</td>
@@ -250,7 +251,7 @@ export default function Assessments() {
                 <div className="leads-mobile-card-top">
                   <div>
                     <div className="leads-mobile-name">{r.company_name}</div>
-                    <div className="leads-mobile-company">{r.full_name}</div>
+                    <div className="leads-mobile-company">{r.full_name || 'Anonymous'}</div>
                   </div>
                   {r.status === 'report_ready'
                     ? <span className="inq-status inq-status-converted">Report ready</span>

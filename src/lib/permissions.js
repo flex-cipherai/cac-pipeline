@@ -30,10 +30,10 @@ export const MODULE_GROUPS = [
     key: 'pipeline',
     label: 'Sales Pipeline',
     modules: [
-      { key: 'dashboard', label: 'Dashboard', path: '/dashboard', defaults: ['admin', 'sales'] },
+      { key: 'dashboard', label: 'Dashboard', hint: 'Overview of the whole BMS; each section shows only for people who can open that module', path: '/dashboard', defaults: ['admin', 'sales'] },
       { key: 'inquiries', label: 'Inquiries', path: '/inquiries', defaults: ['admin', 'sales'] },
       { key: 'assessments', label: 'Automation Scoper', hint: 'Reports from the free assessment tool on the website', path: '/assessments', defaults: ['admin', 'sales'] },
-      { key: 'pipeline', label: 'Pipeline', path: '/pipeline', defaults: ['admin', 'sales'] },
+      { key: 'pipeline', label: 'Sales Pipeline', hint: 'Custom builds: scoper runs, active leads with their interaction log, and clients', path: '/pipeline', defaults: ['admin', 'sales'] },
       { key: 'leads', label: 'All Leads', path: '/leads', defaults: ['admin', 'sales'] },
       { key: 'quotations', label: 'Quotations', path: '/quotations', defaults: ['admin', 'sales'] },
       { key: 'lead_analytics', label: 'Lead Analytics', path: '/analytics', defaults: ['admin', 'marketing'] },

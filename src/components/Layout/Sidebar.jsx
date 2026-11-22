@@ -156,10 +156,9 @@ const MODULES = [
     label: 'Sales Pipeline',
     icon: icons.salesModule,
     items: [
-      { module: 'dashboard', icon: icons.dashboard },
+      { module: 'pipeline', icon: icons.pipeline },
       { module: 'inquiries', icon: icons.inquiries },
       { module: 'assessments', icon: icons.assessments },
-      { module: 'pipeline', icon: icons.pipeline },
       { module: 'leads', icon: icons.leads },
       { module: 'quotations', icon: icons.quotation },
       { module: 'lead_analytics', icon: icons.analytics },
@@ -193,6 +192,11 @@ const MODULES = [
   items: group.items.map(item => ({ ...item, to: MODULE_BY_KEY[item.module].path, label: MODULE_BY_KEY[item.module].label })),
 }))
 
+// The BMS-wide overview sits above the modules.
+const TOP_ITEMS = [
+  { modules: ['dashboard'], icon: icons.dashboard, to: '/dashboard', label: 'Dashboard' },
+]
+
 // Items that don't belong to either module.
 const STANDALONE_ITEMS = [
   // One entry for all the Settings pages; shown to anyone who may open at least one of them.
@@ -214,6 +218,7 @@ export default function Sidebar({ isOpen, onClose }) {
     .map(m => ({ ...m, items: m.items.filter(i => can(i.module)) }))
     .filter(m => m.items.length > 0)
   const standaloneItems = STANDALONE_ITEMS.filter(i => i.modules.some(can))
+  const topItems = TOP_ITEMS.filter(i => i.modules.some(can))
 
   const [openModule, setOpenModule] = useState(null)
 
@@ -252,6 +257,17 @@ export default function Sidebar({ isOpen, onClose }) {
 
           {/* Navigation */}
           <nav className="sidebar-nav" role="navigation" aria-label="Main navigation">
+            {topItems.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={handleNavClick}
+                className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span className="sidebar-nav-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </NavLink>
+            ))}
             {modules.map(module => {
               const isOpen = openModule === module.key
               const hasActiveChild = module.items.some(i => location.pathname.startsWith(i.to))

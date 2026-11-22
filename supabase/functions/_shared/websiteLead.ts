@@ -215,7 +215,7 @@ export function teamEmail(v: LeadValue, source: string) {
 ${row('Name', v.full_name)}${row('Email', v.email)}${row('Phone', v.phone)}${row('Business', v.business_name)}${row('Source', source)}
 </table>
 <pre style="font-family:Arial,Helvetica,sans-serif;font-size:14px;white-space:pre-wrap;background:#FAF8F5;padding:14px;border-radius:8px">${escapeHtml(buildMessage(v))}</pre>
-<p style="font-size:13px;color:#6A645E">Find it under Inquiries in the CRM. Reply within the hour if you can.</p>
+<p style="font-size:13px;color:#6A645E">${v.offer === 'custom' ? 'It is an active lead in the Custom builds pipeline. Log every interaction there: nothing logged for 48 hours flags the lead and emails the admins.' : 'Find it under Inquiries in the CRM. Reply within the hour if you can.'}</p>
 </div>`
   return { subject: `New website enquiry: ${OFFER_LABELS[v.offer]} (${v.full_name})`, html }
 }
