@@ -14,7 +14,7 @@
 // Deploy: supabase functions deploy sm-meta-oauth-callback --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { exchangeMetaCode, friendlyMetaError, graph, syncMetaAccounts } from '../_shared/meta.ts'
+import { exchangeMetaCode, friendlyMetaError, graph, saveUnifiedInstagramAccounts, syncMetaAccounts } from '../_shared/meta.ts'
 
 // What the BMS needs to publish, read insights and reply on Facebook Pages.
 // (Instagram connects separately through Instagram Login — sm-instagram-oauth-*;
@@ -35,10 +35,12 @@ Deno.serve(async (req) => {
 
   let redirectOrigin = ''
   let valid = false
+  let provider = 'meta' // 'instagram' when started by Connect Instagram (Unified login)
   if (state) {
-    const { data } = await db.from('oauth_states').select('redirect_origin, created_at').eq('state', state).eq('provider', 'meta').maybeSingle()
+    const { data } = await db.from('oauth_states').select('redirect_origin, created_at, provider').eq('state', state).in('provider', ['meta', 'instagram']).maybeSingle()
     if (data) {
       redirectOrigin = data.redirect_origin
+      provider = data.provider
       await db.from('oauth_states').delete().eq('state', state)
       valid = Date.now() - new Date(data.created_at).getTime() < 60 * 60 * 1000
     }
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
 
   function back(status: string, detail?: string) {
     if (!redirectOrigin) return new Response(`Meta connection ${status}${detail ? `: ${detail}` : ''}`, { status: 200 })
-    const params = new URLSearchParams({ meta: status, ...(detail ? { detail } : {}) })
+    const params = new URLSearchParams({ [provider === 'instagram' ? 'instagram' : 'meta']: status, ...(detail ? { detail } : {}) })
     return new Response(null, { status: 302, headers: { Location: `${redirectOrigin.replace(/\/$/, '')}/settings?${params.toString()}` } })
   }
 
@@ -55,6 +57,16 @@ Deno.serve(async (req) => {
 
   try {
     const userToken = await exchangeMetaCode(code, `${supabaseUrl}/functions/v1/sm-meta-oauth-callback`)
+
+    // Connect Instagram (Unified login): save the Instagram accounts granted.
+    if (provider === 'instagram') {
+      const { saved, missing } = await saveUnifiedInstagramAccounts(db, userToken)
+      if (!saved.length) return back('error', 'No Instagram account was shared — press Connect Instagram again and select your Instagram account')
+      if (missing.length) {
+        return back('missing_permissions', `${saved.join(', ')} connected, but Meta did not grant: ${missing.join(', ')}. Add them to the Instagram Login Compatible configuration (Edit permissions), then press Connect Instagram again.`)
+      }
+      return back('connected', saved.join(', '))
+    }
 
     // Which permissions were actually granted (the Login for Business
     // configuration decides what Meta asks for).

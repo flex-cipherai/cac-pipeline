@@ -74,8 +74,72 @@ export async function exchangeMetaCode(code: string, redirectUri: string) {
   const id = Deno.env.get('META_APP_ID')!
   const secret = Deno.env.get('META_APP_SECRET')!
   const short = await graph('oauth/access_token', '', { client_id: id, client_secret: secret, redirect_uri: redirectUri, code })
-  const long = await graph('oauth/access_token', '', { grant_type: 'fb_exchange_token', client_id: id, client_secret: secret, fb_exchange_token: short.access_token })
-  return long.access_token as string
+  // User tokens are upgraded to long-lived ones; Unified-login (system user)
+  // tokens already carry the configuration's lifetime, so keep them as they are.
+  try {
+    const long = await graph('oauth/access_token', '', { grant_type: 'fb_exchange_token', client_id: id, client_secret: secret, fb_exchange_token: short.access_token })
+    return long.access_token as string
+  } catch {
+    return short.access_token as string
+  }
+}
+
+// ── Instagram API with Unified Login ──
+// The Meta app's Instagram use case ("API setup with Unified login") has a
+// Facebook Login for Business configuration labelled "Instagram Login
+// Compatible" (secret INSTAGRAM_CONFIG_ID). People sign in with Instagram (or
+// Facebook) through the normal Meta dialog; the code comes back to
+// sm-meta-oauth-callback (already registered) and is exchanged with the Meta
+// app ID/secret for a business system-user token. Instagram accounts don't
+// need a Facebook Page. Calls go to graph.facebook.com with that token.
+export const UNIFIED_INSTAGRAM_SCOPES = ['instagram_basic', 'instagram_content_publish', 'instagram_manage_comments', 'instagram_manage_insights']
+
+export function buildInstagramUnifiedAuthUrl({ redirectUri, state }: { redirectUri: string; state: string }) {
+  const params = new URLSearchParams({
+    client_id: Deno.env.get('META_APP_ID')!,
+    config_id: Deno.env.get('INSTAGRAM_CONFIG_ID')!,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    override_default_response_type: 'true',
+    state,
+  })
+  return `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth?${params.toString()}`
+}
+
+// Saves every Instagram account the sign-in granted. Returns their usernames
+// and any required permission Meta did not grant.
+export async function saveUnifiedInstagramAccounts(db: Db, token: string) {
+  const appToken = `${Deno.env.get('META_APP_ID')}|${Deno.env.get('META_APP_SECRET')}`
+  let expiresAt = NEVER
+  let scopes: string[] = []
+  try {
+    const dbg = await graph('debug_token', appToken, { input_token: token })
+    const exp = Number(dbg.data?.expires_at || 0)
+    if (exp > 0) expiresAt = new Date(exp * 1000).toISOString()
+    scopes = dbg.data?.scopes || []
+  } catch { /* keep defaults */ }
+
+  const accounts = await graphAll('me/assigned_instagram_accounts', token, { fields: 'id,username,profile_picture_url' }, 50)
+  const { data: managed } = await db.from('connected_accounts').select('id').eq('platform', 'instagram').eq('status', 'active').limit(1)
+  let anyManaged = !!managed?.length
+  const saved: string[] = []
+  for (const a of accounts) {
+    const { data: existing } = await db.from('connected_accounts').select('id').eq('platform', 'instagram').eq('external_page_id', String(a.id)).maybeSingle()
+    const fields = { account_name: a.username || 'Instagram', account_type: 'business', avatar_url: a.profile_picture_url || null, mode: 'automated', oauth_connected: true, last_sync_error: null }
+    let id = existing?.id
+    if (id) {
+      await db.from('connected_accounts').update(fields).eq('id', id)
+    } else {
+      const { data, error } = await db.from('connected_accounts').insert({ platform: 'instagram', external_page_id: String(a.id), status: anyManaged ? 'disconnected' : 'active', ...fields }).select('id').single()
+      if (error) throw new Error(`Could not save @${a.username}: ${error.message}`)
+      id = data.id
+      anyManaged = true
+    }
+    await db.from('connected_account_tokens').upsert({ account_id: id, access_token: token, scope: 'instagram-unified', token_expires_at: expiresAt }, { onConflict: 'account_id' })
+    saved.push(`@${a.username}`)
+  }
+  const missing = scopes.length ? UNIFIED_INSTAGRAM_SCOPES.filter((s) => !scopes.includes(s)) : []
+  return { saved, missing }
 }
 
 const NEVER = '2099-12-31T00:00:00Z'

@@ -1,7 +1,7 @@
 // Supabase Edge Function: sm-instagram-oauth-start
 // Called by an authenticated admin from Settings → Integrations
 // ("Connect Instagram"). Verifies the caller, stores a short-lived CSRF
-// state row, and returns the Instagram Login authorization URL for the browser to
+// state row, and returns the Instagram (Unified login) authorization URL for the browser to
 // navigate to. The redirect_uri here MUST exactly match one of the
 // "Authorized redirect URLs" configured on the Meta app's Instagram use case (API setup with Instagram login → Business login settings → OAuth redirect URIs) —
 // it points at sm-instagram-oauth-callback, not the frontend, since only an
@@ -10,7 +10,7 @@
 // Deploy: supabase functions deploy sm-instagram-oauth-start
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildInstagramAuthUrl } from '../_shared/meta.ts'
+import { buildInstagramUnifiedAuthUrl } from '../_shared/meta.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,11 +33,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-    if (!Deno.env.get('INSTAGRAM_APP_ID')) return jsonResponse({ success: false, error: 'INSTAGRAM_APP_ID is not set yet — add the Instagram app ID and secret to Supabase secrets' })
-    // An app ID is digits only; a long value starting with letters is usually an access token pasted by mistake.
-    if (!/^d{6,20}$/.test((Deno.env.get('INSTAGRAM_APP_ID') || '').trim())) {
-      return jsonResponse({ success: false, error: 'The INSTAGRAM_APP_ID secret is not an app ID (it should be digits only). Copy the Instagram app ID from the Meta app → Instagram use case → API setup with Instagram login, and update the secret in Supabase.' })
-    }
+    if (!Deno.env.get('INSTAGRAM_CONFIG_ID')) return jsonResponse({ success: false, error: 'INSTAGRAM_CONFIG_ID is not set — add the Instagram Login Compatible configuration ID to Supabase secrets' })
 
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
@@ -88,8 +84,9 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: false, error: insertError.message })
     }
 
-    const redirectUri = `${supabaseUrl}/functions/v1/sm-instagram-oauth-callback`
-    const url = buildInstagramAuthUrl({ redirectUri, state })
+    // Unified login comes back through the Meta callback (already registered on the app).
+    const redirectUri = `${supabaseUrl}/functions/v1/sm-meta-oauth-callback`
+    const url = buildInstagramUnifiedAuthUrl({ redirectUri, state })
 
     return jsonResponse({ success: true, url })
   } catch (err) {
