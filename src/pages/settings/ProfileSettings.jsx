@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
 import { COMMON_TIMEZONES, detectTimezone, formatOffsetLabel } from '../../lib/timezone'
@@ -126,7 +126,50 @@ export default function ProfileSettings() {
         )}
       </div>
 
+      <ClaudeConnections showToast={showToast} />
+
       {toast}
+    </div>
+  )
+}
+
+// Claude connector (bms-mcp): this person's active Claude connections, with a
+// way to disconnect them (revokes every token Claude holds for them).
+function ClaudeConnections({ showToast }) {
+  const [rows, setRows] = useState(null)
+
+  async function load() {
+    const { data } = await supabase.rpc('my_claude_connections')
+    setRows(data || [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function disconnect() {
+    if (!window.confirm('Disconnect Claude from your BMS account? Claude will need to sign in again to use the BMS.')) return
+    const { error } = await supabase.rpc('revoke_my_claude_connections')
+    if (error) { showToast('error', 'Could not disconnect'); return }
+    showToast('success', 'Claude disconnected')
+    load()
+  }
+
+  return (
+    <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>
+      <div className="section-card-header">
+        <h2 className="section-card-title">Claude connector</h2>
+        {rows?.length > 0 && <button className="btn btn-secondary btn-sm" onClick={disconnect}>Disconnect</button>}
+      </div>
+      {rows === null ? null : rows.length === 0 ? (
+        <p className="form-hint">
+          Not connected. In Claude (claude.ai → Settings → Connectors → Add custom connector) add <code>{window.location.origin}/mcp</code>,
+          then sign in here and press Allow. Claude then works in the BMS as you, with your permissions.
+        </p>
+      ) : rows.map((r, i) => (
+        <p key={i} className="form-hint">
+          <b>{r.client_name}</b> connected {new Date(r.connected_at).toLocaleDateString()}
+          {r.last_used_at ? ` · last used ${new Date(r.last_used_at).toLocaleString()}` : ''}
+        </p>
+      ))}
     </div>
   )
 }

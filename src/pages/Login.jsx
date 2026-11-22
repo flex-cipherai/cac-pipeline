@@ -27,7 +27,9 @@ export default function Login() {
 
     try {
       await signIn(email, password)
-      navigate('/dashboard')
+      // Return to where sign-in was asked for (e.g. the Claude connector page).
+      const next = new URLSearchParams(window.location.search).get('next')
+      navigate(next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard')
     } catch (err) {
       if (err.message === 'ACCOUNT_DEACTIVATED') {
         setError('Your account has been deactivated. Contact your administrator to restore access.')

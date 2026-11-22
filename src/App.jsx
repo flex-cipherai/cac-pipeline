@@ -30,6 +30,7 @@ import Planner from './pages/social/Planner'
 import Reports from './pages/social/Reports'
 import LinkInBio from './pages/social/LinkInBio'
 import BioPage from './pages/public/BioPage'
+import OAuthAuthorize from './pages/OAuthAuthorize'
 import BulkScheduler from './pages/social/BulkScheduler'
 import ApprovalQueue from './pages/social/ApprovalQueue'
 import SocialAnalytics from './pages/social/SocialAnalytics'
@@ -92,6 +93,9 @@ function PublicRoute({ children }) {
   if (loading) return null
 
   if (user && profile) {
+    // Already signed in: honour ?next= (e.g. back to the Claude connector consent page).
+    const next = new URLSearchParams(window.location.search).get('next')
+    if (next && next.startsWith('/') && !next.startsWith('//')) return <Navigate to={next} replace />
     return homePath ? <Navigate to={homePath} replace /> : <NoAccess />
   }
 
@@ -159,6 +163,8 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       {/* Link in Bio — public, no sign-in (served by the bio-page Edge Function) */}
       <Route path="/l/:slug" element={<BioPage />} />
+      {/* Claude connector sign-in (bms-mcp): needs a BMS session, no module */}
+      <Route path="/oauth/authorize" element={<OAuthAuthorize />} />
       <Route
         path="/login"
         element={

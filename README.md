@@ -154,6 +154,14 @@ Benchmarked on Metricool. Sidebar: **Planner · Analytics · Inbox · Reports ·
 
 Setup order: `migration-social-v2.sql` → deploy `sm-move-to-ready`, `sm-publish`, `sm-sync`, `sm-linkedin-sync`, `sm-autolists`, `sm-reports`, `bio-page` (cron/public ones with `--no-verify-jwt`), `sm-reply`, `sm-linkedin-oauth-start`, `sm-linkedin-oauth-callback --no-verify-jwt`, `sm-linkedin-pages` → `migration-social-v2-cron.sql` (project URL + anon key) → reconnect LinkedIn once (new comment scopes).
 
+### Claude connector (`/mcp`)
+
+People can use the BMS from Claude: claude.ai → Settings → Connectors → **Add custom connector** → `https://spm.sdfmgroup.com/mcp` → sign in with their BMS login on `/oauth/authorize` → **Allow**. Claude then acts as that person, with their Settings → Permissions modules (admins have everything).
+
+- **Server:** Edge Function `bms-mcp` (`--no-verify-jwt`): MCP over Streamable HTTP (JSON responses) plus a small OAuth 2.1 server (dynamic client registration, authorization code + PKCE S256, 1-hour access tokens, rotating 60-day refresh tokens, stored as SHA-256 hashes in `mcp_oauth_*`, see `migration-claude-connector.sql`). `netlify.toml` proxies `/mcp`, `/oauth/register|token|revoke` and `/.well-known/oauth-*` from the BMS domain to the function; `/oauth/authorize` is the app page `src/pages/OAuthAuthorize.jsx`. Set the Edge secret `BMS_PUBLIC_URL` if the domain changes.
+- **Tools** (`_shared/bmsTools.ts`, 23): social (accounts, planner, post details, Content Library, create / schedule / queue / publish now, edit, delete, publish or retry, analytics, Inbox list / reply / mark), sales (search and view leads, notes, move stage or mark lost with the usual alerts, upcoming calls, inquiries list / update), reports (pipeline, website traffic, Automation Scoper, Ospod waitlist). Each checks the user's modules; approvals, profile ownership and publishing rules match the app.
+- **Disconnect:** Settings → My profile → Claude connector (revokes that person's tokens).
+
 ### Meta — Facebook Pages & Instagram
 
 - **Connect:** Settings → Integrations → **Connect Meta** (`sm-meta-oauth-start` → Facebook Login → `sm-meta-oauth-callback`, deployed with `--no-verify-jwt`). Every Facebook Page the person manages, and each Page's linked Instagram professional account, is saved as a `connected_accounts` row (`facebook`/`page`, `instagram`/`business`) with the Page token (non-expiring) in `connected_account_tokens`. New accounts start unmanaged unless none of that network is managed yet; choose with **Manage in BMS**.
