@@ -11,6 +11,7 @@
 import { getConnector, hasConnector } from './platforms/index.ts'
 import { type Account, type Db, type Stats, zeroStats } from './platforms/types.ts'
 import { staffWithModule } from './access.ts'
+import { writeDailyAccountRows } from './socialHistory.ts'
 
 const STATS_WINDOW_DAYS = 90
 const COMMENTS_WINDOW_DAYS = 30
@@ -61,15 +62,25 @@ async function syncStats(db: Db, account: Account, token: string, force: boolean
   if (caps.followers && connector.followerCount) {
     try { followers = await connector.followerCount(token, account) } catch (err) { console.warn('[sync] followers:', (err as Error).message) }
   }
+  // Previous follower count = the latest one recorded before today.
   let previous: number | null = null
   if (followers !== null) {
+    const todayStart = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`
     const { data: prev } = await db.from('analytics_snapshots').select('follower_count')
       .eq('account_id', account.id).is('post_id', null).not('follower_count', 'is', null)
+      .lt('captured_at', todayStart)
       .order('captured_at', { ascending: false }).limit(1).maybeSingle()
     previous = prev?.follower_count ?? null
   }
 
-  if (METRICS.some((k) => accountDelta[k] > 0) || (followers !== null && followers !== previous)) {
+  // Account level: platforms with daily totals get one row per day (the last
+  // 3 days refreshed, so late-arriving numbers are picked up); others get an
+  // increment row built from the post changes above.
+  let dailyRows = 0
+  if (connector.dailyAccountStats) {
+    const now = new Date()
+    dailyRows = await writeDailyAccountRows(db, account, token, new Date(now.getTime() - 3 * 86400000), now, followers)
+  } else if (METRICS.some((k) => accountDelta[k] > 0) || (followers !== null && followers !== previous)) {
     rows.push({ account_id: account.id, post_id: null, captured_at: capturedAt, source: 'api', ...accountDelta, engagement_rate: rate(accountDelta), follower_count: followers })
   }
   if (rows.length) {
@@ -81,7 +92,7 @@ async function syncStats(db: Db, account: Account, token: string, force: boolean
     const crossed = MILESTONES.filter((m) => previous! < m && followers! >= m).pop()
     if (crossed) await followerMilestone(db, account, crossed, followers)
   }
-  return { posts: due.length, snapshots: rows.length, followers }
+  return { posts: due.length, snapshots: rows.length, days: dailyRows, followers }
 }
 
 async function followerMilestone(db: Db, account: Account, milestone: number, count: number) {

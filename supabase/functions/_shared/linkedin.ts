@@ -118,7 +118,7 @@ export class LinkedInApiError extends Error {
 export async function liFetch(
   accessToken: string,
   path: string,
-  init: { method?: string; body?: unknown } = {},
+  init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<{ data: any; headers: Headers; status: number }> {
   const url = path.startsWith('http') ? path : `${LINKEDIN_API_BASE}${path}`
   const res = await fetch(url, {
@@ -127,6 +127,7 @@ export async function liFetch(
       Authorization: `Bearer ${accessToken}`,
       'LinkedIn-Version': LINKEDIN_API_VERSION,
       'X-Restli-Protocol-Version': '2.0.0',
+      ...(init.headers || {}),
       ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,

@@ -91,6 +91,23 @@ export interface Connector {
   listComments?(token: string, account: Account, externalPostId: string): Promise<RemoteComment[]>
   replyToComment?(token: string, account: Account, externalPostId: string, parentCommentId: string | null, text: string): Promise<string>
   postUrl(externalPostId: string): string
+
+  // ── History (optional) ──
+  // Account totals per day (YYYY-MM-DD, UTC) between two instants. Used by the
+  // one-time history import and refreshed for recent days by the hourly sync;
+  // when present, account-level analytics are one row per day.
+  dailyAccountStats?(token: string, account: Account, from: Date, to: Date): Promise<Map<string, Stats>>
+  // New followers per day (YYYY-MM-DD) — the follower trend is rebuilt from it.
+  dailyFollowerGains?(token: string, account: Account, from: Date, to: Date): Promise<Map<string, number>>
+  // Posts the account published since a date (including outside the BMS).
+  listPosts?(token: string, account: Account, since: Date): Promise<RemotePost[]>
+}
+
+export interface RemotePost {
+  externalId: string
+  caption: string
+  postType: 'text' | 'image' | 'carousel' | 'video' | 'poll'
+  publishedAt: string
 }
 
 export class PublishError extends Error {}

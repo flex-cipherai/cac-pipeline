@@ -20,6 +20,24 @@ export default function IntegrationsSettings() {
   const [syncing, setSyncing] = useState(false)
   const [refreshingPages, setRefreshingPages] = useState(false)
   const [togglingId, setTogglingId] = useState(null)
+  const [importingId, setImportingId] = useState(null)
+
+  // One-time history import (12 months of daily totals, follower trend and
+  // past Company Page posts). Safe to repeat.
+  async function importHistory(account) {
+    setImportingId(account.id)
+    try {
+      const { data, error } = await supabase.functions.invoke('sm-import-history', { body: { account_id: account.id } })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Import failed')
+      showToast('success', `${account.account_name}: ${data.days} days of analytics${data.posts ? ` and ${data.posts} past posts` : ''} imported`)
+      fetchData()
+    } catch (err) {
+      showToast('error', err.message)
+    } finally {
+      setImportingId(null)
+    }
+  }
 
   // Google Search Console (Website Analytics → Search tab). Access is by service account (Edge Function
   // secret); only the property is set here.
@@ -225,14 +243,22 @@ export default function IntegrationsSettings() {
               {p.status === 'active' && p.last_synced_at && !p.last_sync_error && (
                 <span className="form-hint" style={{ marginLeft: 8 }}>Synced {new Date(p.last_synced_at).toLocaleString()}</span>
               )}
+              <HistoryNote account={p} />
             </div>
-            <button
-              className={`btn btn-sm ${p.status === 'active' ? 'btn-secondary' : 'btn-primary'}`}
-              onClick={() => togglePage(p)}
-              disabled={togglingId === p.id}
-            >
-              {p.status === 'active' ? 'Stop managing' : 'Manage in BMS'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {p.status === 'active' && p.mode === 'automated' && (
+                <button className="btn btn-secondary btn-sm" onClick={() => importHistory(p)} disabled={!!importingId}>
+                  {importingId === p.id ? 'Importing…' : p.history_imported_at ? 'Re-import history' : 'Import history'}
+                </button>
+              )}
+              <button
+                className={`btn btn-sm ${p.status === 'active' ? 'btn-secondary' : 'btn-primary'}`}
+                onClick={() => togglePage(p)}
+                disabled={togglingId === p.id}
+              >
+                {p.status === 'active' ? 'Stop managing' : 'Manage in BMS'}
+              </button>
+            </div>
           </div>
         ))}
         <p className="form-hint">Managed pages appear under Post As in the composer. Pages you administer on LinkedIn but don't switch on here are never posted to.</p>
@@ -246,10 +272,18 @@ export default function IntegrationsSettings() {
               <div>👤 {m.account_name}{m.owner_profile_id === profile?.id ? ' (you)' : ''}</div>
               <span className={`status-badge status-${m.status === 'active' ? 'posted' : 'draft'}`}>{m.status === 'active' ? 'Active' : 'Disconnected'}</span>
               {m.last_sync_error && <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={m.last_sync_error}>Last sync failed</span>}
+              <HistoryNote account={m} />
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setMemberStatus(m, m.status === 'active' ? 'disconnected' : 'active')}>
-              {m.status === 'active' ? 'Disconnect' : 'Reactivate'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {m.status === 'active' && m.owner_profile_id === profile?.id && (
+                <button className="btn btn-secondary btn-sm" onClick={() => importHistory(m)} disabled={!!importingId}>
+                  {importingId === m.id ? 'Importing…' : m.history_imported_at ? 'Re-import history' : 'Import history'}
+                </button>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={() => setMemberStatus(m, m.status === 'active' ? 'disconnected' : 'active')}>
+                {m.status === 'active' ? 'Disconnect' : 'Reactivate'}
+              </button>
+            </div>
           </div>
         ))}
         <p className="form-hint">Only the owner of a profile can schedule posts to it. Analytics sync for profile posts; comments on them do not, because LinkedIn does not offer that to this app.</p>
@@ -308,6 +342,16 @@ export default function IntegrationsSettings() {
       </div>
 
       {toast}
+    </div>
+  )
+}
+
+function HistoryNote({ account }) {
+  if (!account.history_imported_at) return null
+  return (
+    <div className="form-hint" style={{ marginTop: 4 }}>
+      History imported {new Date(account.history_imported_at).toLocaleDateString()}
+      {account.history_import_note ? ` — ${account.history_import_note}` : ''}
     </div>
   )
 }

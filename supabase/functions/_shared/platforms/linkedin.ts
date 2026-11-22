@@ -5,7 +5,7 @@
 import { getValidLinkedInAccessToken, liFetch, postUrlFor } from '../linkedin.ts'
 import {
   type Account, type Capabilities, type Connector, type PublishInput, type PublishOutcome,
-  type RemoteComment, type Stats, PublishError, zeroStats,
+  type RemoteComment, type RemotePost, type Stats, PublishError, zeroStats,
 } from './types.ts'
 
 const MAX_COMMENTARY = 3000
@@ -193,6 +193,125 @@ export const linkedinConnector: Connector = {
       createdAt: c.created?.time ? new Date(c.created.time).toISOString() : new Date().toISOString(),
     }))
   },
+
+  // ── History ──
+  async dailyAccountStats(token, account, from, to) {
+    return account.account_type === 'organization'
+      ? await orgDailyStats(token, account.external_page_id, from, to)
+      : await memberDailyStats(token, from, to)
+  },
+
+  async dailyFollowerGains(token, account, from, to) {
+    const out = new Map<string, number>()
+    if (account.account_type !== 'organization') return out
+    for (const [start, end] of chunks(from, to, 30)) {
+      const { data } = await liFetch(token, `/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(account.external_page_id)}&timeIntervals=(timeRange:(start:${start.getTime()},end:${end.getTime()}),timeGranularityType:DAY)`)
+      for (const el of data?.elements || []) {
+        const day = new Date(el.timeRange?.start).toISOString().slice(0, 10)
+        out.set(day, (el.followerGains?.organicFollowerGain || 0) + (el.followerGains?.paidFollowerGain || 0))
+      }
+    }
+    return out
+  },
+
+  // Company Page posts (r_organization_social). LinkedIn does not let this app
+  // list a person's own posts (r_member_social is closed), so profiles return [].
+  async listPosts(token, account, since): Promise<RemotePost[]> {
+    if (account.account_type !== 'organization') return []
+    const out: RemotePost[] = []
+    for (let start = 0; start < 2000; start += 100) {
+      const { data } = await liFetch(token, `/posts?author=${encodeURIComponent(account.external_page_id)}&q=author&count=100&start=${start}&sortBy=CREATED`, { headers: { 'X-RestLi-Method': 'FINDER' } })
+      const els = data?.elements || []
+      let older = false
+      for (const p of els) {
+        const at = p.publishedAt || p.createdAt
+        if (!at || at < since.getTime()) { older = true; continue }
+        if (p.lifecycleState && p.lifecycleState !== 'PUBLISHED') continue
+        out.push({ externalId: p.id, caption: unescapeLittleText(p.commentary || ''), postType: postTypeOf(p.content), publishedAt: new Date(at).toISOString() })
+      }
+      if (els.length < 100 || older) break
+    }
+    return out
+  },
+}
+
+// ── History helpers ─────────────────────────────────────────────
+
+// [start, end) pairs of at most `days` days covering from..to.
+function chunks(from: Date, to: Date, days: number): [Date, Date][] {
+  const out: [Date, Date][] = []
+  let s = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))
+  while (s < to) {
+    const e = new Date(Math.min(s.getTime() + days * 86400000, to.getTime()))
+    out.push([s, e])
+    s = e
+  }
+  return out
+}
+
+async function orgDailyStats(token: string, orgUrn: string, from: Date, to: Date): Promise<Map<string, Stats>> {
+  const out = new Map<string, Stats>()
+  for (const [start, end] of chunks(from, to, 30)) {
+    const { data } = await liFetch(token, `/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}&timeIntervals=(timeRange:(start:${start.getTime()},end:${end.getTime()}),timeGranularityType:DAY)`)
+    for (const el of data?.elements || []) {
+      const s = el.totalShareStatistics || {}
+      out.set(new Date(el.timeRange?.start).toISOString().slice(0, 10), {
+        impressions: s.impressionCount || 0,
+        reach: s.uniqueImpressionsCount ?? s.uniqueImpressionsCounts ?? 0,
+        reactions: s.likeCount || 0, comments: s.commentCount || 0, shares: s.shareCount || 0, clicks: s.clickCount || 0,
+      })
+    }
+  }
+  return out
+}
+
+const MEMBER_DAILY: [keyof Stats, string][] = [['impressions', 'IMPRESSION'], ['reactions', 'REACTION'], ['comments', 'COMMENT'], ['shares', 'RESHARE']]
+
+// The member's posts in aggregate, per day (one metric per request). How far
+// back LinkedIn keeps this is not documented: ask for the whole range, then
+// shorter ranges if it refuses.
+async function memberDailyStats(token: string, from: Date, to: Date): Promise<Map<string, Stats>> {
+  const out = new Map<string, Stats>()
+  const d = (x: Date) => `(day:${x.getUTCDate()},month:${x.getUTCMonth() + 1},year:${x.getUTCFullYear()})`
+  for (const [key, queryType] of MEMBER_DAILY) {
+    for (const days of [365, 180, 90, 30]) {
+      const start = new Date(Math.max(from.getTime(), to.getTime() - days * 86400000))
+      try {
+        const { data } = await liFetch(token, `/memberCreatorPostAnalytics?q=me&queryType=${queryType}&aggregation=DAILY&dateRange=(start:${d(start)},end:${d(to)})`)
+        for (const el of data?.elements || []) {
+          const st = el.dateRange?.start
+          if (!st) continue
+          const day = `${st.year}-${String(st.month).padStart(2, '0')}-${String(st.day).padStart(2, '0')}`
+          const cur = out.get(day) || zeroStats()
+          cur[key] = (cur[key] || 0) + (el.count || 0)
+          out.set(day, cur)
+        }
+        break
+      } catch (err) {
+        console.warn(`[linkedin] member daily ${queryType} (${days}d):`, (err as Error).message)
+      }
+    }
+  }
+  return out
+}
+
+function postTypeOf(content: any): RemotePost['postType'] {
+  if (!content) return 'text'
+  if (content.poll) return 'poll'
+  if (content.multiImage) return 'image'
+  const id: string = content.media?.id || ''
+  if (id.startsWith('urn:li:image:')) return 'image'
+  if (id.startsWith('urn:li:video:')) return 'video'
+  if (id.startsWith('urn:li:document:')) return 'carousel'
+  return 'text'
+}
+
+// Little Text Format → plain text: {hashtag|\#|ai} → #ai, @[Name](urn) → @Name, \x → x.
+export function unescapeLittleText(t: string) {
+  return t
+    .replace(/\{hashtag\|\\?[#＃]\|([^}]+)\}/g, '#$1')
+    .replace(/@\[([^\]]+)\]\([^)]*\)/g, '@$1')
+    .replace(/\\(.)/g, '$1')
 }
 
 // Comments are written as the account itself (page or person). Plain text:
