@@ -140,7 +140,7 @@ Settings → Permissions shows an amber banner until the enforcement migration h
 
 LinkedIn approved the app for the **Community Management API**. Connecting LinkedIn once (Settings → Integrations → Connect LinkedIn, signed in as an admin of the Company Page) sets up two publishing targets, both in Automated Mode:
 
-- **The Company Page** (`connected_accounts.account_type = 'organization'`): scheduled posts publish automatically; post analytics, the follower count and new comments sync hourly.
+- **Company Pages** (`connected_accounts.account_type = 'organization'`, one row per page the connecting person administers, unique on `external_page_id`): Settings → Integrations lists them with **Manage in BMS / Stop managing** (`status` active / disconnected). Only managed pages appear under Post As, publish and sync; a page found for the first time starts unmanaged (unless no page is managed yet). **Refresh pages** (`sm-linkedin-pages`) re-reads the list using the existing connection, no LinkedIn sign-in needed. Managed pages: scheduled posts publish automatically; post analytics, the follower count and new comments sync hourly.
 - **The connecting person's own profile** (`account_type = 'member'`, `owner_profile_id` = that BMS user): pick it under **Post As** in the composer. Only the owner can schedule to their profile (database trigger `check_post_account_owner`). Post analytics sync; comments on profile posts do not (that needs `r_member_social_feed`, which LinkedIn does not grant this app).
 
 How it runs:
@@ -155,7 +155,7 @@ Setup:
 - The LinkedIn app's **Authorized redirect URL**: `https://<project-ref>.supabase.co/functions/v1/sm-linkedin-oauth-callback`.
 - Scopes requested (`LINKEDIN_SCOPES` in `_shared/linkedin.ts`) must all be listed on the app's Auth tab, or LinkedIn refuses the connection: `r_basicprofile w_member_social r_member_postAnalytics r_organization_social r_organization_social_feed w_organization_social rw_organization_admin`.
 - `LINKEDIN_API_VERSION` (`YYYYMM`) in the same file: each version lasts about a year; bump it before it sunsets.
-- Order: `migration-social-linkedin-oauth.sql` → `migration-social-linkedin-publishing.sql` → deploy `sm-publish`, `sm-move-to-ready --no-verify-jwt`, `sm-linkedin-sync --no-verify-jwt`, `sm-linkedin-oauth-start`, `sm-linkedin-oauth-callback --no-verify-jwt` → `migration-social-linkedin-sync-cron.sql` (fill in the project URL and anon key) → Connect LinkedIn in Settings.
+- Order: `migration-social-linkedin-oauth.sql` → `migration-social-linkedin-publishing.sql` → deploy `sm-publish`, `sm-linkedin-pages`, `sm-move-to-ready --no-verify-jwt`, `sm-linkedin-sync --no-verify-jwt`, `sm-linkedin-oauth-start`, `sm-linkedin-oauth-callback --no-verify-jwt` → `migration-social-linkedin-sync-cron.sql` (fill in the project URL and anon key) → Connect LinkedIn in Settings.
 - Access tokens last 60 days. If LinkedIn issues a refresh token it is used automatically; otherwise publishing fails with "reconnect LinkedIn" when it expires, so reconnect every ~2 months.
 
 ### Website Analytics (`/social/website-analytics`)

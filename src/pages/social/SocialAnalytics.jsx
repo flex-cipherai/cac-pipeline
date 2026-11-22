@@ -87,9 +87,14 @@ export default function SocialAnalytics() {
   // Account filter: 'all', or one connected_accounts id (Company Page or a profile).
   const [accountFilter, setAccountFilter] = useState('all')
   const [accountOptions, setAccountOptions] = useState([])
+  const [logAccountId, setLogAccountId] = useState('')
   useEffect(() => {
     supabase.from('connected_accounts').select('id, account_name, account_type').eq('platform', 'linkedin').order('created_at')
-      .then(({ data }) => setAccountOptions(data || []))
+      .then(({ data }) => {
+        setAccountOptions(data || [])
+        const first = (data || []).find(a => a.account_type === 'organization' && a.status === 'active') || (data || [])[0]
+        setLogAccountId(prev => prev || first?.id || '')
+      })
   }, [])
 
   const filteredAccountSnapshots = useMemo(() => filterByPeriod(
@@ -201,11 +206,8 @@ export default function SocialAnalytics() {
       video_views: Number(logFields.video_views) || 0,
       follower_count: logFields.follower_count ? Number(logFields.follower_count) : null,
     }
-    // Fetch account id for account-level logs
-    if (!payload.post_id) {
-      const { data: account } = await supabase.from('connected_accounts').select('id').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
-      payload.account_id = account?.id || null
-    }
+    // Account-level logs belong to the account chosen in the modal.
+    if (!payload.post_id) payload.account_id = logAccountId || null
     const { error } = await supabase.from('analytics_snapshots').insert(payload)
     setSaving(false)
     if (error) { showToast('error', 'Failed to save'); return }
@@ -224,7 +226,15 @@ export default function SocialAnalytics() {
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
 
-    const { data: account } = await supabase.from('connected_accounts').select('id').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
+    // A LinkedIn export covers one page: import it into the account picked in the account filter.
+    const account = accountFilter !== 'all'
+      ? accountOptions.find(a => a.id === accountFilter)
+      : accountOptions.length === 1 ? accountOptions[0] : null
+    if (!account) {
+      if (csvInputRef.current) csvInputRef.current.value = ''
+      showToast('error', 'Pick the page this export is for in the account filter, then import again')
+      return
+    }
 
     const payload = rows.map(r => {
       const norm = {}
@@ -477,6 +487,14 @@ export default function SocialAnalytics() {
                   {posts.map(p => <option key={p.id} value={p.id}>{(p.caption || '').slice(0, 40) || '(No caption)'}</option>)}
                 </select>
               </div>
+              {!logForPostId && accountOptions.length > 1 && (
+                <div className="form-group">
+                  <label className="form-label">Account</label>
+                  <select className="form-input" value={logAccountId} onChange={e => setLogAccountId(e.target.value)}>
+                    {accountOptions.map(a => <option key={a.id} value={a.id}>{a.account_type === 'member' ? '👤 ' : '🏢 '}{a.account_name}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="sa-log-grid">
               {METRIC_FIELDS.map(f => (

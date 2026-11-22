@@ -6,18 +6,18 @@
 // One connection sets up two publishing targets:
 //   - the connecting person's own LinkedIn profile (a connected_accounts row
 //     with account_type 'member', owned by that BMS user), and
-//   - the LinkedIn Company Page they administer (the 'organization' row).
-// Both switch to Automated Mode. Tokens go in connected_account_tokens
-// (service-role only — never readable from the browser).
+//   - every LinkedIn Company Page they administer (one 'organization' row
+//     each; Settings → Integrations chooses which ones the BMS manages).
+// Tokens go in connected_account_tokens (service-role only — never readable
+// from the browser).
 //
 // Redirects back to /settings?linkedin=<status>.
 //
 // Deploy: supabase functions deploy sm-linkedin-oauth-callback --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import {
-  exchangeCodeForToken, fetchAdministeredOrganizations, fetchMe, fetchOrganizationName, tokenColumns,
-} from '../_shared/linkedin.ts'
+import { exchangeCodeForToken, fetchMe, tokenColumns } from '../_shared/linkedin.ts'
+import { syncAdministeredPages } from '../_shared/linkedinPages.ts'
 
 function redirectTo(url: string) {
   return new Response(null, { status: 302, headers: { Location: url } })
@@ -110,46 +110,18 @@ Deno.serve(async (req) => {
       linkedin_member_urn: memberUrn,
     }, { onConflict: 'account_id' })
 
-    // ── The Company Page ──
-    const { data: orgAccount } = await adminClient
-      .from('connected_accounts')
-      .select('id, account_name')
-      .eq('platform', 'linkedin')
-      .eq('account_type', 'organization')
-      .order('created_at')
-      .limit(1)
-      .maybeSingle()
-
-    let orgUrn: string | null = null
-    let orgProblem = ''
+    // ── Company Pages: every page this person administers gets a row; the
+    // admin picks which ones the BMS manages in Settings → Integrations. ──
     try {
-      const orgs = await fetchAdministeredOrganizations(token.access_token)
-      orgUrn = orgs[0] || null
-      if (!orgUrn) orgProblem = 'you are not an admin of any LinkedIn Company Page'
+      const { pages } = await syncAdministeredPages(adminClient, token.access_token, { columns }, memberUrn)
+      if (pages.length === 0) {
+        return toSettings('connected_profile_only', 'you are not an admin of any LinkedIn Company Page')
+      }
+      return toSettings('connected', String(pages.length))
     } catch (err) {
-      orgProblem = (err as Error).message
-      console.warn('[sm-linkedin-oauth-callback] organizationAcls failed:', orgProblem)
+      console.warn('[sm-linkedin-oauth-callback] pages failed:', (err as Error).message)
+      return toSettings('connected_profile_only', (err as Error).message)
     }
-
-    if (orgUrn && orgAccount) {
-      const orgName = await fetchOrganizationName(token.access_token, orgUrn)
-      await adminClient.from('connected_accounts').update({
-        external_page_id: orgUrn,
-        mode: 'automated',
-        status: 'active',
-        oauth_connected: true,
-        last_sync_error: null,
-        ...(orgName ? { account_name: orgName } : {}),
-      }).eq('id', orgAccount.id)
-      await adminClient.from('connected_account_tokens').upsert({
-        account_id: orgAccount.id,
-        ...columns,
-        linkedin_member_urn: memberUrn,
-      }, { onConflict: 'account_id' })
-      return toSettings('connected')
-    }
-
-    return toSettings('connected_profile_only', orgProblem || 'No Company Page account row found')
   } catch (err) {
     console.error('[sm-linkedin-oauth-callback] failed:', (err as Error).message)
     return toSettings('error', (err as Error).message)

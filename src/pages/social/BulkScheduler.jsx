@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import { fetchPostableAccounts, accountLabel, defaultAccountId } from '../../lib/linkedinAccounts'
 import './ContentLibrary.css'
 import './BulkScheduler.css'
 
@@ -47,6 +48,16 @@ export default function BulkScheduler() {
   const [rows, setRows] = useState([])
   const [validation, setValidation] = useState([])
   const [importing, setImporting] = useState(false)
+  const [accounts, setAccounts] = useState([])
+  const [accountId, setAccountId] = useState('')
+
+  useEffect(() => {
+    if (!profile?.id) return
+    fetchPostableAccounts(profile.id).then(list => {
+      setAccounts(list)
+      setAccountId(prev => prev || defaultAccountId(list))
+    })
+  }, [profile?.id])
   const [imported, setImported] = useState(null)
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
 
@@ -162,7 +173,7 @@ export default function BulkScheduler() {
     if (importable.length === 0) { showToast('error', 'No valid rows to import'); return }
 
     setImporting(true)
-    const { data: account } = await supabase.from('connected_accounts').select('*').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
+    const account = accounts.find(a => a.id === accountId) || null
     const { data: assetRows } = await supabase.from('content_assets').select('id, file_name')
     const assetByName = new Map((assetRows || []).map(a => [a.file_name, a.id]))
     const pillarCache = new Map()
@@ -253,6 +264,11 @@ export default function BulkScheduler() {
             </table>
           </div>
           <div className="modal-actions" style={{ marginTop: 'var(--space-md)' }}>
+            {accounts.length > 0 && (
+              <select className="form-input" style={{ width: 'auto' }} value={accountId} onChange={e => setAccountId(e.target.value)} title="Post as">
+                {accounts.map(a => <option key={a.id} value={a.id}>Post as {accountLabel(a)}</option>)}
+              </select>
+            )}
             <button className="btn btn-primary" onClick={handleImport} disabled={importing || validation.every(v => v.hasError)}>
               {importing ? 'Importing…' : `Import ${validation.length - errorCount} Post(s)`}
             </button>

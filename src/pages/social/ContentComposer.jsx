@@ -88,7 +88,7 @@ export default function ContentComposer() {
     if (accountRes.data) {
       setAccounts(accountRes.data)
       // New posts default to the Company Page.
-      const org = accountRes.data.find(a => a.account_type === 'organization')
+      const org = accountRes.data.find(a => a.account_type === 'organization' && a.status === 'active')
       setAccountId(prev => prev || org?.id || accountRes.data[0]?.id || '')
     }
     if (pillarsRes.data) setPillars(pillarsRes.data)

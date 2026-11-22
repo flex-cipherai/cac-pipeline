@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { DateTime } from 'luxon'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/AuthContext'
+import { fetchPostableAccounts, accountLabel, defaultAccountId } from '../../lib/linkedinAccounts'
 import '../Dashboard.css'
 import './ContentLibrary.css'
 import './ActivityInbox.css'
@@ -31,9 +32,18 @@ export default function ActivityInbox() {
   const [showLogModal, setShowLogModal] = useState(false)
   const [newEvent, setNewEvent] = useState({ event_type: 'comment', content: '', author_name: '', occurred_at: new Date().toISOString().slice(0, 16), external_url: '' })
   const [saving, setSaving] = useState(false)
+  const [accounts, setAccounts] = useState([])
+  const [logAccountId, setLogAccountId] = useState('')
   const [toast, setToast] = useState({ show: false, type: '', text: '' })
 
   useEffect(() => { fetchEvents() }, [])
+  useEffect(() => {
+    if (!profile?.id) return
+    fetchPostableAccounts(profile.id).then(list => {
+      setAccounts(list)
+      setLogAccountId(prev => prev || defaultAccountId(list))
+    })
+  }, [profile?.id])
 
   useEffect(() => {
     if (toast.show) {
@@ -79,7 +89,7 @@ export default function ActivityInbox() {
       return
     }
     setSaving(true)
-    const { data: account } = await supabase.from('connected_accounts').select('id, account_name').eq('platform', 'linkedin').eq('account_type', 'organization').maybeSingle()
+    const account = accounts.find(a => a.id === logAccountId) || null
 
     const payload = {
       account_id: account?.id || null,
@@ -179,7 +189,15 @@ export default function ActivityInbox() {
         <div className="modal-overlay" onClick={() => !saving && setShowLogModal(false)}>
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <h3 className="modal-title">Log Activity</h3>
-            <p className="modal-subtitle">No API access yet — log what you see on LinkedIn directly here.</p>
+            <p className="modal-subtitle">Comments on managed Company Pages sync automatically. Log anything else you see on LinkedIn here.</p>
+            {accounts.length > 1 && (
+              <div className="form-group">
+                <label className="form-label">Account</label>
+                <select className="form-input" value={logAccountId} onChange={e => setLogAccountId(e.target.value)}>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
+                </select>
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Type</label>
               <select className="form-input" value={newEvent.event_type} onChange={e => setNewEvent(prev => ({ ...prev, event_type: e.target.value }))}>

@@ -127,3 +127,10 @@ values
  true,
  ARRAY['scheduled_for','account_name','error','post_caption_preview','calendar_link'])
 on conflict (template_key) do nothing;
+
+-- 6. Several Company Pages: one row per LinkedIn page. Admins choose which
+-- ones the BMS manages with status ('active' = managed). Never two rows for
+-- the same page.
+create unique index if not exists connected_accounts_org_page_idx
+  on public.connected_accounts (external_page_id)
+  where account_type = 'organization' and external_page_id is not null;

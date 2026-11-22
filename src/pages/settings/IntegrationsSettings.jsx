@@ -12,12 +12,12 @@ export default function IntegrationsSettings() {
   const [loading, setLoading] = useState(true)
 
   // LinkedIn
-  const [connectedAccount, setConnectedAccount] = useState(null)
-  const [accountNameDraft, setAccountNameDraft] = useState('')
-  const [savingAccount, setSavingAccount] = useState(false)
+  const [pages, setPages] = useState([]) // account_type 'organization' — one per LinkedIn Company Page
   const [connectingLinkedIn, setConnectingLinkedIn] = useState(false)
   const [memberAccounts, setMemberAccounts] = useState([])
   const [syncing, setSyncing] = useState(false)
+  const [refreshingPages, setRefreshingPages] = useState(false)
+  const [togglingId, setTogglingId] = useState(null)
 
   // Google Search Console (Website Analytics → Search tab). Access is by service account (Edge Function
   // secret); only the property is set here.
@@ -36,9 +36,9 @@ export default function IntegrationsSettings() {
     if (!linkedinStatus) return
 
     if (linkedinStatus === 'connected') {
-      showToast('success', 'LinkedIn connected — the Company Page and your profile now publish automatically')
+      showToast('success', 'LinkedIn connected — choose below which Company Pages the BMS manages')
     } else if (linkedinStatus === 'connected_profile_only') {
-      showToast('error', `Your profile is connected, but not the Company Page: ${params.get('detail') || 'no page found'}`)
+      showToast('error', `Your profile is connected, but no Company Page was found: ${params.get('detail') || 'no page found'}`)
     } else if (linkedinStatus === 'error') {
       showToast('error', params.get('detail') || 'Failed to connect LinkedIn')
     }
@@ -55,8 +55,8 @@ export default function IntegrationsSettings() {
       supabase.from('system_settings').select('key, value').in('key', ['gsc_site_url', 'gsc_last_sync_at', 'gsc_last_sync_status']),
     ])
     if (accountRes.data) {
-      const org = accountRes.data.find(a => a.account_type === 'organization')
-      if (org) { setConnectedAccount(org); setAccountNameDraft(org.account_name) }
+      setPages(accountRes.data.filter(a => a.account_type === 'organization')
+        .sort((a, b) => (a.status === 'active' ? 0 : 1) - (b.status === 'active' ? 0 : 1) || a.account_name.localeCompare(b.account_name)))
       setMemberAccounts(accountRes.data.filter(a => a.account_type === 'member'))
     }
     if (gscRes.data) {
@@ -68,14 +68,41 @@ export default function IntegrationsSettings() {
   }
 
   // ── LinkedIn ──
-  async function saveAccountName() {
-    if (!connectedAccount || !accountNameDraft.trim()) return
-    setSavingAccount(true)
-    const { error } = await supabase.from('connected_accounts').update({ account_name: accountNameDraft.trim() }).eq('id', connectedAccount.id)
-    setSavingAccount(false)
-    if (error) { showToast('error', 'Failed to update account'); return }
-    setConnectedAccount(prev => ({ ...prev, account_name: accountNameDraft.trim() }))
-    showToast('success', 'Account updated')
+  const anyConnected = [...pages, ...memberAccounts].some(a => a.oauth_connected)
+  const myProfile = memberAccounts.find(m => m.owner_profile_id === profile?.id)
+
+  // Switches whether the BMS manages a Company Page (status active / disconnected).
+  async function togglePage(page) {
+    const turningOff = page.status === 'active'
+    if (turningOff) {
+      const { count } = await supabase.from('posts').select('id', { count: 'exact', head: true })
+        .eq('account_id', page.id).in('status', ['scheduled', 'pending_approval'])
+      const warning = count ? `\n\n${count} scheduled post(s) for this page will not publish automatically; at their time they move to Ready to Post.` : ''
+      if (!window.confirm(`Stop managing ${page.account_name} from the BMS?${warning}`)) return
+    }
+    setTogglingId(page.id)
+    const newStatus = turningOff ? 'disconnected' : 'active'
+    const { error } = await supabase.from('connected_accounts').update({ status: newStatus }).eq('id', page.id)
+    setTogglingId(null)
+    if (error) { showToast('error', 'Failed to update page'); return }
+    setPages(prev => prev.map(p => p.id === page.id ? { ...p, status: newStatus } : p))
+    showToast('success', turningOff ? `${page.account_name} is no longer managed` : `${page.account_name} is now managed — it appears under Post As`)
+  }
+
+  async function refreshPages() {
+    setRefreshingPages(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('sm-linkedin-pages', { body: {} })
+      if (error) throw new Error('Could not reach the server. Please try again.')
+      if (!data?.success) throw new Error(data?.error || 'Could not load your LinkedIn pages')
+      const added = (data.pages || []).filter(p => p.is_new).length
+      showToast('success', `${data.pages.length} page(s) found${added ? `, ${added} new` : ''}`)
+      fetchData()
+    } catch (err) {
+      showToast('error', err.message)
+    } finally {
+      setRefreshingPages(false)
+    }
   }
 
   async function connectLinkedIn() {
@@ -116,15 +143,6 @@ export default function IntegrationsSettings() {
     setMemberAccounts(prev => prev.map(m => m.id === member.id ? { ...m, status: newStatus } : m))
   }
 
-  async function toggleAccountStatus() {
-    if (!connectedAccount) return
-    const newStatus = connectedAccount.status === 'active' ? 'disconnected' : 'active'
-    const { error } = await supabase.from('connected_accounts').update({ status: newStatus }).eq('id', connectedAccount.id)
-    if (error) { showToast('error', 'Failed to update status'); return }
-    setConnectedAccount(prev => ({ ...prev, status: newStatus }))
-    showToast('success', newStatus === 'active' ? 'Account reactivated' : 'Account disconnected')
-  }
-
   // ── Google Search Console ──
   async function saveGscSite() {
     setSavingGsc(true)
@@ -162,62 +180,68 @@ export default function IntegrationsSettings() {
 
   return (
     <div>
-      <SettingsHeading title="Integrations" hint="The LinkedIn page posts are published to, and the Google Search Console property behind Website Analytics." />
+      <SettingsHeading title="Integrations" hint="The LinkedIn pages and profiles posts are published to, and the Google Search Console property behind Website Analytics." />
 
       <div className="section-card" style={{ padding: 'var(--space-lg)' }}>
-        {connectedAccount ? (
-          <>
-            <div className="sm-account-row">
-              <div>
-                <div className="sm-account-platform">LinkedIn Company Page</div>
-                <span className={`status-badge status-${connectedAccount.status === 'active' ? 'posted' : 'draft'}`}>{connectedAccount.status === 'active' ? 'Active' : 'Disconnected'}</span>
-                <span className="status-badge" style={quietBadge}>
-                  {connectedAccount.mode === 'automated' ? 'Automated Mode' : 'Assisted Mode'}
-                </span>
-                {connectedAccount.last_sync_error && (
-                  <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={connectedAccount.last_sync_error}>Last sync failed</span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {connectedAccount.mode === 'automated' && (
-                  <button className="btn btn-secondary btn-sm" onClick={syncNow} disabled={syncing}>{syncing ? 'Syncing...' : 'Sync now'}</button>
-                )}
-                <button className="btn btn-primary btn-sm" onClick={connectLinkedIn} disabled={connectingLinkedIn}>
-                  {connectingLinkedIn ? 'Redirecting...' : connectedAccount.oauth_connected ? 'Reconnect LinkedIn' : 'Connect LinkedIn'}
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={toggleAccountStatus}>
-                  {connectedAccount.status === 'active' ? 'Disconnect' : 'Reactivate'}
-                </button>
-              </div>
-            </div>
-            <div className="profile-edit-grid" style={{ marginTop: 'var(--space-md)' }}>
-              <div className="form-group">
-                <label className="form-label">Account Name</label>
-                <input className="form-input" value={accountNameDraft} onChange={e => setAccountNameDraft(e.target.value)} />
-              </div>
-            </div>
-            <p className="form-hint">
-              {connectedAccount.mode === 'automated'
-                ? <>Connected through the LinkedIn API: scheduled posts publish automatically, and analytics and new comments sync every hour{connectedAccount.last_synced_at ? <> (last sync {new Date(connectedAccount.last_synced_at).toLocaleString()})</> : null}.{connectedAccount.last_sync_error ? <> <strong>{connectedAccount.last_sync_error}</strong></> : null}</>
-                : 'Assisted Mode: posts are published by hand. Connect LinkedIn (signed in as an admin of the Company Page) to publish automatically, to the page and to your own profile.'}
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-sm)' }}>
-              <button className="btn btn-primary btn-sm" onClick={saveAccountName} disabled={savingAccount}>{savingAccount ? 'Saving...' : 'Save'}</button>
-            </div>
-          </>
-        ) : (
-          <p className="form-hint">No LinkedIn account connected yet.</p>
-        )}
-      </div>
+        <div className="sm-account-row">
+          <div>
+            <div className="sm-account-platform">LinkedIn</div>
+            <span className={`status-badge status-${anyConnected ? 'posted' : 'draft'}`}>{anyConnected ? 'Connected' : 'Not connected'}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {anyConnected && (
+              <button className="btn btn-secondary btn-sm" onClick={syncNow} disabled={syncing}>{syncing ? 'Syncing...' : 'Sync now'}</button>
+            )}
+            {myProfile && (
+              <button className="btn btn-secondary btn-sm" onClick={refreshPages} disabled={refreshingPages}>{refreshingPages ? 'Looking...' : 'Refresh pages'}</button>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={connectLinkedIn} disabled={connectingLinkedIn}>
+              {connectingLinkedIn ? 'Redirecting...' : anyConnected ? 'Reconnect LinkedIn' : 'Connect LinkedIn'}
+            </button>
+          </div>
+        </div>
+        <p className="form-hint">
+          {anyConnected
+            ? 'Scheduled posts publish automatically to the pages and profiles switched on below; analytics and new comments sync every hour.'
+            : 'Assisted Mode: posts are published by hand. Connect LinkedIn to publish automatically to the Company Pages you administer and to your own profile.'}
+        </p>
 
-      <div className="section-card" style={{ padding: 'var(--space-lg)', marginTop: 'var(--space-md)' }}>
-        <div className="sm-account-platform" style={{ marginBottom: 8 }}>Personal LinkedIn Profiles</div>
+        <div className="sm-account-platform" style={{ margin: 'var(--space-md) 0 8px' }}>Company Pages</div>
+        {pages.length === 0 ? (
+          <p className="form-hint">No pages yet. Connect LinkedIn (or press Refresh pages) to list the pages you administer.</p>
+        ) : pages.map(p => (
+          <div key={p.id} className="sm-account-row" style={{ marginBottom: 8 }}>
+            <div>
+              <div>🏢 {p.account_name}</div>
+              <span className={`status-badge status-${p.status === 'active' ? 'posted' : 'draft'}`}>{p.status === 'active' ? 'Managed in BMS' : 'Not managed'}</span>
+              {p.status === 'active' && (
+                <span className="status-badge" style={quietBadge}>{p.mode === 'automated' ? 'Publishes automatically' : 'Assisted Mode'}</span>
+              )}
+              {p.status === 'active' && p.last_sync_error && (
+                <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={p.last_sync_error}>Last sync failed</span>
+              )}
+              {p.status === 'active' && p.last_synced_at && !p.last_sync_error && (
+                <span className="form-hint" style={{ marginLeft: 8 }}>Synced {new Date(p.last_synced_at).toLocaleString()}</span>
+              )}
+            </div>
+            <button
+              className={`btn btn-sm ${p.status === 'active' ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={() => togglePage(p)}
+              disabled={togglingId === p.id}
+            >
+              {p.status === 'active' ? 'Stop managing' : 'Manage in BMS'}
+            </button>
+          </div>
+        ))}
+        <p className="form-hint">Managed pages appear under Post As in the composer. Pages you administer on LinkedIn but don't switch on here are never posted to.</p>
+
+        <div className="sm-account-platform" style={{ margin: 'var(--space-md) 0 8px' }}>Personal Profiles</div>
         {memberAccounts.length === 0 ? (
-          <p className="form-hint">None connected. Connecting LinkedIn above also connects the profile of the person who signs in, so they can post as themselves.</p>
+          <p className="form-hint">None connected. Connecting LinkedIn also connects the profile of the person who signs in, so they can post as themselves.</p>
         ) : memberAccounts.map(m => (
           <div key={m.id} className="sm-account-row" style={{ marginBottom: 8 }}>
             <div>
-              <div>{m.account_name}{m.owner_profile_id === profile?.id ? ' (you)' : ''}</div>
+              <div>👤 {m.account_name}{m.owner_profile_id === profile?.id ? ' (you)' : ''}</div>
               <span className={`status-badge status-${m.status === 'active' ? 'posted' : 'draft'}`}>{m.status === 'active' ? 'Active' : 'Disconnected'}</span>
               {m.last_sync_error && <span className="status-badge status-failed" style={{ marginLeft: 6 }} title={m.last_sync_error}>Last sync failed</span>}
             </div>
