@@ -20,6 +20,7 @@ export const SECTOR_LABELS: Record<string, string> = {
   security: 'Security services', manufacturing: 'Manufacturing', retail: 'Retail and wholesale',
   construction: 'Construction and real estate', education: 'Education', finance: 'Finance and professional services',
   logistics: 'Logistics and transport', hospitality: 'Hospitality', agriculture: 'Agriculture',
+  law_firms: 'Law firms', marketing_agencies: 'Marketing agencies', podcasts: 'Podcasts', hr_teams: 'HR teams',
   other: 'Other',
 }
 
